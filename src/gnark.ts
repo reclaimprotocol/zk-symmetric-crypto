@@ -3,7 +3,7 @@ import {join} from "path";
 import {CONFIG} from "./config";
 import {Base64} from "js-base64";
 
-let koffi = require('koffi');
+let koffi
 
 
 let verify:(...args: any[]) => any
@@ -14,6 +14,7 @@ let initAlgorithm:(...args: any[]) => any
 let initDone = false
 
 try {
+	koffi = require('koffi');
 	if(koffi?.version){
 		koffi.reset() //otherwise tests will fail
 

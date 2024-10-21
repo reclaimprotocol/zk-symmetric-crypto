@@ -1,7 +1,9 @@
 import {EncryptionAlgorithm, ZKOperator} from "./types";
 import {join} from "path";
 import {CONFIG} from "./config";
-import {Base64} from "js-base64";
+import {Base64, toBase64} from "js-base64";
+import fs from "fs";
+import {json} from "node:stream/consumers";
 
 let koffi
 
@@ -60,78 +62,45 @@ try {
 }
 
 
+async function initGnark(){
+	const { join } = await import('path')
+
+	const fs = require('fs')
+
+	const folder = `../resources/gnark`
+
+	function initAlg(id, name) {
+		let keyPath = join(__dirname,`${folder}/pk.${name}`)
+		let keyFile = fs.readFileSync(keyPath)
+
+		let r1Path = join(__dirname,`${folder}/r1cs.${name}`)
+		let r1File = fs.readFileSync(r1Path)
+
+		let f1 = {
+			data: Buffer.from(keyFile),
+			len:keyFile.length,
+			cap:keyFile.length
+		}
+		let f2 = {
+			data: Buffer.from(r1File),
+			len:r1File.length,
+			cap:r1File.length
+		}
+
+		initAlgorithm(id,f1, f2)
+	}
+
+	initAlg(0, 'chacha20')
+	initAlg(1, 'aes128')
+	initAlg(2, 'aes256')
+	initAlg(3, 'chacha20_oprf')
+
+	initDone = true
+}
+
 export async function makeLocalGnarkZkOperator(cipher: EncryptionAlgorithm): Promise<ZKOperator> {
 
 	if(koffi){
-
-		async function initGnark(){
-			const { join } = await import('path')
-
-			const fs = require('fs')
-
-			const folder = `../resources/gnark`
-
-			let keyPath = join(__dirname,`${folder}/pk.chacha20`)
-			let keyFile = fs.readFileSync(keyPath)
-
-			let r1Path = join(__dirname,`${folder}/r1cs.chacha20`)
-			let r1File = fs.readFileSync(r1Path)
-
-			let f1 = {
-				data: Buffer.from(keyFile),
-				len:keyFile.length,
-				cap:keyFile.length
-			}
-			let f2 = {
-				data: Buffer.from(r1File),
-				len:r1File.length,
-				cap:r1File.length
-			}
-
-			initAlgorithm(0,f1, f2)
-
-
-			keyPath = join(__dirname,`${folder}/pk.aes128`)
-			keyFile = fs.readFileSync(keyPath)
-
-			r1Path = join(__dirname,`${folder}/r1cs.aes128`)
-			r1File = fs.readFileSync(r1Path)
-
-			f1 = {
-				data: Buffer.from(keyFile),
-				len:keyFile.length,
-				cap:keyFile.length
-			}
-			f2 = {
-				data: Buffer.from(r1File),
-				len:r1File.length,
-				cap:r1File.length
-			}
-
-			initAlgorithm(1,f1, f2)
-
-
-			keyPath = join(__dirname,`${folder}/pk.aes256`)
-			keyFile = fs.readFileSync(keyPath)
-
-			r1Path = join(__dirname,`${folder}/r1cs.aes256`)
-			r1File = fs.readFileSync(r1Path)
-
-			f1 = {
-				data: Buffer.from(keyFile),
-				len:keyFile.length,
-				cap:keyFile.length
-			}
-			f2 = {
-				data: Buffer.from(r1File),
-				len:r1File.length,
-				cap:r1File.length
-			}
-
-			initAlgorithm(2,f1, f2)
-			initDone = true
-		}
-
 
 		return Promise.resolve({
 
@@ -204,6 +173,69 @@ export async function makeLocalGnarkZkOperator(cipher: EncryptionAlgorithm): Pro
 	}
 }
 
+export function makeLocalGnarkOPRFOperator(){
+	return {
+		async generateWitness(input): Promise<Uint8Array> {
+			const witness = {
+				cipher: input.cipher,
+				key: toBase64(input.key),
+				nonce: toBase64(input.nonce),
+				counter: input.counter,
+				input: toBase64(input.input),
+				oprf: input.oprf
+			}
+			const paramsJson = JSON.stringify(witness)
+			return strToUint8Array(paramsJson)
+		},
+
+		async proveOPRF(witness: Uint8Array) {
+			if (!initDone){
+				await initGnark()
+			}
+			const wtns = {
+				data: Buffer.from(witness),
+				len:witness.length,
+				cap:witness.length
+			}
+			const res = prove(wtns)
+			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
+			free(res.r0) // Avoid memory leak!
+			const proof = JSON.parse(resJson)
+			return Promise.resolve(proof)
+		},
+
+		async verifyOPRF(input, proof) {
+
+
+			const signals = {
+				nonce: toBase64(input.nonce),
+				counter: input.counter,
+				input: toBase64(input.input),
+				oprf: input.oprf
+			}
+
+			const strSignals = JSON.stringify(signals)
+			const verifyParams = {
+				cipher:'chacha20-oprf',
+				proof: proof.proof.proofJson,
+				publicSignals: toBase64(strSignals),
+			}
+
+			const paramsJson = JSON.stringify(verifyParams)
+			const paramsBuf = strToUint8Array(paramsJson)
+
+			const params = {
+				data: paramsBuf,
+				len:paramsJson.length,
+				cap:paramsJson.length
+
+			}
+
+			return verify(params) === 1
+		},
+	}
+}
+
 function generateGnarkWitness(cipher:EncryptionAlgorithm, input){
 	const {
 		bitsToUint8Array,
@@ -234,4 +266,5 @@ function generateGnarkWitness(cipher:EncryptionAlgorithm, input){
 function strToUint8Array(str: string) {
 	return new TextEncoder().encode(str)
 }
+
 

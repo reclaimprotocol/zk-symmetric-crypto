@@ -9,9 +9,13 @@ let koffi
 
 
 let verify:(...args: any[]) => any
+let vfree:(...args: any[]) => any // free but in libverify
 let free:(...args: any[]) => any
 let prove:(...args: any[]) => any
 let initAlgorithm:(...args: any[]) => any
+let generateOPRFRequest:(...args: any[]) => any
+let processOPRFResponse:(...args: any[]) => any
+let oprf:(...args: any[]) => any
 
 let initDone = false
 
@@ -28,7 +32,7 @@ try {
 			cap: 'longlong'
 		})
 
-		const ProveReturn = koffi.struct('ProveReturn', {
+		const LibReturn = koffi.struct('LibReturn', {
 			r0: 'void *',
 			r1:  'longlong',
 		})
@@ -52,9 +56,15 @@ try {
 		const libProve = koffi.load(libProvePath)
 
 		verify = libVerify.func('Verify', 'unsigned char', [GoSlice])
-		free = libProve.func('Free', 'void', ['void *'])
-		prove = libProve.func('Prove', ProveReturn, [GoSlice])
+		vfree = libVerify.func('VFree', 'void', ['void *'])
+		oprf = libVerify.func('OPRF', LibReturn, [GoSlice])
+
 		initAlgorithm = libProve.func('InitAlgorithm', 'unsigned char', ['unsigned char', GoSlice, GoSlice])
+		free = libProve.func('Free', 'void', ['void *'])
+		prove = libProve.func('Prove', LibReturn, [GoSlice])
+		generateOPRFRequest = libProve.func('GenerateOPRFRequestData', LibReturn, [GoSlice])
+		processOPRFResponse = libProve.func('ProcessOPRFResponse', LibReturn, [GoSlice])
+
 	}
 } catch (e){
 	koffi = undefined
@@ -205,8 +215,6 @@ export function makeLocalGnarkOPRFOperator(){
 		},
 
 		async verifyOPRF(input, proof) {
-
-
 			const signals = {
 				nonce: toBase64(input.nonce),
 				counter: input.counter,
@@ -232,6 +240,90 @@ export function makeLocalGnarkOPRFOperator(){
 			}
 
 			return verify(params) === 1
+		},
+
+		async generateOPRFRequestData(data, domainSeparator: string) {
+			if (!initDone){
+				await initGnark()
+			}
+			const params = {
+				data: data,
+				domainSeparator: domainSeparator,
+			}
+
+			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			if (!initDone){
+				await initGnark()
+			}
+			const wtns = {
+				data: Buffer.from(pamamsJson),
+				len:pamamsJson.length,
+				cap:pamamsJson.length
+			}
+			const res = generateOPRFRequest(wtns)
+			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
+			free(res.r0) // Avoid memory leak!
+			const req = JSON.parse(resJson)
+			return Promise.resolve(req)
+		},
+
+		async processOPRFResponse(serverPublicKey, mask, maskedData, serverResponse, c, s: string) {
+			if (!initDone){
+				await initGnark()
+			}
+
+			const request = {
+				mask: mask,
+				maskedData: maskedData,
+			}
+
+			const response = {
+				response: serverResponse,
+				c: c,
+				s: s,
+			}
+			const params = {
+				serverPublicKey: serverPublicKey,
+				request: request,
+				response: response
+			}
+
+			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			if (!initDone){
+				await initGnark()
+			}
+			const libReq = {
+				data: Buffer.from(pamamsJson),
+				len:pamamsJson.length,
+				cap:pamamsJson.length
+			}
+			const res = processOPRFResponse(libReq)
+			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
+			free(res.r0) // Avoid memory leak!
+			const req = JSON.parse(resJson)
+			return Promise.resolve(req)
+		},
+
+		async OPRF(serverPrivate, maskedData:string) {
+			if (!initDone){
+				await initGnark()
+			}
+			const params = {
+				serverPrivate: serverPrivate,
+				maskedData: maskedData,
+			}
+
+			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			const libParams = {
+				data: Buffer.from(pamamsJson),
+				len:pamamsJson.length,
+				cap:pamamsJson.length
+			}
+			const res = oprf(libParams)
+			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
+			vfree(res.r0) // Avoid memory leak!
+			const req = JSON.parse(resJson)
+			return Promise.resolve(req)
 		},
 	}
 }

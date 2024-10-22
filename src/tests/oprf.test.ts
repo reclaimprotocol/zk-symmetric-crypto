@@ -1,15 +1,33 @@
-import {randomBytes} from "crypto";
-import {PrivateInput} from "../types";
 import {encryptData} from "./utils";
-import {Base64} from "js-base64";
+import {Base64, fromBase64} from "js-base64";
 import {makeLocalGnarkOPRFOperator} from "../gnark";
+import {createHash} from "node:crypto";
 
 describe('OPRF circuits Tests', () => {
 
     it('should prove OPRF', async() => {
 
+        const operator = makeLocalGnarkOPRFOperator()
+
+        const serverPrivate = 'A3q7HrA+10FUiL0Q9lrDBRdRuoq752oREn9STszgLEo='
+        const serverPublic =  'dGEZEZY4qexS2WyOL8KDcv99BWjL7ivaKvvarCcbYCU='
+
         const email = "test@email.com"
         const domainSeparator = "reclaim"
+
+        const req =  await operator.generateOPRFRequestData(email, domainSeparator)
+        const resp = await operator.OPRF(serverPrivate, req.maskedData)
+        const result = await operator.processOPRFResponse(serverPublic, req.mask, req.maskedData, resp.response, resp.c, resp.s)
+
+
+        expect(result.output).toEqual('Qs7vK8HR2GJxiFKWqMOs/9JuRQfIuFJwS5DOE8aQ8aw=')
+
+        const rawOutput = fromBase64(result.output)
+        const hash = createHash('sha256');
+        hash.update(rawOutput)
+        const nullifier = hash.digest('hex')
+        expect(nullifier).toEqual('3c937dbcd65f73a615f74976ceeefaed765132ebc83778bd4ea451fda48edae9') // ACTUAL "NULLIFIER" value
+
         const pos = 10
         const len = email.length
 
@@ -21,15 +39,15 @@ describe('OPRF circuits Tests', () => {
                 len: len, // length of data to "hash"
                 domainSeparator: Base64.fromUint8Array(new Uint8Array(Buffer.from(domainSeparator))),
 
-                serverPublicKey: "vxLn+WUuKIsgBZbe/oRDuUXwUgHJiwalF0BjxpLMnSw=", // set externally by client when proving & attestor when verifying
+                serverPublicKey: serverPublic,
 
                 // values from OPRF procedure
-                mask: "Bd7l0FC43Se7WWsMVlG5sTlb9u7RjLaQty7c04scOQI=",
-                serverResponse: "iVGq7kFnuUDH4nBx7LYhBBGQcxDadJN/7z/XWj2sAww=",
-                output: "eOv2n1nsmLuyxb7UgZlarKcq6gnKfJVMp9jadT42tRc=", // => hashing this produces that "oprf hash" or nullifier that we need
+                mask: req.mask,
+                serverResponse: resp.response,
+                output: result.output, // => hashing this produces that "oprf hash" or nullifier that we need
                 // DLEQ proof
-                c: "AgsIlrbNvWc9KL7YZoMw4lPPmkIkIXjP24JRvnqOUZQ=",
-                s: "Ab7SzWnISNbA0eKhIIG8p9Q/3SOl4b7sDvRcJmwJfAQ="
+                c: resp.c,
+                s:  resp.s
         }
 
 
@@ -55,7 +73,7 @@ describe('OPRF circuits Tests', () => {
             "oprf": oprf
         }
 
-        const operator = makeLocalGnarkOPRFOperator()
+
         const wtns = await operator.generateWitness(witnessParams)
 
         const proof = await operator.proveOPRF(wtns)

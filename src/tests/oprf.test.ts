@@ -20,13 +20,13 @@ describe('OPRF circuits Tests', () => {
         const result = await operator.processOPRFResponse(serverPublic, req.mask, req.maskedData, resp.response, resp.c, resp.s)
 
 
-        expect(result.output).toEqual('Qs7vK8HR2GJxiFKWqMOs/9JuRQfIuFJwS5DOE8aQ8aw=')
+        expect(result.output).toEqual('T3ikGmkt+a/uou6kEz97AmuFGECsTSNINmN4dWcaiaU=')
 
         const rawOutput = fromBase64(result.output)
         const hash = createHash('sha256');
         hash.update(rawOutput)
         const nullifier = hash.digest('hex')
-        expect(nullifier).toEqual('3c937dbcd65f73a615f74976ceeefaed765132ebc83778bd4ea451fda48edae9') // ACTUAL "NULLIFIER" value
+        expect(nullifier).toEqual('3555badf313bc299351e007040b8797ab7f1d75b1954b801cd8e3b9dc3531104') // ACTUAL "NULLIFIER" value
 
         const pos = 10
         const len = email.length

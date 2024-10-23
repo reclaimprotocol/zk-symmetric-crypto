@@ -131,3 +131,15 @@ export type PublicInput = {
 }
 
 export type Logger = Pick<typeof console, 'info' | 'trace' | 'debug' | 'error' | 'warn'>
+
+export interface EncryptionConfig {
+    chunkSize: number; // Size of each chunk in bytes
+    bitsPerWord: number; // Number of bits in a word
+    keySizeBytes: number; // Key size in bytes
+    ivSizeBytes: number; // Initialization vector size in bytes
+    startCounter: number; // Starting counter for encryption
+    blocksPerChunk: number; // Number of blocks per chunk
+    isLittleEndian: boolean; // Indicates if little-endian encoding is used
+    uint8ArrayToBits: (arr: Uint8Array) => number[] | number[][]; // Function to convert Uint8Array to bits
+    bitsToUint8Array: (bits: number[]) => Uint8Array; // Function to convert bits to Uint8Array
+}

@@ -1,19 +1,26 @@
 import {EncryptionAlgorithm, ZKOperator} from "./types";
 import {join} from "path";
 import {CONFIG} from "./config";
-import {Base64} from "js-base64";
+import {Base64, toBase64} from "js-base64";
+import fs from "fs";
+import {json} from "node:stream/consumers";
 
-let koffi = require('koffi');
+let koffi
 
 
 let verify:(...args: any[]) => any
+let vfree:(...args: any[]) => any // free but in libverify
 let free:(...args: any[]) => any
 let prove:(...args: any[]) => any
 let initAlgorithm:(...args: any[]) => any
+let generateOPRFRequest:(...args: any[]) => any
+let processOPRFResponse:(...args: any[]) => any
+let oprf:(...args: any[]) => any
 
 let initDone = false
 
 try {
+	koffi = require('koffi');
 	if(koffi?.version){
 		koffi.reset() //otherwise tests will fail
 
@@ -25,7 +32,7 @@ try {
 			cap: 'longlong'
 		})
 
-		const ProveReturn = koffi.struct('ProveReturn', {
+		const LibReturn = koffi.struct('LibReturn', {
 			r0: 'void *',
 			r1:  'longlong',
 		})
@@ -49,9 +56,15 @@ try {
 		const libProve = koffi.load(libProvePath)
 
 		verify = libVerify.func('Verify', 'unsigned char', [GoSlice])
-		free = libProve.func('Free', 'void', ['void *'])
-		prove = libProve.func('Prove', ProveReturn, [GoSlice])
+		vfree = libVerify.func('VFree', 'void', ['void *'])
+		oprf = libVerify.func('OPRF', LibReturn, [GoSlice])
+
 		initAlgorithm = libProve.func('InitAlgorithm', 'unsigned char', ['unsigned char', GoSlice, GoSlice])
+		free = libProve.func('Free', 'void', ['void *'])
+		prove = libProve.func('Prove', LibReturn, [GoSlice])
+		generateOPRFRequest = libProve.func('GenerateOPRFRequestData', LibReturn, [GoSlice])
+		processOPRFResponse = libProve.func('ProcessOPRFResponse', LibReturn, [GoSlice])
+
 	}
 } catch (e){
 	koffi = undefined
@@ -59,78 +72,45 @@ try {
 }
 
 
+async function initGnark(){
+	const { join } = await import('path')
+
+	const fs = require('fs')
+
+	const folder = `../resources/gnark`
+
+	function initAlg(id, name) {
+		let keyPath = join(__dirname,`${folder}/pk.${name}`)
+		let keyFile = fs.readFileSync(keyPath)
+
+		let r1Path = join(__dirname,`${folder}/r1cs.${name}`)
+		let r1File = fs.readFileSync(r1Path)
+
+		let f1 = {
+			data: Buffer.from(keyFile),
+			len:keyFile.length,
+			cap:keyFile.length
+		}
+		let f2 = {
+			data: Buffer.from(r1File),
+			len:r1File.length,
+			cap:r1File.length
+		}
+
+		initAlgorithm(id,f1, f2)
+	}
+
+	initAlg(0, 'chacha20')
+	initAlg(1, 'aes128')
+	initAlg(2, 'aes256')
+	initAlg(3, 'chacha20_oprf')
+
+	initDone = true
+}
+
 export async function makeLocalGnarkZkOperator(cipher: EncryptionAlgorithm): Promise<ZKOperator> {
 
 	if(koffi){
-
-		async function initGnark(){
-			const { join } = await import('path')
-
-			const fs = require('fs')
-
-			const folder = `../resources/gnark`
-
-			let keyPath = join(__dirname,`${folder}/pk.chacha20`)
-			let keyFile = fs.readFileSync(keyPath)
-
-			let r1Path = join(__dirname,`${folder}/r1cs.chacha20`)
-			let r1File = fs.readFileSync(r1Path)
-
-			let f1 = {
-				data: Buffer.from(keyFile),
-				len:keyFile.length,
-				cap:keyFile.length
-			}
-			let f2 = {
-				data: Buffer.from(r1File),
-				len:r1File.length,
-				cap:r1File.length
-			}
-
-			initAlgorithm(0,f1, f2)
-
-
-			keyPath = join(__dirname,`${folder}/pk.aes128`)
-			keyFile = fs.readFileSync(keyPath)
-
-			r1Path = join(__dirname,`${folder}/r1cs.aes128`)
-			r1File = fs.readFileSync(r1Path)
-
-			f1 = {
-				data: Buffer.from(keyFile),
-				len:keyFile.length,
-				cap:keyFile.length
-			}
-			f2 = {
-				data: Buffer.from(r1File),
-				len:r1File.length,
-				cap:r1File.length
-			}
-
-			initAlgorithm(1,f1, f2)
-
-
-			keyPath = join(__dirname,`${folder}/pk.aes256`)
-			keyFile = fs.readFileSync(keyPath)
-
-			r1Path = join(__dirname,`${folder}/r1cs.aes256`)
-			r1File = fs.readFileSync(r1Path)
-
-			f1 = {
-				data: Buffer.from(keyFile),
-				len:keyFile.length,
-				cap:keyFile.length
-			}
-			f2 = {
-				data: Buffer.from(r1File),
-				len:r1File.length,
-				cap:r1File.length
-			}
-
-			initAlgorithm(2,f1, f2)
-			initDone = true
-		}
-
 
 		return Promise.resolve({
 
@@ -203,6 +183,151 @@ export async function makeLocalGnarkZkOperator(cipher: EncryptionAlgorithm): Pro
 	}
 }
 
+export function makeLocalGnarkOPRFOperator(){
+	return {
+		async generateWitness(input): Promise<Uint8Array> {
+			const witness = {
+				cipher: input.cipher,
+				key: toBase64(input.key),
+				nonce: toBase64(input.nonce),
+				counter: input.counter,
+				input: toBase64(input.input),
+				oprf: input.oprf
+			}
+			const paramsJson = JSON.stringify(witness)
+			return strToUint8Array(paramsJson)
+		},
+
+		async proveOPRF(witness: Uint8Array) {
+			if (!initDone){
+				await initGnark()
+			}
+			const wtns = {
+				data: Buffer.from(witness),
+				len:witness.length,
+				cap:witness.length
+			}
+			const res = prove(wtns)
+			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
+			free(res.r0) // Avoid memory leak!
+			const proof = JSON.parse(resJson)
+			return Promise.resolve(proof)
+		},
+
+		async verifyOPRF(input, proof) {
+			const signals = {
+				nonce: toBase64(input.nonce),
+				counter: input.counter,
+				input: toBase64(input.input),
+				oprf: input.oprf
+			}
+
+			const strSignals = JSON.stringify(signals)
+			const verifyParams = {
+				cipher:'chacha20-oprf',
+				proof: proof.proof.proofJson,
+				publicSignals: toBase64(strSignals),
+			}
+
+			const paramsJson = JSON.stringify(verifyParams)
+			const paramsBuf = strToUint8Array(paramsJson)
+
+			const params = {
+				data: paramsBuf,
+				len:paramsJson.length,
+				cap:paramsJson.length
+
+			}
+
+			return verify(params) === 1
+		},
+
+		async generateOPRFRequestData(data, domainSeparator: string) {
+			if (!initDone){
+				await initGnark()
+			}
+			const params = {
+				data: data,
+				domainSeparator: domainSeparator,
+			}
+
+			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			if (!initDone){
+				await initGnark()
+			}
+			const wtns = {
+				data: Buffer.from(pamamsJson),
+				len:pamamsJson.length,
+				cap:pamamsJson.length
+			}
+			const res = generateOPRFRequest(wtns)
+			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
+			free(res.r0) // Avoid memory leak!
+			const req = JSON.parse(resJson)
+			return Promise.resolve(req)
+		},
+
+		async processOPRFResponse(serverPublicKey, mask, maskedData, serverResponse, c, s: string) {
+			if (!initDone){
+				await initGnark()
+			}
+
+			const request = {
+				mask: mask,
+				maskedData: maskedData,
+			}
+
+			const response = {
+				response: serverResponse,
+				c: c,
+				s: s,
+			}
+			const params = {
+				serverPublicKey: serverPublicKey,
+				request: request,
+				response: response
+			}
+
+			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			if (!initDone){
+				await initGnark()
+			}
+			const libReq = {
+				data: Buffer.from(pamamsJson),
+				len:pamamsJson.length,
+				cap:pamamsJson.length
+			}
+			const res = processOPRFResponse(libReq)
+			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
+			free(res.r0) // Avoid memory leak!
+			const req = JSON.parse(resJson)
+			return Promise.resolve(req)
+		},
+
+		async OPRF(serverPrivate, maskedData:string) {
+			if (!initDone){
+				await initGnark()
+			}
+			const params = {
+				serverPrivate: serverPrivate,
+				maskedData: maskedData,
+			}
+
+			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			const libParams = {
+				data: Buffer.from(pamamsJson),
+				len:pamamsJson.length,
+				cap:pamamsJson.length
+			}
+			const res = oprf(libParams)
+			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
+			vfree(res.r0) // Avoid memory leak!
+			const req = JSON.parse(resJson)
+			return Promise.resolve(req)
+		},
+	}
+}
+
 function generateGnarkWitness(cipher:EncryptionAlgorithm, input){
 	const {
 		bitsToUint8Array,
@@ -233,4 +358,5 @@ function generateGnarkWitness(cipher:EncryptionAlgorithm, input){
 function strToUint8Array(str: string) {
 	return new TextEncoder().encode(str)
 }
+
 

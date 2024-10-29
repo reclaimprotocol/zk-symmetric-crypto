@@ -13,6 +13,8 @@ let initAlgorithm:(...args: any[]) => any
 
 let initDone = false
 
+const resFolder = `../../resources/gnark`
+
 try {
 	if(koffi?.version){
 		koffi.reset() //otherwise tests will fail
@@ -29,9 +31,6 @@ try {
 			r0: 'void *',
 			r1:  'longlong',
 		})
-
-
-		const resFolder = `../resources/gnark`
 
 		const arch = process.arch
 
@@ -68,12 +67,10 @@ export async function makeLocalGnarkZkOperator(cipher: EncryptionAlgorithm): Pro
 
 			const fs = require('fs')
 
-			const folder = `../resources/gnark`
-
-			let keyPath = join(__dirname,`${folder}/pk.chacha20`)
+			let keyPath = join(__dirname,`${resFolder}/pk.chacha20`)
 			let keyFile = fs.readFileSync(keyPath)
 
-			let r1Path = join(__dirname,`${folder}/r1cs.chacha20`)
+			let r1Path = join(__dirname,`${resFolder}/r1cs.chacha20`)
 			let r1File = fs.readFileSync(r1Path)
 
 			let f1 = {
@@ -90,10 +87,10 @@ export async function makeLocalGnarkZkOperator(cipher: EncryptionAlgorithm): Pro
 			initAlgorithm(0,f1, f2)
 
 
-			keyPath = join(__dirname,`${folder}/pk.aes128`)
+			keyPath = join(__dirname,`${resFolder}/pk.aes128`)
 			keyFile = fs.readFileSync(keyPath)
 
-			r1Path = join(__dirname,`${folder}/r1cs.aes128`)
+			r1Path = join(__dirname,`${resFolder}/r1cs.aes128`)
 			r1File = fs.readFileSync(r1Path)
 
 			f1 = {
@@ -110,10 +107,10 @@ export async function makeLocalGnarkZkOperator(cipher: EncryptionAlgorithm): Pro
 			initAlgorithm(1,f1, f2)
 
 
-			keyPath = join(__dirname,`${folder}/pk.aes256`)
+			keyPath = join(__dirname,`${resFolder}/pk.aes256`)
 			keyFile = fs.readFileSync(keyPath)
 
-			r1Path = join(__dirname,`${folder}/r1cs.aes256`)
+			r1Path = join(__dirname,`${resFolder}/r1cs.aes256`)
 			r1File = fs.readFileSync(r1Path)
 
 			f1 = {

@@ -4,7 +4,7 @@ if [ -z "${GOARCH}" ]; then
 fi
 
 export GOOS="${GOOS:-linux}"
-OUT_PREFIX="../js/bin/gnark/$GOOS-$GOARCH-"
+OUT_PREFIX="../bin/gnark/$GOOS-$GOARCH-"
 
 set -e
 

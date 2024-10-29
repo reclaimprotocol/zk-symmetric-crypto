@@ -9,7 +9,7 @@ import {
 	CONFIG,
 } from '../index'
 import { encryptData } from "./utils";
-import {makeLocalGnarkZkOperator} from "../gnark";
+import { makeLocalGnarkZkOperator } from "../gnark";
 
 jest.setTimeout(20_000)
 

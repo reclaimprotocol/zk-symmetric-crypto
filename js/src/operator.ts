@@ -28,7 +28,7 @@ export async function makeLocalSnarkJsZkOperator(
 	type: EncryptionAlgorithm,
 ) {
 	const { join } = await import('path')
-	const folder = `../resources/${type}`
+	const folder = `../../resources/circom/${type}`
 	return makeSnarkJsZKOperator(
 		{
 			getZkey: () => ({

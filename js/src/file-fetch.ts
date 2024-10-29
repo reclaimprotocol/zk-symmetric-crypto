@@ -1,10 +1,42 @@
-import { FileFetch, ZKEngine } from "./types"
+import { FileFetch } from "./types"
 
+const COMMIT_HASH = '9b2410139d02fa06085af618da1844588925bbe9'
+const DEFAULT_REMOTE_BASE_URL = `https://github.com/reclaimprotocol/zk-symmetric-crypto/raw/${COMMIT_HASH}/resources/`
 const DEFAULT_BASE_PATH = '../resources'
 
+export type MakeRemoteFileFetchOpts = {
+	baseUrl?: string
+}
+
 export type MakeLocalFileFetchOpts = {
-	engine: ZKEngine
 	basePath?: string
+}
+
+/**
+ * Fetches ZK resources from a remote server.
+ * Assumes the structure of the resources is:
+ * BASE_URL/{engine}/{filename}
+ * 
+ * By default, it uses the resources from a specific commit
+ * of the `zk-symmetric-crypto` repository.
+ */
+export function makeRemoteFileFetch({
+	baseUrl = DEFAULT_REMOTE_BASE_URL,
+}: MakeRemoteFileFetchOpts = {}): FileFetch {
+	return {
+		async fetch(engine, filename) {
+			const url = `${baseUrl}/${engine}/${filename}`
+			const res = await fetch(url)
+			if(!res.ok) {
+				throw new Error(
+					`${engine}-${filename} fetch failed with code: ${res.status}`
+				)
+			}
+
+			const arr = await res.arrayBuffer()
+			return new Uint8Array(arr)
+		},
+	}
 }
 
 /**
@@ -13,10 +45,10 @@ export type MakeLocalFileFetchOpts = {
  * BASE_PATH/{engine}/{filename}
  */
 export function makeLocalFileFetch(
-	{ engine, basePath = DEFAULT_BASE_PATH }: MakeLocalFileFetchOpts
+	{ basePath = DEFAULT_BASE_PATH }: MakeLocalFileFetchOpts = {}
 ): FileFetch {
 	return {
-		async fetch(filename) {
+		async fetch(engine, filename) {
 			const path = `${basePath}/${engine}/${filename}`
 			// import here to avoid loading fs in
 			// a browser env

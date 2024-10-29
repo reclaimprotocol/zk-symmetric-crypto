@@ -1,4 +1,4 @@
-import { CircuitWasm, EncryptionAlgorithm, FileFetch, MakeZKOperatorOpts, VerificationKey, ZKOperator, ZKParams } from "../types";
+import { CircuitWasm, Logger, MakeZKOperatorOpts, VerificationKey, ZKOperator } from "../types";
 
 type WitnessData = {
 	type: 'mem'
@@ -14,11 +14,13 @@ const WITNESS_MEMORY_SIZE_PAGES = 5
  * the circuit WASM and ZK key. This operator can generate witnesses and 
  * produce proofs for zero-knowledge circuits.
  *
- * @param algorithm - operator for the alg: chacha20, aes-256-ctr, aes-128-ctr
+ * @param algorithm - operator for the alg: chacha20, aes-256-ctr,
+ *  aes-128-ctr
  * @param fetcher - A function that fetches a file by name and returns
  * 	its contents as a Uint8Array.
  * 
- * @returns {ZKOperator} A ZK operator that can generate witnesses and proofs.
+ * @returns {ZKOperator} A ZK operator that can generate witnesses and
+ * 	proofs.
  * @throws {Error} Throws an error if the `snarkjs` library is not available.
  *
  * @example
@@ -116,12 +118,13 @@ export function makeSnarkJsZKOperator({
 		}
 	}
 
-	function getCircuitWasm() {
-		return fetcher.fetch(`${algorithm}/circuit.wasm`)
+	function getCircuitWasm(logger?: Logger) {
+		return fetcher.fetch('snarkjs', `${algorithm}/circuit.wasm`, logger)
 	}
 
-	async function getZkey() {
-		const data = await fetcher.fetch(`${algorithm}/circuit_final.zkey`)
+	async function getZkey(logger?: Logger) {
+		const data = await fetcher
+			.fetch('snarkjs', `${algorithm}/circuit_final.zkey`, logger)
 		return { data }
 	}
 }

@@ -33,20 +33,16 @@ const ALG_TEST_CONFIG = {
 	},
 }
 
+const fetcher = makeLocalFileFetch()
+
 const ALL_ZK_ENGINES: {
 	[E in ZKEngine]: (algorithm: EncryptionAlgorithm) => ZKOperator
 } = {
 	'snarkjs': (algorithm) => (
-		makeSnarkJsZKOperator({
-			algorithm,
-			fetcher: makeLocalFileFetch({ engine: 'snarkjs' })
-		})
+		makeSnarkJsZKOperator({ algorithm, fetcher })
 	),
 	'gnark': (algorithm)=> (
-		makeGnarkZkOperator({
-			algorithm,
-			fetcher: makeLocalFileFetch({ engine: 'gnark' })
-		})
+		makeGnarkZkOperator({ algorithm, fetcher })
 	),
 }
 

@@ -21,7 +21,11 @@ export type Proof = {
 }
 
 export type FileFetch = {
-	fetch(filename: string): Promise<Uint8Array>
+	fetch(
+		engine: ZKEngine,
+		filename: string,
+		logger?: Logger
+	): Promise<Uint8Array>
 }
 
 export type MakeZKOperatorOpts<T> = {

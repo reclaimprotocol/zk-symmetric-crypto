@@ -67,3 +67,25 @@ jobs:
       - name: Run tests
         working-directory: ./${{ matrix.package-dir }}
         run: npm test
+  test-gnark-circuits:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [1.23] # Specify the Go versions you want to test with
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Install dependencies
+        working-directory: ./gnark
+        run: go mod download
+
+      - name: Run tests
+        working-directory: ./gnark
+        run: go test -v ./...

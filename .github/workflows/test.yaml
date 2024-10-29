@@ -56,7 +56,7 @@ jobs:
       
       - name: Install Circom
         run: |
-          git clone https://github.com/iden3/circom.git circom-lib
+          git clone https://github.com/iden3/circom.git -b v2.2.0 circom-lib
           cd circom-lib
           cargo install --path circom
 

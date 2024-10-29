@@ -16,7 +16,7 @@ const CLONE_CMD = [
 	`git reset ${GIT_COMMIT_HASH} --hard`
 ].join(' && ')
 
-const BASE_DIR = join(__dirname, '../../tmp')
+const BASE_DIR = join(__dirname, '../../')
 const DIRS_TO_COPY = [
 	'resources',
 	'bin'

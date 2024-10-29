@@ -22,12 +22,14 @@ V3 ChaCha20 and V2 AES are the most efficient implementations:
 These optimized versions provide the best balance of speed and resource usage for their respective algorithms.
 
 ## Libraries
+
 [Prover library](libraries/prover) runs on Client side Android, IOS and Linux for generating proofs
 [Verifier library](libraries/verifier) runs on Server side Linux (X64 and ARM64) only for verifying proofs
 
 ## Compile all circuits, generate proving and verification keys
+
 ```
-go run keygen.go
+go run keygen/keygen.go
 ```
 
 Proving keys & compiled circuits will be [here](resources/gnark)

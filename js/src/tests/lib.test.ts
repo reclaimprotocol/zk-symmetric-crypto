@@ -2,14 +2,16 @@ import { randomBytes } from 'crypto';
 import {
 	PrivateInput,
 	generateProof,
-	makeLocalSnarkJsZkOperator,
+	makeSnarkJsZKOperator,
+	makeGnarkZkOperator,
 	verifyProof,
 	ZKOperator,
 	EncryptionAlgorithm,
 	CONFIG,
+	ZKEngine,
 } from '../index'
 import { encryptData } from "./utils";
-import { makeLocalGnarkZkOperator } from "../gnark";
+import { makeLocalFileFetch } from '../file-fetch';
 
 jest.setTimeout(20_000)
 
@@ -31,12 +33,25 @@ const ALG_TEST_CONFIG = {
 	},
 }
 
-const ALL_ZK_ENGINES = {
-	'snarkJS': async (algorithm)=>await makeLocalSnarkJsZkOperator(algorithm),
-	'gnark': async (algorithm)=>await makeLocalGnarkZkOperator(algorithm),
+const ALL_ZK_ENGINES: {
+	[E in ZKEngine]: (algorithm: EncryptionAlgorithm) => ZKOperator
+} = {
+	'snarkjs': (algorithm) => (
+		makeSnarkJsZKOperator({
+			algorithm,
+			fetcher: makeLocalFileFetch({ engine: 'snarkjs' })
+		})
+	),
+	'gnark': (algorithm)=> (
+		makeGnarkZkOperator({
+			algorithm,
+			fetcher: makeLocalFileFetch({ engine: 'gnark' })
+		})
+	),
 }
 
-const ZK_ENGINES = ['snarkJS', 'gnark']
+const ZK_ENGINES = Object.keys(ALL_ZK_ENGINES) as ZKEngine[]
+
 describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 	describe.each(ZK_ENGINES)('%s engine', (zkEngine) => {
 		const {

@@ -3,7 +3,7 @@ if [ -z "${ALG}" ]; then
   exit 1
 fi
 
-OUT_DIR="../resources/circom/$ALG"
+OUT_DIR="../resources/snarkjs/$ALG"
 
 set -e
 

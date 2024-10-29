@@ -2,6 +2,8 @@ export type EncryptionAlgorithm = 'aes-256-ctr'
 	| 'aes-128-ctr'
 	| 'chacha20'
 
+export type ZKEngine = 'snarkjs' | 'gnark'
+
 // the Array type used in the circuit
 // it's a Uint32Array, as all ChaCha20 operations
 // are done on 32-bit words
@@ -17,6 +19,18 @@ export type Proof = {
 	 */
 	plaintext: Uint8Array
 }
+
+export type FileFetch = {
+	fetch(filename: string): Promise<Uint8Array>
+}
+
+export type MakeZKOperatorOpts<T> = {
+	algorithm: EncryptionAlgorithm
+	fetcher: FileFetch
+	options?: T
+}
+
+export type MakeZKOperator<T> = (opts: MakeZKOperatorOpts<T>) => ZKOperator
 
 /**
  * provide Uint8array for file data loaded into memory

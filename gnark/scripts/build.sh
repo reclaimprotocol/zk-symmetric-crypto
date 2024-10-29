@@ -4,7 +4,7 @@ if [ -z "${GOARCH}" ]; then
 fi
 
 export GOOS="${GOOS:-linux}"
-OUT_DIR="../resources/gnark/$GOARCH"
+OUT_PREFIX="../js/bin/gnark/$GOOS-$GOARCH-"
 
 set -e
 
@@ -14,7 +14,7 @@ build() {
 		-trimpath \
 		-ldflags '-s -w' \
 		-buildmode=c-shared \
-		-o "$OUT_DIR/$module.so" \
+		-o "$OUT_PREFIX-$module.so" \
 		libraries/prover/$module.go
   	
 	echo "Built $module"

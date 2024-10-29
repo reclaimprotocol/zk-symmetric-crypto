@@ -32,6 +32,10 @@ jobs:
         working-directory: ./${{ matrix.package-dir }}
         run: npm run build
 
+      - name: Check lint
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm run lint
+
       - name: Run tests
         working-directory: ./${{ matrix.package-dir }}
         run: npm test

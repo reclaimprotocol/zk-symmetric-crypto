@@ -3,17 +3,19 @@ if [ -z "${ALG}" ]; then
   exit 1
 fi
 
-set ALG = $ALG
+OUT_DIR="../resources/circom/$ALG"
 
 set -e
-echo "building circuit..."
-circom circuits/$ALG/circuit.circom --r1cs --wasm --O2 --inspect -o resources/$ALG/
-mv resources/$ALG/circuit_js/circuit.wasm resources/$ALG/circuit.wasm
-rm -rf resources/$ALG/circuit_js
+
+echo "building $ALG circuit..."
+circom circuits/$ALG/circuit.circom --r1cs --wasm --O2 --inspect -o $OUT_DIR
+mv $OUT_DIR/circuit_js/circuit.wasm $OUT_DIR/circuit.wasm
+rm -rf $OUT_DIR/circuit_js
+
 echo "generating verification key..."
-npm exec snarkjs -- groth16 setup resources/$ALG/circuit.r1cs pot/pot_final.ptau resources/$ALG/circuit_0000.zkey
-npm exec snarkjs -- zkey contribute resources/$ALG/circuit_0000.zkey resources/$ALG/circuit_0001.zkey --name="1st Contributor" -v -e=$(openssl rand -hex 10240)
-npm exec snarkjs -- zkey beacon resources/$ALG/circuit_0001.zkey resources/$ALG/circuit_final.zkey $(openssl rand -hex 128) 20
-rm -rf resources/$ALG/circuit_0000.zkey
-rm -rf resources/$ALG/circuit_0001.zkey
-rm -rf resources/$ALG/circuit_0002.zkey
+npm exec snarkjs -- groth16 setup $OUT_DIR/circuit.r1cs pot/pot_final.ptau $OUT_DIR/circuit_0000.zkey
+npm exec snarkjs -- zkey contribute $OUT_DIR/circuit_0000.zkey $OUT_DIR/circuit_0001.zkey --name="1st Contributor" -v -e=$(openssl rand -hex 10240)
+npm exec snarkjs -- zkey beacon $OUT_DIR/circuit_0001.zkey $OUT_DIR/circuit_final.zkey $(openssl rand -hex 128) 20
+rm -rf $OUT_DIR/circuit_0000.zkey
+rm -rf $OUT_DIR/circuit_0001.zkey
+rm -rf $OUT_DIR/circuit_0002.zkey

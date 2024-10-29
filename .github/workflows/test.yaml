@@ -1,0 +1,60 @@
+name: Test
+
+# Run this workflow on pull requests and pushes to main
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test-js-lib:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22]
+        package-dir: [js]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm install
+      
+      - name: Check build
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm run build
+
+      - name: Run tests
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm test
+  test-circom-circuits:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22]
+        package-dir: [circom]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm install
+
+      - name: Run tests
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm test

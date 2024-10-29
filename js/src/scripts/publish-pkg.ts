@@ -66,12 +66,12 @@ async function main() {
 	await execPromise('npm publish --access public')
 	logger.info('published to NPM, adding changes to git')
 
-	// tag the commit
-	await execPromise(`git tag v${pkgVersion}`)
 	// add changes to git
 	await execPromise('git add .')
 	// commit the changes
 	await execPromise(`git commit -m "chore: publish v${pkgVersion}"`)
+	// tag the commit
+	await execPromise(`git tag v${pkgVersion}`)
 	// push the changes
 	await execPromise('git push')
 	// push the tags

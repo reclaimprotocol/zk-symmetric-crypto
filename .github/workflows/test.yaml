@@ -51,6 +51,15 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
+      - name: Install Rust
+        uses: actions-rust-lang/rustfmt@v1
+      
+      - name: Install Circom
+        run: |
+          git clone https://github.com/iden3/circom.git
+          cd circom
+          cargo install --path circom
+
       - name: Install dependencies
         working-directory: ./${{ matrix.package-dir }}
         run: npm install

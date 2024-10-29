@@ -79,7 +79,7 @@ export async function loadGnarkLib(): Promise<GnarkLib> {
 			throw new Error(
 				`Gnark library not compatible with OS/arch (${platform}/${arch})`
 			)
-		} else if(err.message.includes('no such file')) {
+		} else if(err.message.toLowerCase().includes('no such file')) {
 			throw new Error(
 				`Gnark library not built for OS/arch (${platform}/${arch})`
 			)

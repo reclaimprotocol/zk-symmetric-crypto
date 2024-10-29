@@ -74,6 +74,8 @@ async function main() {
 	await execPromise(`git commit -m "chore: publish v${pkgVersion}"`)
 	// push the changes
 	await execPromise('git push')
+	// push the tags
+	await execPromise('git push --tags')
 
 	logger.info('pushed changes to git. Done.')
 

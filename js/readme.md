@@ -1,6 +1,6 @@
 # ZK Symmetric Crypto - JS
 
-The JS (typescript really) package for generating & verifying ZK proofs for symmetric encryption.
+The JS (typescript really) package for generating & verifying ZK proofs for symmetric encryption, on the browser or NodeJS.
 
 ## Install
 
@@ -12,6 +12,8 @@ The individual backends are optional dependencies. You can install them as neede
 For `snarkjs`: `npm i snarkjs`
 For `gnark`: `npm i koffi`
 	- Also ensure you download the `gnark` binaries. See [here](#obtaining-files-locally)
+	- Note: `gnark` is not supported on the browser.
+	- Note: `gnark` binaries are only built for `linux` - `x86_64` & `arm64`
 For `expander`: No additional dependencies needed
 
 ## Usage

@@ -1,7 +1,7 @@
 import { bitsToUint8Array, bitsToUintArray, toUint8Array, toUintArray, uint8ArrayToBits, uintArrayToBits } from './utils'
 
 // commit hash for this repo
-export const GIT_COMMIT_HASH = '9b2410139d02fa06085af618da1844588925bbe9'
+export const GIT_COMMIT_HASH = 'f27b1d7d4631b571962d51b6792d16f647d07a75'
 
 export const CONFIG = {
 	'chacha20': {

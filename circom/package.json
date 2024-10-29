@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "sh scripts/build-circuit.sh",
-    "test": "node --experimental-strip-types --test"
+    "test": "node --experimental-strip-types --test",
+    "generate:ptau": "sh scripts/generate-ptau.sh",
+    "download:ptau": "sh scripts/download-ptau.sh"
   },
   "keywords": [],
   "author": "",

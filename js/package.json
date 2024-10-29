@@ -5,11 +5,8 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "NODE_ENV=test jest --forceExit --detectOpenHandles",
-    "build:circuit": "sh scripts/build-circuit.sh",
-    "build:tsc": "npm exec tsc",
-    "generate:ptau": "sh scripts/generate-ptau.sh",
-    "download:ptau": "sh scripts/download-ptau.sh",
-    "prepare": "npm run build:tsc",
+    "build": "npm exec tsc",
+    "prepare": "npm run build",
     "commitlint": "commitlint --edit"
   },
   "keywords": [

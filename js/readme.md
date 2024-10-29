@@ -110,3 +110,5 @@ Now, you can use the `local file fetcher` right out of the box.
 4. `npm run test` to run the tests
 
 Note: just FYI, the circuit files are symlinked to the root of the repo (i.e. `resources` & `bin` folders). So during local dev, the default local fetching works right out of the box.
+
+To publish the package, we've a Github Action that will build the package & publish it to the Github Package Registry. It can be manually triggered by running the workflow `Publish to NPM` in the Actions tab.

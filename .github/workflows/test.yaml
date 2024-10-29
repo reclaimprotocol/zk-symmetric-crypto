@@ -58,7 +58,7 @@ jobs:
         run: |
           git clone https://github.com/iden3/circom.git -b v2.1.6 circom-lib
           cd circom-lib
-          RUSTFLAGS="$RUSTFLAGS -A dead_code" cargo install --path circom
+          RUSTFLAGS="-A dead_code -A unused-imports" cargo install --path circom
 
       - name: Install dependencies
         working-directory: ./${{ matrix.package-dir }}

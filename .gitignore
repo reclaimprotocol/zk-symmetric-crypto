@@ -1,8 +1,9 @@
-pot/*.ptau
+circom/pot/*.ptau
 resources/*.r1cs
 resources/*.sym
-src/test.ts
+js/src/test.ts
 node_modules
 lib
 
 .idea
+.DS_Store

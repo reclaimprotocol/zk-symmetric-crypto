@@ -55,4 +55,4 @@ This project is licensed under a [custom license](https://github.com/reclaimprot
 
 ---
 
-Thank you for your contributions! ❤️
+Thank you for your contributions!

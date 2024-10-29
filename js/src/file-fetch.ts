@@ -1,7 +1,7 @@
+import { GIT_COMMIT_HASH } from './config'
 import { FileFetch } from './types'
 
-const COMMIT_HASH = '9b2410139d02fa06085af618da1844588925bbe9'
-const DEFAULT_REMOTE_BASE_URL = `https://github.com/reclaimprotocol/zk-symmetric-crypto/raw/${COMMIT_HASH}/resources/`
+const DEFAULT_REMOTE_BASE_URL = `https://github.com/reclaimprotocol/zk-symmetric-crypto/raw/${GIT_COMMIT_HASH}/resources/`
 const DEFAULT_BASE_PATH = './resources'
 
 export type MakeRemoteFileFetchOpts = {

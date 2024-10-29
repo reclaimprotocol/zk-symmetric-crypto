@@ -97,10 +97,12 @@ Since the proving keys, binaries, circuits etc. are quite large, they aren't inc
 
 Thus, to overcome this, you can locally download the files & use the local file fetching by running the script:
 ``` sh
-npm run node_modules/lib/scripts/download-files.js
+node node_modules/@reclaimprotocol/zk-symmetric-crypto/lib/scripts/download-files
 ```
 
 Now, you can use the `local file fetcher` right out of the box.
+
+Do keep in mind, if you update the package, you will need to run this script again. This is intentional as newer versions of the package may need newer files or just may not be compatible with the old ones
 
 ## Local Dev
 

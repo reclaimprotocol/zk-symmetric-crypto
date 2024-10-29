@@ -2,7 +2,7 @@ import { GIT_COMMIT_HASH } from './config'
 import { FileFetch } from './types'
 
 const DEFAULT_REMOTE_BASE_URL = `https://github.com/reclaimprotocol/zk-symmetric-crypto/raw/${GIT_COMMIT_HASH}/resources/`
-const DEFAULT_BASE_PATH = './resources'
+const DEFAULT_BASE_PATH = '../resources'
 
 export type MakeRemoteFileFetchOpts = {
 	baseUrl?: string
@@ -53,7 +53,9 @@ export function makeLocalFileFetch(
 			// import here to avoid loading fs in
 			// a browser env
 			const { readFile } = await import('fs/promises')
-			const buff = await readFile(path)
+			const { join } = await import('path')
+			const fullPath = join(__dirname, path)
+			const buff = await readFile(fullPath)
 			return buff
 		},
 	}

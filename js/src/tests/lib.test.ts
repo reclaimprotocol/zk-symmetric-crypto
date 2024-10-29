@@ -1,10 +1,10 @@
 import { randomBytes } from 'crypto'
-import { makeLocalFileFetch } from '../file-fetch'
 import {
 	CONFIG,
 	EncryptionAlgorithm,
 	generateProof,
 	makeGnarkZkOperator,
+	makeLocalFileFetch,
 	makeSnarkJsZKOperator,
 	PrivateInput,
 	verifyProof,

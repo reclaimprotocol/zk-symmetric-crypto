@@ -1,8 +1,7 @@
-import {Base64} from "js-base64";
-
-import { Logger, MakeZKOperatorOpts, ZKOperator} from "../types";
-import { CONFIG } from "../config";
-import { ALGS_MAP, generateGnarkWitness, loadGnarkLib, strToUint8Array } from "./utils";
+import { Base64 } from 'js-base64'
+import { CONFIG } from '../config'
+import { Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
+import { ALGS_MAP, generateGnarkWitness, loadGnarkLib, strToUint8Array } from './utils'
 
 export let globalGnarkLib: ReturnType<typeof loadGnarkLib> | undefined
 
@@ -78,7 +77,7 @@ export function makeGnarkZkOperator({
 		await lib.initAlgorithm(id, f1, f2)
 
 		initDone = true
-		
+
 		return lib
 	}
 }

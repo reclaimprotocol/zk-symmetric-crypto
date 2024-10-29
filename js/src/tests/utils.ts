@@ -1,6 +1,6 @@
 import { wasm as WasmTester } from 'circom_tester'
-import { createCipheriv } from "crypto"
-import { join } from "path"
+import { createCipheriv } from 'crypto'
+import { join } from 'path'
 import { EncryptionAlgorithm } from '../types'
 
 export function encryptData(

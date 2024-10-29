@@ -1,4 +1,4 @@
-import { bitsToUint8Array, bitsToUintArray, toUint8Array, toUintArray, uint8ArrayToBits, uintArrayToBits } from "./utils"
+import { bitsToUint8Array, bitsToUintArray, toUint8Array, toUintArray, uint8ArrayToBits, uintArrayToBits } from './utils'
 
 export const CONFIG = {
 	'chacha20': {

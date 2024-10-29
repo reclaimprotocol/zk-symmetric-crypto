@@ -1,5 +1,5 @@
-import { CONFIG } from "./config"
-import { EncryptionAlgorithm, UintArray } from "./types"
+import { CONFIG } from './config'
+import { EncryptionAlgorithm, UintArray } from './types'
 
 export const BITS_PER_WORD = 32
 
@@ -12,6 +12,7 @@ export function toUintArray(buf: Uint8Array) {
 	for(let i = 0;i < arr.length;i++) {
 		arr[i] = arrView.getUint32(i * 4, true)
 	}
+
 	return arr
 }
 
@@ -27,9 +28,10 @@ export function makeUintArray(init: number | number[]) {
 export function toUint8Array(buf: UintArray) {
 	const arr = new Uint8Array(buf.length * 4)
 	const arrView = new DataView(arr.buffer, arr.byteOffset, arr.byteLength)
-	for(let i = 0;i < buf.length;i++) {
-		arrView.setUint32(i * 4, buf[i], true)
+	for(const [i, element] of buf.entries()) {
+		arrView.setUint32(i * 4, element, true)
 	}
+
 	return arr
 }
 
@@ -69,23 +71,24 @@ export function padArray(buf: UintArray, size: number): UintArray {
  */
 export function uint8ArrayToBits(buff: Uint8Array | number[]) {
 	const res: number[] = []
-	for (let i = 0; i < buff.length; i++) {
-		for (let j = 0; j < 8; j++) {
-			if ((buff[i] >> 7-j) & 1) {
-				res.push(1);
+	for(const element of buff) {
+		for(let j = 0; j < 8; j++) {
+			if((element >> 7 - j) & 1) {
+				res.push(1)
 			} else {
-				res.push(0);
+				res.push(0)
 			}
 		}
 	}
-	return res;
+
+	return res
 }
 
 /**
  * Converts an array of bits to a Uint8Array.
  * Expecting BE order.
- * @param bits 
- * @returns 
+ * @param bits
+ * @returns
  */
 export function bitsToUint8Array(bits: number[]) {
 	const arr = new Uint8Array(bits.length / 8)
@@ -103,8 +106,7 @@ export function bitsToUint8Array(bits: number[]) {
  */
 export function uintArrayToBits(uintArray: UintArray | number[]) {
 	const bits: number[][] = []
-	for (let i = 0; i < uintArray.length; i++) {
-		const uint = uintArray[i]
+	for(const uint of uintArray) {
 		bits.push(numToBitsNumerical(uint))
 	}
 
@@ -136,8 +138,8 @@ function bitsToNum(bits: number[]) {
 	let num = 0
 
 	let exp = 2 ** (bits.length - 1)
-	for(let i = 0;i < bits.length;i++) {
-		num += bits[i] * exp
+	for(const bit of bits) {
+		num += bit * exp
 		exp /= 2
 	}
 
@@ -158,9 +160,9 @@ export function getFullCounterIv(nonce: Uint8Array, counter: number) {
 
 /**
  * Get the counter to use for a given chunk.
- * @param algorithm 
- * @param offsetInChunks 
- * @returns 
+ * @param algorithm
+ * @param offsetInChunks
+ * @returns
  */
 export function getCounterForChunk(
 	algorithm: EncryptionAlgorithm,

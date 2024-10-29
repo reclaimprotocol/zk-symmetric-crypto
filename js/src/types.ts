@@ -45,7 +45,7 @@ type ZKInput = Uint8Array | string
 export type VerificationKey = {
 	/** binary data for .zkey file */
 	data: ZKInput
-	json?: any
+	json?: unknown
 }
 
 export type CircuitWasm = Uint8Array | string
@@ -59,7 +59,7 @@ export type GenerateProofOpts = {
 	algorithm: EncryptionAlgorithm
 	/**
 	 * private input to the circuit
-	 * * will include the key, iv, and counter 
+	 * * will include the key, iv, and counter
 	 */
 	privateInput: PrivateInput
 	/**
@@ -82,7 +82,7 @@ export type VerifyProofOpts = {
 	logger?: Logger
 }
 
-type ZKProof = { [_: string]: any } | string
+type ZKProof = { [_: string]: unknown } | string
 
 type ZKProofOutput = {
 	proof: ZKProof
@@ -101,7 +101,7 @@ type ZKProofInput = {
 /**
  * the operator to use for proving and verifying the groth16
  * proof of the ChaCha20 circuit
- * 
+ *
  * this generic interface is allow
  * for different implementations
  */

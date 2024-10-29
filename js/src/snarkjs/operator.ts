@@ -1,4 +1,4 @@
-import { CircuitWasm, Logger, MakeZKOperatorOpts, VerificationKey, ZKOperator } from "../types";
+import { CircuitWasm, Logger, MakeZKOperatorOpts, VerificationKey, ZKOperator } from '../types'
 
 type WitnessData = {
 	type: 'mem'
@@ -10,15 +10,15 @@ type WitnessData = {
 const WITNESS_MEMORY_SIZE_PAGES = 5
 
 /**
- * Constructs a SnarkJS ZK operator using the provided functions to get 
- * the circuit WASM and ZK key. This operator can generate witnesses and 
+ * Constructs a SnarkJS ZK operator using the provided functions to get
+ * the circuit WASM and ZK key. This operator can generate witnesses and
  * produce proofs for zero-knowledge circuits.
  *
  * @param algorithm - operator for the alg: chacha20, aes-256-ctr,
  *  aes-128-ctr
  * @param fetcher - A function that fetches a file by name and returns
  * 	its contents as a Uint8Array.
- * 
+ *
  * @returns {ZKOperator} A ZK operator that can generate witnesses and
  * 	proofs.
  * @throws {Error} Throws an error if the `snarkjs` library is not available.
@@ -39,7 +39,7 @@ export function makeSnarkJsZKOperator({
 	const snarkjs = require('snarkjs')
 	let zkey: Promise<VerificationKey> | VerificationKey | undefined
 	let circuitWasm: Promise<CircuitWasm> | CircuitWasm | undefined
-	let wc: Promise<any> | undefined
+	let wc: Promise<unknown> | undefined
 
 	return {
 		async generateWitness(input, logger) {
@@ -85,13 +85,14 @@ export function makeSnarkJsZKOperator({
 					wtns,
 				)
 			}
-			
+
 			return wtns.data!
 		},
 		async groth16Prove(witness, logger) {
 			zkey ||= getZkey()
+			const { data } = await zkey
 			return snarkjs.groth16.prove(
-				(await zkey).data,
+				data,
 				witness,
 				logger
 			)
@@ -105,7 +106,7 @@ export function makeSnarkJsZKOperator({
 			}
 
 			return snarkjs.groth16.verify(
-				zkeyResult.json!,
+				zkeyResult.json,
 				publicSignals,
 				proof,
 				logger

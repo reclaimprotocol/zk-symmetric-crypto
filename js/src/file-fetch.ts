@@ -1,4 +1,4 @@
-import { FileFetch } from "./types"
+import { FileFetch } from './types'
 
 const COMMIT_HASH = '9b2410139d02fa06085af618da1844588925bbe9'
 const DEFAULT_REMOTE_BASE_URL = `https://github.com/reclaimprotocol/zk-symmetric-crypto/raw/${COMMIT_HASH}/resources/`
@@ -16,7 +16,7 @@ export type MakeLocalFileFetchOpts = {
  * Fetches ZK resources from a remote server.
  * Assumes the structure of the resources is:
  * BASE_URL/{engine}/{filename}
- * 
+ *
  * By default, it uses the resources from a specific commit
  * of the `zk-symmetric-crypto` repository.
  */

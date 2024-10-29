@@ -1,17 +1,17 @@
-import { randomBytes } from 'crypto';
+import { randomBytes } from 'crypto'
+import { makeLocalFileFetch } from '../file-fetch'
 import {
-	PrivateInput,
-	generateProof,
-	makeSnarkJsZKOperator,
-	makeGnarkZkOperator,
-	verifyProof,
-	ZKOperator,
-	EncryptionAlgorithm,
 	CONFIG,
+	EncryptionAlgorithm,
+	generateProof,
+	makeGnarkZkOperator,
+	makeSnarkJsZKOperator,
+	PrivateInput,
+	verifyProof,
 	ZKEngine,
+	ZKOperator,
 } from '../index'
-import { encryptData } from "./utils";
-import { makeLocalFileFetch } from '../file-fetch';
+import { encryptData } from './utils'
 
 jest.setTimeout(20_000)
 
@@ -41,7 +41,7 @@ const ALL_ZK_ENGINES: {
 	'snarkjs': (algorithm) => (
 		makeSnarkJsZKOperator({ algorithm, fetcher })
 	),
-	'gnark': (algorithm)=> (
+	'gnark': (algorithm) => (
 		makeGnarkZkOperator({ algorithm, fetcher })
 	),
 }
@@ -107,7 +107,7 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 			// use a chunk in the middle
 			const offset = 2
 			const plaintext = totalPlaintext
-				.subarray(chunkSizeBytes*offset, chunkSizeBytes * (offset + 1))
+				.subarray(chunkSizeBytes * offset, chunkSizeBytes * (offset + 1))
 
 			const iv = Buffer.alloc(12, 3)
 			const privateInput: PrivateInput = {
@@ -121,7 +121,7 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 				iv,
 			)
 			const ciphertext = totalCiphertext
-				.subarray(chunkSizeBytes*offset, chunkSizeBytes * (offset + 1))
+				.subarray(chunkSizeBytes * offset, chunkSizeBytes * (offset + 1))
 
 			const publicInput = { ciphertext, iv, offset }
 			const proof = await generateProof({
@@ -154,7 +154,7 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 				privateInput.key,
 				iv
 			)
-			const publicInput = { ciphertext, iv, offset: 0}
+			const publicInput = { ciphertext, iv, offset: 0 }
 
 			const proof = await generateProof({
 				algorithm,

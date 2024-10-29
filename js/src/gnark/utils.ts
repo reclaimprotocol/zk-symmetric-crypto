@@ -99,8 +99,8 @@ export function strToUint8Array(str: string) {
 	return new TextEncoder().encode(str)
 }
 
-export 
-function generateGnarkWitness(cipher:EncryptionAlgorithm, input){
+export
+function generateGnarkWitness(cipher: EncryptionAlgorithm, input) {
 	const {
 		bitsToUint8Array,
 		isLittleEndian
@@ -121,6 +121,6 @@ function generateGnarkWitness(cipher:EncryptionAlgorithm, input){
 	function deSerialiseCounter() {
 		const bytes = bitsToUint8Array(input.counter)
 		const counterView = new DataView(bytes.buffer)
-		return counterView.getUint32(0,isLittleEndian)
+		return counterView.getUint32(0, isLittleEndian)
 	}
 }

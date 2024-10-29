@@ -52,7 +52,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install Rust
-        uses: actions-rust-lang/rustfmt@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v1
       
       - name: Install Circom
         run: |

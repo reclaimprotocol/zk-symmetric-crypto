@@ -23,6 +23,12 @@ export const ALGS_MAP: {
 	'aes-256-ctr': { id: 2, ext: 'aes256' },
 }
 
+// golang uses different arch names
+// for some archs -- so this map corrects the name
+const ARCH_MAP = {
+	'x64': 'x86_64',
+}
+
 export async function loadGnarkLib(): Promise<GnarkLib> {
 	const koffi = await import('koffi')
 		.catch(() => undefined)
@@ -47,7 +53,7 @@ export async function loadGnarkLib(): Promise<GnarkLib> {
 		r1:  'longlong',
 	})
 
-	const arch = process.arch
+	const arch = ARCH_MAP[process.arch] || process.arch
 	const platform = process.platform
 
 	const libVerifyPath = join(

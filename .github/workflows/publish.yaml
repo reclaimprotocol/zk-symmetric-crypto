@@ -7,6 +7,10 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22]
+        package-dir: [js]
 
     steps:
       - name: Checkout repository
@@ -15,13 +19,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '22' # Specify the Node.js version if required
+          node-version: ${{ matrix.node-version }}
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
+        working-directory: ./${{ matrix.package-dir }}
         run: npm install
+      
+      - name: Lint
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm run lint
 
       - name: Publish to NPM
+        working-directory: ./${{ matrix.package-dir }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm run publish:pkg

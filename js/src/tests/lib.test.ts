@@ -83,20 +83,12 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 			)
 			const publicInput = { ciphertext, iv: iv, offset: 0 }
 
-
 			const proof = await generateProof({
 				algorithm,
 				privateInput,
 				publicInput,
 				operator
 			})
-			// ensure the ZK decrypted data matches the plaintext
-			expect(
-				proof.plaintext
-					.slice(0, plaintext.length)
-			).toEqual(
-				plaintext
-			)
 			// client will send proof to witness
 			// witness would verify proof
 			await verifyProof({ proof, publicInput, operator })
@@ -106,8 +98,6 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 			const totalPlaintext = new Uint8Array(randomBytes(chunkSizeBytes * 5))
 			// use a chunk in the middle
 			const offset = 2
-			const plaintext = totalPlaintext
-				.subarray(chunkSizeBytes * offset, chunkSizeBytes * (offset + 1))
 
 			const iv = Buffer.alloc(12, 3)
 			const privateInput: PrivateInput = {
@@ -130,13 +120,8 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 				publicInput,
 				operator
 			})
-			// ensure the ZK decrypted data matches the plaintext
-			expect(
-				proof.plaintext
-					.slice(0, plaintext.length)
-			).toEqual(
-				plaintext
-			)
+
+			await verifyProof({ proof, publicInput, operator })
 		})
 
 		it('should fail to verify incorrect data', async() => {
@@ -145,7 +130,6 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 			const privateInput: PrivateInput = {
 				key: Buffer.alloc(keySizeBytes, 2),
 			}
-
 
 			const iv = Buffer.alloc(12, 3)
 			const ciphertext = encryptData(

@@ -46,6 +46,7 @@
     }
   },
   "dependencies": {
+    "@stablelib/chacha20poly1305": "^1.0.0",
     "js-base64": "^3.7.7"
   },
   "devDependencies": {

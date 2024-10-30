@@ -1,4 +1,3 @@
-import { Base64 } from 'js-base64'
 import { CONFIG } from './config'
 import { EncryptionAlgorithm, GenerateProofOpts, Proof, VerifyProofOpts } from './types'
 import { getCounterForChunk } from './utils'
@@ -11,31 +10,15 @@ import { getCounterForChunk } from './utils'
  */
 export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
 	const { algorithm, operator, logger } = opts
-	const {
-		bitsPerWord,
-		chunkSize,
-		bitsToUint8Array
-	} = CONFIG[algorithm]
-	const witness = await generateZkWitness(opts)
-	const {
-		proof,
-		publicSignals
-	} = await operator.groth16Prove(witness, logger)
-
-	const totalBits = chunkSize * bitsPerWord
+	const { witness, plaintextArray } = await generateZkWitness(opts)
+	const { proof } = await operator.groth16Prove(witness, logger)
 
 	return {
 		algorithm,
 		proofJson: typeof proof === 'string'
 			? proof
 			: JSON.stringify(proof),
-		plaintext: Array.isArray(publicSignals) ? //snarkJS
-			bitsToUint8Array(
-				publicSignals
-					.slice(0, totalBits)
-					.map((x) => +x)
-			) :
-			Base64.toUint8Array(publicSignals) // gnark
+		plaintext: plaintextArray
 	}
 }
 
@@ -46,9 +29,7 @@ export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
  */
 export async function generateZkWitness({
 	algorithm,
-	privateInput: {
-		key,
-	},
+	privateInput: { key },
 	publicInput: { ciphertext, iv, offset },
 	operator
 }: GenerateProofOpts,
@@ -72,13 +53,23 @@ export async function generateZkWitness({
 		algorithm,
 		ciphertext,
 	)
+	const plaintextArray = await decryptCiphertext({
+		algorithm,
+		key,
+		iv,
+		offset,
+		ciphertext: ciphertextArray,
+	})
+
 	const witness = await operator.generateWitness({
 		key: uint8ArrayToBits(key),
 		nonce: uint8ArrayToBits(iv),
 		counter: serialiseCounter(),
 		in: uint8ArrayToBits(ciphertextArray),
+		out: uint8ArrayToBits(plaintextArray),
 	},)
-	return witness
+
+	return { witness, plaintextArray }
 
 	function serialiseCounter() {
 		const counterArr = new Uint8Array(4)
@@ -99,15 +90,17 @@ export async function generateZkWitness({
  * @param zkey
  */
 export async function verifyProof({
-	proof: { algorithm, plaintext, proofJson },
+	proof: { algorithm, proofJson, plaintext },
 	publicInput: { ciphertext, iv, offset },
 	operator,
 }: VerifyProofOpts): Promise<void> {
-	const { uint8ArrayToBits, isLittleEndian, startCounter } = CONFIG[algorithm]
+	const { uint8ArrayToBits, isLittleEndian } = CONFIG[algorithm]
+	const startCounter = getCounterForChunk(algorithm, offset)
 	const ciphertextArray = padCiphertextToChunkSize(
 		algorithm,
 		ciphertext
 	)
+
 	if(ciphertextArray.length !== plaintext.length) {
 		throw new Error('ciphertext and plaintext must be the same length')
 	}
@@ -119,6 +112,7 @@ export async function verifyProof({
 		...serialiseCounter(),
 		...uint8ArrayToBits(ciphertextArray),
 	].flat()
+
 	const verified = await operator.groth16Verify(
 		pubInputs,
 		JSON.parse(proofJson),
@@ -131,7 +125,7 @@ export async function verifyProof({
 	function serialiseCounter() {
 		const counterArr = new Uint8Array(4)
 		const counterView = new DataView(counterArr.buffer)
-		counterView.setUint32(0, offset + startCounter, isLittleEndian)
+		counterView.setUint32(0, startCounter, isLittleEndian)
 		return uint8ArrayToBits(counterArr)
 			.flat()
 	}
@@ -141,10 +135,7 @@ function padCiphertextToChunkSize(
 	alg: EncryptionAlgorithm,
 	ciphertext: Uint8Array
 ) {
-	const {
-		chunkSize,
-		bitsPerWord,
-	} = CONFIG[alg]
+	const { chunkSize, bitsPerWord } = CONFIG[alg]
 
 	const expectedSizeBytes = (chunkSize * bitsPerWord) / 8
 	if(ciphertext.length > expectedSizeBytes) {
@@ -159,4 +150,29 @@ function padCiphertextToChunkSize(
 	}
 
 	return ciphertext
+}
+
+type DecryptCiphertextOpts = {
+	algorithm: EncryptionAlgorithm
+	key: Uint8Array
+	iv: Uint8Array
+	offset: number
+	ciphertext: Uint8Array
+}
+
+async function decryptCiphertext({
+	algorithm,
+	key,
+	iv,
+	offset,
+	ciphertext,
+}: DecryptCiphertextOpts) {
+	const { chunkSize, bitsPerWord, encrypt } = CONFIG[algorithm]
+	const chunkSizeBytes = chunkSize * bitsPerWord / 8
+	const startOffset = offset * chunkSizeBytes
+	const inp = new Uint8Array(startOffset + ciphertext.length)
+	inp.set(ciphertext, startOffset)
+
+	const out = await encrypt({ key, iv, in: inp })
+	return out.slice(startOffset)
 }

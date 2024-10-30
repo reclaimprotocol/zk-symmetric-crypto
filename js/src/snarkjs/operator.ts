@@ -42,7 +42,8 @@ export function makeSnarkJsZKOperator({
 	let wc: Promise<unknown> | undefined
 
 	return {
-		async generateWitness(input, logger) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		async generateWitness({ out, ...input }, logger) {
 			circuitWasm ||= getCircuitWasm()
 			wc ||= (async() => {
 				if(!snarkjs.wtns.getWtnsCalculator) {

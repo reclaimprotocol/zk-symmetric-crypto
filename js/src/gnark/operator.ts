@@ -65,7 +65,8 @@ export function makeGnarkZkOperator({
 			return lib
 		}
 
-		const { id, ext } = ALGS_MAP[algorithm]
+		const { ext } = ALGS_MAP[algorithm]
+		const { index: id } = CONFIG[algorithm]
 		const [pk, r1cs] = await Promise.all([
 			fetcher.fetch('gnark', `pk.${ext}`, logger),
 			fetcher.fetch('gnark', `r1cs.${ext}`, logger),

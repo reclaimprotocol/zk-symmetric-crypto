@@ -13,14 +13,11 @@ export type GnarkLib = {
 }
 
 export const ALGS_MAP: {
-	[key in EncryptionAlgorithm]: {
-		id: number
-		ext: string
-	}
+	[key in EncryptionAlgorithm]: { ext: string }
 } = {
-	'chacha20': { id: 0, ext: 'chacha20' },
-	'aes-128-ctr': { id: 1, ext: 'aes128' },
-	'aes-256-ctr': { id: 2, ext: 'aes256' },
+	'chacha20': { ext: 'chacha20' },
+	'aes-128-ctr': { ext: 'aes128' },
+	'aes-256-ctr': { ext: 'aes256' },
 }
 
 // golang uses different arch names
@@ -99,8 +96,7 @@ export function strToUint8Array(str: string) {
 	return new TextEncoder().encode(str)
 }
 
-export
-function generateGnarkWitness(cipher: EncryptionAlgorithm, input) {
+export function generateGnarkWitness(cipher: EncryptionAlgorithm, input) {
 	const {
 		bitsToUint8Array,
 		isLittleEndian

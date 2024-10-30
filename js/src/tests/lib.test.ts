@@ -3,6 +3,7 @@ import {
 	CONFIG,
 	EncryptionAlgorithm,
 	generateProof,
+	makeExpanderZkOperator,
 	makeGnarkZkOperator,
 	makeLocalFileFetch,
 	makeSnarkJsZKOperator,
@@ -44,15 +45,16 @@ const ALL_ZK_ENGINES: {
 	'gnark': (algorithm) => (
 		makeGnarkZkOperator({ algorithm, fetcher })
 	),
+	'expander': (algorithm) => (
+		makeExpanderZkOperator({ algorithm, fetcher })
+	)
 }
 
 const ZK_ENGINES = Object.keys(ALL_ZK_ENGINES) as ZKEngine[]
 
 describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 	describe.each(ZK_ENGINES)('%s engine', (zkEngine) => {
-		const {
-			encLength,
-		} = ALG_TEST_CONFIG[algorithm]
+		const { encLength } = ALG_TEST_CONFIG[algorithm]
 		const {
 			bitsPerWord,
 			chunkSize,

@@ -107,6 +107,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "arith"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "ark-std",
+ "cfg-if",
+ "ethnum",
+ "halo2curves",
+ "log",
+ "rand",
+ "raw-cpuid",
+ "sha2",
+ "thiserror",
+ "tynm",
+]
+
+[[package]]
 name = "ark-std"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -295,13 +312,27 @@ dependencies = [
 name = "circuit"
 version = "0.1.0"
 dependencies = [
- "arith",
+ "arith 0.1.0",
  "ark-std",
- "config",
+ "config 0.1.0",
  "ethnum",
  "log",
  "thiserror",
- "transcript",
+ "transcript 0.1.0",
+]
+
+[[package]]
+name = "circuit"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "ark-std",
+ "config 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "ethnum",
+ "log",
+ "thiserror",
+ "transcript 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
 ]
 
 [[package]]
@@ -365,15 +396,31 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 name = "config"
 version = "0.1.0"
 dependencies = [
- "arith",
+ "arith 0.1.0",
  "ark-std",
  "getrandom",
- "gf2",
- "gf2_128",
+ "gf2 0.1.0",
+ "gf2_128 0.1.0",
  "halo2curves",
- "mersenne31",
+ "mersenne31 0.1.0",
  "mpi",
- "transcript",
+ "transcript 0.1.0",
+]
+
+[[package]]
+name = "config"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "ark-std",
+ "getrandom",
+ "gf2 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "gf2_128 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "halo2curves",
+ "mersenne31 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "mpi",
+ "transcript 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
 ]
 
 [[package]]
@@ -541,17 +588,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b90ca2580b73ab6a1f724b76ca11ab632df820fd6040c336200d2c1df7b3c82c"
 
 [[package]]
-name = "expander_bench"
+name = "expander_compiler"
 version = "0.1.0"
 dependencies = [
- "arith",
- "circuit",
- "config",
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "ark-std",
+ "chrono",
+ "circuit 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "clap",
+ "config 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "ethnum",
+ "gf2 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "gkr 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "halo2curves",
+ "mersenne31 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "rand",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "expander_symmetric_crypto"
+version = "0.1.0"
+dependencies = [
+ "arith 0.1.0",
+ "circuit 0.1.0",
+ "config 0.1.0",
  "console_error_panic_hook",
+ "expander_compiler",
  "getrandom",
- "gkr",
+ "gkr 0.1.0",
  "peak_alloc",
- "transcript",
+ "transcript 0.1.0",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -657,7 +724,24 @@ dependencies = [
 name = "gf2"
 version = "0.1.0"
 dependencies = [
- "arith",
+ "arith 0.1.0",
+ "ark-std",
+ "cfg-if",
+ "ethnum",
+ "halo2curves",
+ "log",
+ "rand",
+ "raw-cpuid",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "gf2"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
  "ark-std",
  "cfg-if",
  "ethnum",
@@ -673,9 +757,20 @@ dependencies = [
 name = "gf2_128"
 version = "0.1.0"
 dependencies = [
- "arith",
+ "arith 0.1.0",
  "ark-std",
- "gf2",
+ "gf2 0.1.0",
+ "rand",
+]
+
+[[package]]
+name = "gf2_128"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "ark-std",
+ "gf2 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
  "rand",
 ]
 
@@ -689,29 +784,61 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 name = "gkr"
 version = "0.1.0"
 dependencies = [
- "arith",
+ "arith 0.1.0",
  "ark-std",
  "bytes",
  "chrono",
- "circuit",
+ "circuit 0.1.0",
  "clap",
- "config",
+ "config 0.1.0",
  "env_logger",
  "ethnum",
- "gf2",
- "gf2_128",
+ "gf2 0.1.0",
+ "gf2_128 0.1.0",
  "halo2curves",
  "log",
- "mersenne31",
+ "mersenne31 0.1.0",
  "mpi",
- "polynomials",
+ "polynomials 0.1.0",
  "rand",
  "sha2",
- "sumcheck",
+ "sumcheck 0.1.0",
  "thiserror",
  "tiny-keccak",
  "tokio",
- "transcript",
+ "transcript 0.1.0",
+ "tynm",
+ "warp",
+]
+
+[[package]]
+name = "gkr"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "ark-std",
+ "bytes",
+ "chrono",
+ "circuit 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "clap",
+ "config 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "env_logger",
+ "ethnum",
+ "gf2 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "gf2_128 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "halo2curves",
+ "log",
+ "mersenne31 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "mpi",
+ "polynomials 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "rand",
+ "sha2",
+ "sumcheck 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "thiserror",
+ "tiny-keccak",
+ "tokio",
+ "transcript 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
  "tynm",
  "warp",
 ]
@@ -1057,7 +1184,24 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 name = "mersenne31"
 version = "0.1.0"
 dependencies = [
- "arith",
+ "arith 0.1.0",
+ "ark-std",
+ "cfg-if",
+ "ethnum",
+ "halo2curves",
+ "log",
+ "rand",
+ "raw-cpuid",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "mersenne31"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
  "ark-std",
  "cfg-if",
  "ethnum",
@@ -1316,7 +1460,17 @@ checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 name = "polynomials"
 version = "0.1.0"
 dependencies = [
- "arith",
+ "arith 0.1.0",
+ "ark-std",
+ "halo2curves",
+]
+
+[[package]]
+name = "polynomials"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
  "ark-std",
  "halo2curves",
 ]
@@ -1644,13 +1798,27 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 name = "sumcheck"
 version = "0.1.0"
 dependencies = [
- "arith",
- "circuit",
- "config",
+ "arith 0.1.0",
+ "circuit 0.1.0",
+ "config 0.1.0",
  "env_logger",
  "log",
- "polynomials",
- "transcript",
+ "polynomials 0.1.0",
+ "transcript 0.1.0",
+]
+
+[[package]]
+name = "sumcheck"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "circuit 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "config 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "env_logger",
+ "log",
+ "polynomials 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
+ "transcript 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
 ]
 
 [[package]]
@@ -1809,7 +1977,17 @@ dependencies = [
 name = "transcript"
 version = "0.1.0"
 dependencies = [
- "arith",
+ "arith 0.1.0",
+ "sha2",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "transcript"
+version = "0.1.0"
+source = "git+https://github.com/reclaimprotocol/Expander?branch=wasm#7f2ac635a2d54cf59cbe0d6911ddfa2471536bae"
+dependencies = [
+ "arith 0.1.0 (git+https://github.com/reclaimprotocol/Expander?branch=wasm)",
  "sha2",
  "tiny-keccak",
 ]

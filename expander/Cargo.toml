@@ -1,5 +1,5 @@
 [package]
-name = "expander_bench"
+name = "expander_symmetric_crypto"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,14 +9,17 @@ crate-type = ["cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+console_error_panic_hook = "0.1.7"
 web-sys = { version = "0.3", features = ["console"] }
 wasm-bindgen = "0.2.95"
-peak_alloc = "0.2.0"
 getrandom = { version = "0.2", features = ["js"] }
 
 expander_circuit = { path = "../../Expander/circuit", package = "circuit" }
 expander_config = { path = "../../Expander/config", package = "config" }
-console_error_panic_hook = "0.1.7"
 expander_gkr = { path = "../../Expander/gkr", package = "gkr" }
 expander_arith = { path = "../../Expander/arith", package = "arith" }
 expander_transcript = { path = "../../Expander/transcript", package = "transcript" }
+expander_compiler = {  path = "../../ExpanderCompilerCollection/expander_compiler", package = "expander_compiler" }
+
+[dev-dependencies]
+peak_alloc = "0.2.0"

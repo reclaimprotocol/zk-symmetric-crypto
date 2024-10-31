@@ -24,7 +24,8 @@ pub enum SymmetricCryptoAlgorithm {
 
 #[derive(Debug)]
 pub enum Error {
-	AlgorithmNotLoaded(SymmetricCryptoAlgorithm),
+	CircuitNotLoaded(SymmetricCryptoAlgorithm),
+	SolverNotLoaded(SymmetricCryptoAlgorithm),
 }
 
 static mut CIRCUITS: Vec<Option<_Circuit>> = Vec::new();
@@ -92,6 +93,7 @@ pub fn prove(
 	prover.prepare_mem(&circuit);
 
 	let (claimed_v, proof) = prover.prove(&mut circuit);
+
 	return dump_proof_and_claimed_v(&proof, &claimed_v).unwrap();
 }
 
@@ -136,11 +138,11 @@ fn get_circuit(alg: SymmetricCryptoAlgorithm) -> Result<_Circuit, Error> {
 	let alg_value = alg as usize;
 	unsafe {
 		if CIRCUITS.len() <= alg_value {
-			return Err(Error::AlgorithmNotLoaded(alg));
+			return Err(Error::CircuitNotLoaded(alg));
 		}
 	
 		let circuit_opt = CIRCUITS[alg_value].clone();
-		return circuit_opt.ok_or(Error::AlgorithmNotLoaded(alg));
+		return circuit_opt.ok_or(Error::CircuitNotLoaded(alg));
 	}
 }
 
@@ -165,10 +167,10 @@ fn get_solver(alg: SymmetricCryptoAlgorithm) -> Result<&'static _WitnessSolver, 
 	let alg_value = alg as usize;
 	unsafe {
 		if SOLVERS.len() <= alg_value {
-			return Err(Error::AlgorithmNotLoaded(alg));
+			return Err(Error::SolverNotLoaded(alg));
 		}
 	
-		return SOLVERS[alg_value].ok_or(Error::AlgorithmNotLoaded(alg));
+		return SOLVERS[alg_value].ok_or(Error::SolverNotLoaded(alg));
 	}
 }
 

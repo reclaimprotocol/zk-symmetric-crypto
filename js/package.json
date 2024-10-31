@@ -5,6 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "NODE_ENV=test jest --forceExit --detectOpenHandles",
+    "bench": "NODE_ENV=test node -r @swc-node/register ./src/tests/benchmark",
     "build": "npm exec tsc",
     "prepare": "npm run build",
     "commitlint": "commitlint --edit",
@@ -64,6 +65,7 @@
     "jest": "^29.7.0",
     "koffi": "^2.8.11",
     "snarkjs": "git+https://github.com/reclaimprotocol/snarkjs.git",
+    "tinybench": "^3.0.3",
     "typescript": "^5.2.2"
   }
 }

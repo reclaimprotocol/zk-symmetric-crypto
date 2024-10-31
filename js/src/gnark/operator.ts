@@ -41,7 +41,12 @@ export function makeGnarkZkOperator({
 				cipher: algorithm,
 				proof: proofStr,
 				publicSignals: Base64.fromUint8Array(
-					bitsToUint8Array(publicSignals.flat())
+					bitsToUint8Array([
+						...publicSignals.out,
+						...publicSignals.nonce,
+						...publicSignals.counter,
+						...publicSignals.in
+					])
 				),
 			}
 

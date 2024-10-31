@@ -3,16 +3,11 @@ import {
 	CONFIG,
 	EncryptionAlgorithm,
 	generateProof,
-	makeExpanderZkOperator,
-	makeGnarkZkOperator,
-	makeLocalFileFetch,
-	makeSnarkJsZKOperator,
 	PrivateInput,
 	verifyProof,
-	ZKEngine,
 	ZKOperator,
 } from '../index'
-import { encryptData } from './utils'
+import { ALL_ZK_ENGINES, encryptData, ZK_ENGINES } from './utils'
 
 jest.setTimeout(20_000)
 
@@ -33,24 +28,6 @@ const ALG_TEST_CONFIG = {
 		encLength: 44,
 	},
 }
-
-const fetcher = makeLocalFileFetch()
-
-const ALL_ZK_ENGINES: {
-	[E in ZKEngine]: (algorithm: EncryptionAlgorithm) => ZKOperator
-} = {
-	'snarkjs': (algorithm) => (
-		makeSnarkJsZKOperator({ algorithm, fetcher })
-	),
-	'gnark': (algorithm) => (
-		makeGnarkZkOperator({ algorithm, fetcher })
-	),
-	'expander': (algorithm) => (
-		makeExpanderZkOperator({ algorithm, fetcher })
-	)
-}
-
-const ZK_ENGINES = Object.keys(ALL_ZK_ENGINES) as ZKEngine[]
 
 describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 	describe.each(ZK_ENGINES)('%s engine', (zkEngine) => {

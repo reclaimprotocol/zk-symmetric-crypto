@@ -3,15 +3,20 @@ import { Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
 import { loadCircuitIfRequired, loadExpander, loadProverCircuitIfRequired } from './utils'
 import { prove, verify } from './wasm-binding'
 
-let wasmInitDone = false
+let wasmInit: Promise<void> | undefined
+
+export type ExpanderOpts = {
+	maxWorkers?: number
+}
 
 export function makeExpanderZkOperator({
 	algorithm,
 	fetcher
-}: MakeZKOperatorOpts<{}>): ZKOperator {
+}: MakeZKOperatorOpts<ExpanderOpts>): ZKOperator {
 	const { index: id, keySizeBytes } = CONFIG[algorithm]
-	let loadedProver = false
-	let loadedCircuit = false
+	let proverLoader: Promise<void> | undefined
+	let circuitLoader: Promise<void> | undefined
+
 	return {
 		generateWitness(input) {
 			const witness = new Uint8Array([
@@ -64,34 +69,19 @@ export function makeExpanderZkOperator({
 	}
 
 	async function loadProverAsRequired(logger?: Logger) {
-		if(!wasmInitDone) {
-			await loadExpander(fetcher, logger)
-			wasmInitDone = true
-		}
+		wasmInit ||= loadExpander(fetcher, logger)
+		await wasmInit
 
-		if(loadedProver) {
-			return
-		}
-
-		await Promise.all([
-			loadProverCircuitIfRequired(algorithm, fetcher, logger),
-			loadCircuitIfRequired(algorithm, fetcher, logger)
-		])
-		loadedCircuit = true
-		loadedProver = true
+		proverLoader ||= loadProverCircuitIfRequired(algorithm, fetcher, logger)
+		circuitLoader ||= loadCircuitIfRequired(algorithm, fetcher, logger)
+		await Promise.all([proverLoader, circuitLoader])
 	}
 
 	async function loadCircuitAsRequired(logger?: Logger) {
-		if(!wasmInitDone) {
-			await loadExpander(fetcher, logger)
-			wasmInitDone = true
-		}
+		wasmInit ||= loadExpander(fetcher, logger)
+		await wasmInit
 
-		if(loadedCircuit) {
-			return
-		}
-
-		await loadCircuitIfRequired(algorithm, fetcher, logger)
-		loadedCircuit = true
+		circuitLoader ||= loadCircuitIfRequired(algorithm, fetcher, logger)
+		await circuitLoader
 	}
 }

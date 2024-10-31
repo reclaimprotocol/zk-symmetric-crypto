@@ -1,7 +1,13 @@
 import { wasm as WasmTester } from 'circom_tester'
 import { createCipheriv } from 'crypto'
 import { join } from 'path'
-import { EncryptionAlgorithm } from '../types'
+import {
+	EncryptionAlgorithm, 	makeExpanderZkOperator,
+	makeGnarkZkOperator,
+	makeLocalFileFetch,
+	makeSnarkJsZKOperator,
+	ZKEngine, ZKOperator
+} from '../index'
 
 export function encryptData(
 	algorithm: EncryptionAlgorithm,
@@ -30,3 +36,21 @@ export function encryptData(
 export function loadCircuit(name: string) {
 	return WasmTester(join(__dirname, `../../circuits/tests/${name}.circom`))
 }
+
+const fetcher = makeLocalFileFetch()
+
+export const ALL_ZK_ENGINES: {
+	[E in Exclude<ZKEngine, 'snarkjs'>]: (algorithm: EncryptionAlgorithm) => ZKOperator
+} = {
+	// 'snarkjs': (algorithm) => (
+	// 	makeSnarkJsZKOperator({ algorithm, fetcher })
+	// ),
+	'expander': (algorithm) => (
+		makeExpanderZkOperator({ algorithm, fetcher })
+	),
+	'gnark': (algorithm) => (
+		makeGnarkZkOperator({ algorithm, fetcher })
+	),
+}
+
+export const ZK_ENGINES = Object.keys(ALL_ZK_ENGINES) as ZKEngine[]

@@ -27,6 +27,7 @@ func generateChaChaV3() error {
 	}
 
 	c := circuit.GetLayeredCircuit()
+	solver := circuit.GetInputSolver()
 
 	circuitfilename := GEN_FILES_DIR + "chacha20.txt"
 	err = os.WriteFile(circuitfilename, c.Serialize(), 0o644)
@@ -35,6 +36,14 @@ func generateChaChaV3() error {
 	}
 
 	fmt.Printf("generated circuit file: %s\n", circuitfilename)
+
+	solverfilename := GEN_FILES_DIR + "chacha20-solver.txt"
+	err = os.WriteFile(solverfilename, solver.Serialize(), 0o644)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("generated solver file: %s\n", solverfilename)
 
 	return nil
 }

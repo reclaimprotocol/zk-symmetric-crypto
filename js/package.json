@@ -4,8 +4,9 @@
   "description": "JS Wrappers for Various ZK Snark Circuits",
   "main": "lib/index.js",
   "scripts": {
-    "test": "NODE_ENV=test jest --forceExit --detectOpenHandles",
-    "bench": "NODE_ENV=test node -r @swc-node/register ./src/tests/benchmark",
+    "run:tsc": "SWC_NODE_IGNORE_DYNAMIC=true node -r @swc-node/register",
+    "test": "SWC_NODE_IGNORE_DYNAMIC=true NODE_ENV=test node --experimental-strip-types node_modules/.bin/jest --forceExit --detectOpenHandles",
+    "bench": "NODE_ENV=test npm run run:tsc -- ./src/tests/benchmark",
     "build": "npm exec tsc",
     "prepare": "npm run build",
     "commitlint": "commitlint --edit",
@@ -48,7 +49,8 @@
   },
   "dependencies": {
     "@stablelib/chacha20poly1305": "^1.0.0",
-    "js-base64": "^3.7.7"
+    "js-base64": "^3.7.7",
+    "p-queue": "^6.0.0"
   },
   "devDependencies": {
     "@adiwajshing/eslint-config": "github:adiwajshing/eslint-config",

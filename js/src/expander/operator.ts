@@ -1,19 +1,30 @@
 import { CONFIG } from '../config'
 import { Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
-import { loadCircuitIfRequired, loadExpander, loadProverCircuitIfRequired } from './utils'
+import { initWorker } from './node-worker'
+import { loadCircuitIfRequired, loadExpander, loadProverCircuitIfRequired, makeWorkerPool } from './utils'
 import { prove, verify } from './wasm-binding'
 
-let wasmInit: Promise<void> | undefined
+let wasmInit: ReturnType<typeof loadExpander> | undefined
 
 export type ExpanderOpts = {
+	/**
+	 * Number of parallel workers to use.
+	 * Set to 0 to disable parallelism.
+	 * @default 0
+	 */
 	maxWorkers?: number
 }
 
 export function makeExpanderZkOperator({
 	algorithm,
-	fetcher
+	fetcher,
+	options: { maxWorkers = 0 } = {}
 }: MakeZKOperatorOpts<ExpanderOpts>): ZKOperator {
 	const { index: id, keySizeBytes } = CONFIG[algorithm]
+	const workerPool = maxWorkers
+		? makeWorkerPool(maxWorkers, _initWorker)
+		: undefined
+
 	let proverLoader: Promise<void> | undefined
 	let circuitLoader: Promise<void> | undefined
 
@@ -40,9 +51,17 @@ export function makeExpanderZkOperator({
 			const privBits = witness
 
 			await loadProverAsRequired(logger)
+			if(!workerPool) {
+				const bytes = prove(id, privBits, pubBits)
+				return { proof: bytes }
+			}
 
-			const bytes = prove(id, privBits, pubBits)
-			return { proof: bytes }
+			const worker = await workerPool.getNext()
+			const { result: proof } = await (
+				worker.rpc('prove', { args: [id, privBits, pubBits] })
+			)
+
+			return { proof }
 
 			function readFromWitness(length: number) {
 				const result = witness.slice(0, length)
@@ -66,6 +85,9 @@ export function makeExpanderZkOperator({
 
 			return verify(id, pubSignals, proof)
 		},
+		release() {
+			return workerPool?.release()
+		}
 	}
 
 	async function loadProverAsRequired(logger?: Logger) {
@@ -84,4 +106,13 @@ export function makeExpanderZkOperator({
 		circuitLoader ||= loadCircuitIfRequired(algorithm, fetcher, logger)
 		await circuitLoader
 	}
+}
+
+async function _initWorker() {
+	const { wasm, module } = await wasmInit!
+
+	return initWorker({
+		module,
+		initialisationMemory: new Uint8Array(wasm.memory.buffer),
+	})
 }

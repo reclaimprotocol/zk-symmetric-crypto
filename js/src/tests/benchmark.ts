@@ -3,7 +3,7 @@ import { Bench } from 'tinybench'
 import { CONFIG } from '../config'
 import { EncryptionAlgorithm, PrivateInput, PublicInput, ZKOperator } from '../types'
 import { generateZkWitness } from '../zk'
-import { ALL_ZK_ENGINES, encryptData, ZK_ENGINES } from './utils'
+import { encryptData, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils'
 
 const ALL_ALGOS: EncryptionAlgorithm[] = [
 	'chacha20',
@@ -11,17 +11,16 @@ const ALL_ALGOS: EncryptionAlgorithm[] = [
 	//'aes-128-ctr',
 ]
 
-const DATA_LENGTH = 512
+const DATA_LENGTH = 1024
 
 const BENCHES = ALL_ALGOS.map((algo) => {
 	let bench = new Bench({
 		name: `Generate Proof - ${algo}`,
 		iterations: 1,
-		time: 5000
 	})
 
-	for(const engine of ZK_ENGINES) {
-		const operator = ALL_ZK_ENGINES[engine](algo)
+	for(const engine of ZK_CONFIGS) {
+		const operator = ZK_CONFIG_MAP[engine](algo)
 		let witnesses: Uint8Array[]
 		bench = bench.add(
 			engine,

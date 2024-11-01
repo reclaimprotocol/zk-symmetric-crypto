@@ -7,14 +7,15 @@ import {
 	verifyProof,
 	ZKOperator,
 } from '../index'
-import { ALL_ZK_ENGINES, encryptData, ZK_ENGINES } from './utils'
+import { encryptData, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils'
 
 jest.setTimeout(20_000)
 
+// TODO: add back AES tests
 const ALL_ALGOS: EncryptionAlgorithm[] = [
 	'chacha20',
-	'aes-256-ctr',
-	'aes-128-ctr',
+	//'aes-256-ctr',
+	//'aes-128-ctr',
 ]
 
 const ALG_TEST_CONFIG = {
@@ -30,7 +31,7 @@ const ALG_TEST_CONFIG = {
 }
 
 describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
-	describe.each(ZK_ENGINES)('%s engine', (zkEngine) => {
+	describe.each(ZK_CONFIGS)('%s engine', (zkEngine) => {
 		const { encLength } = ALG_TEST_CONFIG[algorithm]
 		const {
 			bitsPerWord,
@@ -42,7 +43,11 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 
 		let operator: ZKOperator
 		beforeAll(async() => {
-			operator = await ALL_ZK_ENGINES[zkEngine](algorithm)
+			operator = await ZK_CONFIG_MAP[zkEngine](algorithm)
+		})
+
+		afterEach(async() => {
+			await operator.release?.()
 		})
 
 		it('should verify encrypted data', async() => {

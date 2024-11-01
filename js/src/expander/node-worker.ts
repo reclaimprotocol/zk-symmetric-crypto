@@ -6,6 +6,11 @@ import init, { prove } from './wasm-binding.js'
 const BYTES_PER_PAGE = 65536
 const logger: Logger = console
 
+type Output<T> = [
+	'reply',
+	T | ErrorRPCMessage
+]
+
 async function main() {
 	const { module, initialisationMemory } = workerData as WorkerInitData
 	const wasm = await init({ 'module_or_path': module })
@@ -82,12 +87,12 @@ export async function initWorker(workerData: WorkerInitData) {
 
 	return channel
 
-	async function waitForRpcReply<T>(id: string) {
+	async function waitForRpcReply<T extends { id: string }>(id: string) {
 		return new Promise<T>((resolve, reject) => {
 			worker.on('message', listener)
 			worker.once('error', reject)
 
-			async function listener([type, output]: any) {
+			async function listener([type, output]: Output<T>) {
 				if(type !== 'reply' || output.id !== id) {
 					return
 				}
@@ -95,14 +100,14 @@ export async function initWorker(workerData: WorkerInitData) {
 				worker.off('message', listener)
 				worker.off('error', reject)
 
-				if(output.type === 'error') {
+				if('type' in output && output.type === 'error') {
 					const err = new Error(output.message)
 					err.stack = output.stack
 					reject(err)
 					return
 				}
 
-				resolve(output)
+				resolve(output as T)
 			}
 		})
 	}

@@ -1,7 +1,15 @@
 import { wasm as WasmTester } from 'circom_tester'
 import { createCipheriv } from 'crypto'
+import { cpus } from 'os'
 import { join } from 'path'
-import { EncryptionAlgorithm } from '../types'
+import {
+	EncryptionAlgorithm,
+	makeExpanderZkOperator,
+	makeGnarkZkOperator,
+	makeLocalFileFetch,
+	makeSnarkJsZKOperator,
+	ZKOperator
+} from '../index'
 
 export function encryptData(
 	algorithm: EncryptionAlgorithm,
@@ -30,3 +38,41 @@ export function encryptData(
 export function loadCircuit(name: string) {
 	return WasmTester(join(__dirname, `../../circuits/tests/${name}.circom`))
 }
+
+const fetcher = makeLocalFileFetch()
+
+type ConfigItem = 'snarkjs'
+	| 'gnark'
+	| 'expander-single-thread'
+	| 'expander-multi-thread'
+
+export const ZK_CONFIG_MAP: {
+	[E in ConfigItem]: (algorithm: EncryptionAlgorithm) => ZKOperator
+} = {
+	'snarkjs': (algorithm) => (
+		makeSnarkJsZKOperator({
+			algorithm,
+			fetcher,
+			options: { maxProofConcurrency: 2 }
+		})
+	),
+	'gnark': (algorithm) => (
+		makeGnarkZkOperator({ algorithm, fetcher })
+	),
+	'expander-single-thread': (algorithm) => (
+		makeExpanderZkOperator({
+			algorithm,
+			fetcher,
+			options: { maxWorkers: 0 }
+		})
+	),
+	'expander-multi-thread': (algorithm) => (
+		makeExpanderZkOperator({
+			algorithm,
+			fetcher,
+			options: { maxWorkers: cpus().length }
+		})
+	),
+}
+
+export const ZK_CONFIGS = Object.keys(ZK_CONFIG_MAP) as ConfigItem[]

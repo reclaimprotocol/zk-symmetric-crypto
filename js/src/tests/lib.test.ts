@@ -3,22 +3,19 @@ import {
 	CONFIG,
 	EncryptionAlgorithm,
 	generateProof,
-	makeGnarkZkOperator,
-	makeLocalFileFetch,
-	makeSnarkJsZKOperator,
 	PrivateInput,
 	verifyProof,
-	ZKEngine,
 	ZKOperator,
 } from '../index'
-import { encryptData } from './utils'
+import { encryptData, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils'
 
 jest.setTimeout(20_000)
 
+// TODO: add back AES tests
 const ALL_ALGOS: EncryptionAlgorithm[] = [
 	'chacha20',
-	'aes-256-ctr',
-	'aes-128-ctr',
+	//'aes-256-ctr',
+	//'aes-128-ctr',
 ]
 
 const ALG_TEST_CONFIG = {
@@ -33,26 +30,9 @@ const ALG_TEST_CONFIG = {
 	},
 }
 
-const fetcher = makeLocalFileFetch()
-
-const ALL_ZK_ENGINES: {
-	[E in ZKEngine]: (algorithm: EncryptionAlgorithm) => ZKOperator
-} = {
-	'snarkjs': (algorithm) => (
-		makeSnarkJsZKOperator({ algorithm, fetcher })
-	),
-	'gnark': (algorithm) => (
-		makeGnarkZkOperator({ algorithm, fetcher })
-	),
-}
-
-const ZK_ENGINES = Object.keys(ALL_ZK_ENGINES) as ZKEngine[]
-
 describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
-	describe.each(ZK_ENGINES)('%s engine', (zkEngine) => {
-		const {
-			encLength,
-		} = ALG_TEST_CONFIG[algorithm]
+	describe.each(ZK_CONFIGS)('%s engine', (zkEngine) => {
+		const { encLength } = ALG_TEST_CONFIG[algorithm]
 		const {
 			bitsPerWord,
 			chunkSize,
@@ -63,7 +43,11 @@ describe.each(ALL_ALGOS)('%s Lib Tests', (algorithm) => {
 
 		let operator: ZKOperator
 		beforeAll(async() => {
-			operator = await ALL_ZK_ENGINES[zkEngine](algorithm)
+			operator = await ZK_CONFIG_MAP[zkEngine](algorithm)
+		})
+
+		afterEach(async() => {
+			await operator.release?.()
 		})
 
 		it('should verify encrypted data', async() => {

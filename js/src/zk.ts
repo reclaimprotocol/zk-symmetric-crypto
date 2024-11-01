@@ -15,9 +15,7 @@ export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
 
 	return {
 		algorithm,
-		proofJson: typeof proof === 'string'
-			? proof
-			: JSON.stringify(proof),
+		proofData: proof,
 		plaintext: plaintextArray
 	}
 }
@@ -31,7 +29,7 @@ export async function generateZkWitness({
 	algorithm,
 	privateInput: { key },
 	publicInput: { ciphertext, iv, offset },
-	operator
+	operator,
 }: GenerateProofOpts,
 ) {
 	const {
@@ -90,9 +88,10 @@ export async function generateZkWitness({
  * @param zkey
  */
 export async function verifyProof({
-	proof: { algorithm, proofJson, plaintext },
+	proof: { algorithm, proofData, plaintext },
 	publicInput: { ciphertext, iv, offset },
 	operator,
+	logger
 }: VerifyProofOpts): Promise<void> {
 	const { uint8ArrayToBits, isLittleEndian } = CONFIG[algorithm]
 	const startCounter = getCounterForChunk(algorithm, offset)
@@ -106,16 +105,15 @@ export async function verifyProof({
 	}
 
 	// serialise to array of numbers for the ZK circuit
-	const pubInputs = [
-		...uint8ArrayToBits(plaintext),
-		...uint8ArrayToBits(iv),
-		...serialiseCounter(),
-		...uint8ArrayToBits(ciphertextArray),
-	].flat()
-
 	const verified = await operator.groth16Verify(
-		pubInputs,
-		JSON.parse(proofJson),
+		{
+			nonce: uint8ArrayToBits(iv),
+			counter: serialiseCounter(),
+			in: uint8ArrayToBits(ciphertextArray),
+			out: uint8ArrayToBits(plaintext),
+		},
+		proofData,
+		logger
 	)
 
 	if(!verified) {

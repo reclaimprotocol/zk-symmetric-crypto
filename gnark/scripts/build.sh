@@ -4,21 +4,24 @@ if [ -z "${GOARCH}" ]; then
 fi
 
 export GOOS="${GOOS:-linux}"
-OUT_PREFIX="../bin/gnark/$GOOS-$GOARCH-"
+OUT_PREFIX="../bin/gnark/$GOOS-$GOARCH"
 
 set -e
 
 build() {
-	local module="$1"
+	local path="$1"
+	local module="$2"
+
 	CGO_ENABLED=1 go build \
 		-trimpath \
 		-ldflags '-s -w' \
 		-buildmode=c-shared \
 		-o "$OUT_PREFIX-$module.so" \
-		libraries/prover/$module.go
+		$path/$module.go
+	rm "$OUT_PREFIX-$module.h"
   	
 	echo "Built $module"
 }
 
-build "libprove"
-build "libverify"
+build "libraries/prover" "libprove"
+build "libraries/verifier" "libverify"

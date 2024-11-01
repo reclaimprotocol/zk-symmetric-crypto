@@ -2,3 +2,4 @@ lib
 node_modules
 bin
 jest.config.js
+src/expander/wasm-binding.*

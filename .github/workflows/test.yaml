@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: latest # Specify the Go versions you want to test with
+        go-version: 'stable' # Specify the Go versions you want to test with
 
     steps:
       - name: Checkout code
@@ -85,6 +85,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+          check-latest: true
 
       - name: Install dependencies
         working-directory: ./gnark

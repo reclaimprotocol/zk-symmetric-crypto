@@ -5,51 +5,53 @@ import {createHash} from "node:crypto";
 import {makeLocalGnarkOPRFOperator} from "../gnark/toprf";
 import {makeLocalFileFetch} from "../file-fetch";
 
-describe('OPRF circuits Tests', () => {
+describe('TOPRF circuits Tests', () => {
 
-    it('should prove OPRF', async() => {
+    it('should prove & verify TOPRF', async() => {
         const fetcher = makeLocalFileFetch()
         const operator = makeLocalGnarkOPRFOperator(fetcher)
-
-        const serverPrivate = 'A3q7HrA+10FUiL0Q9lrDBRdRuoq752oREn9STszgLEo='
-        const serverPublic =  'dGEZEZY4qexS2WyOL8KDcv99BWjL7ivaKvvarCcbYCU='
 
         const email = "test@email.com"
         const domainSeparator = "reclaim"
 
+        const keys = await operator.GenerateThresholdKeys(3,2)
+
         const req =  await operator.generateOPRFRequestData(email, domainSeparator)
-        const resp = await operator.OPRF(serverPrivate, req.maskedData)
-        const result = await operator.processOPRFResponse(serverPublic, req.mask, req.maskedData, resp.response, resp.c, resp.s)
 
+        const resps: any[] = []
+        const threshold = 2 //hardcoded
 
-        expect(result.output).toEqual('T3ikGmkt+a/uou6kEz97AmuFGECsTSNINmN4dWcaiaU=')
+        for (let i = 0; i < threshold; i++) {
+            const evalResult = await operator.OPRFEvaluate(keys.shares[i].privateKey, req.maskedData)
 
-        const rawOutput = fromBase64(result.output)
-        const hash = createHash('sha256');
-        hash.update(rawOutput)
-        const nullifier = hash.digest('hex')
-        expect(nullifier).toEqual('3555badf313bc299351e007040b8797ab7f1d75b1954b801cd8e3b9dc3531104') // ACTUAL "NULLIFIER" value
+            const resp = {
+                index: i,
+                publicKeyShare: keys.shares[i].publicKey,
+                evaluated: evalResult.evaluated,
+                c: evalResult.c,
+                r: evalResult.r,
+            }
+
+            resps.push(resp)
+        }
+
+        const result = await operator.TOPRFFinalize(keys.publicKey, req, resps)
+        //console.log(result.output) // actual hash to be used elsewhere
+
 
         const pos = 10
         const len = email.length
 
 
-        // response from OPRF server + local values
+        // response from OPRF servers + local values
         // pre-calculated for email & separator above
-        const oprf = {
+        const toprf = {
             pos: pos, //pos in plaintext
             len: len, // length of data to "hash"
-            domainSeparator: Base64.fromUint8Array(new Uint8Array(Buffer.from(domainSeparator))),
-
-            serverPublicKey: serverPublic,
-
-            // values from OPRF procedure
             mask: req.mask,
-            serverResponse: resp.response,
+            domainSeparator: Base64.fromUint8Array(new Uint8Array(Buffer.from(domainSeparator))),
             output: result.output, // => hashing this produces that "oprf hash" or nullifier that we need
-            // DLEQ proof
-            c: resp.c,
-            s:  resp.s
+            responses: resps
         }
 
 
@@ -67,12 +69,12 @@ describe('OPRF circuits Tests', () => {
         )
 
         const witnessParams = {
-            "cipher": "chacha20-oprf",
+            "cipher": "chacha20-toprf",
             "key": key,
             "nonce": iv,
             "counter": 1,
             "input": ciphertext, // plaintext will be calculated in library
-            "oprf": oprf
+            "toprf": toprf
         }
 
 
@@ -84,17 +86,12 @@ describe('OPRF circuits Tests', () => {
             "nonce": iv,
             "counter": 1,
             "input": ciphertext,
-            "oprf": {
+            "toprf": {
                 pos: pos, //pos in plaintext
                 len: len, // length of data to "hash"
-                domainSeparator: oprf.domainSeparator,
-                serverPublicKey: oprf.serverPublicKey, // set externally by client when proving & attestor when verifying
-                // output from OPRF procedure which corresponds to
-                serverResponse: oprf.serverResponse,
-                output: oprf.output,
-                // DLEQ proof
-                c: oprf.c,
-                s: oprf.s,
+                domainSeparator: toprf.domainSeparator,
+                output: toprf.output,
+                responses: resps
             }
         }
 

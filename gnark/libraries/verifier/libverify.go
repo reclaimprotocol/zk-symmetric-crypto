@@ -25,8 +25,8 @@ func VFree(pointer unsafe.Pointer) {
 	C.free(pointer)
 }
 
-//export OPRF
-func OPRF(params []byte) (proofRes unsafe.Pointer, resLen int) {
+//export OPRFEvaluate
+func OPRFEvaluate(params []byte) (evalRes unsafe.Pointer, resLen int) {
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -35,7 +35,7 @@ func OPRF(params []byte) (proofRes unsafe.Pointer, resLen int) {
 			if er != nil {
 				fmt.Println(er)
 			} else {
-				proofRes, resLen = C.CBytes(bRes), len(bRes)
+				evalRes, resLen = C.CBytes(bRes), len(bRes)
 			}
 		}
 	}()
@@ -44,8 +44,8 @@ func OPRF(params []byte) (proofRes unsafe.Pointer, resLen int) {
 	return C.CBytes(res), len(res)
 }
 
-//export TOPRFGenerateSharedKey
-func TOPRFGenerateSharedKey(params []byte) (proofRes unsafe.Pointer, resLen int) {
+//export GenerateThresholdKeys
+func GenerateThresholdKeys(params []byte) (genRes unsafe.Pointer, resLen int) {
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -54,11 +54,11 @@ func TOPRFGenerateSharedKey(params []byte) (proofRes unsafe.Pointer, resLen int)
 			if er != nil {
 				fmt.Println(er)
 			} else {
-				proofRes, resLen = C.CBytes(bRes), len(bRes)
+				genRes, resLen = C.CBytes(bRes), len(bRes)
 			}
 		}
 	}()
 
-	res := oprf.TOPRFGenerateSharedKey(params)
+	res := oprf.TOPRFGenerateThresholdKeys(params)
 	return C.CBytes(res), len(res)
 }

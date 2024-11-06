@@ -19,11 +19,11 @@ type InputVerifyParams struct {
 }
 
 type TOPRFResponse struct {
-	Index     uint8   `json:"index"`
-	PublicKey []byte  `json:"publicKey"`
-	Evaluated []uint8 `json:"evaluated"`
-	C         []byte  `json:"c"`
-	R         []byte  `json:"r"`
+	Index          uint8   `json:"index"`
+	PublicKeyShare []byte  `json:"publicKeyShare"`
+	Evaluated      []uint8 `json:"evaluated"`
+	C              []byte  `json:"c"`
+	R              []byte  `json:"r"`
 }
 
 type TOPRFParams struct {

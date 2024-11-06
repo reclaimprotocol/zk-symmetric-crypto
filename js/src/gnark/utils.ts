@@ -10,9 +10,10 @@ export type GnarkLib = {
 	vfree:Function
 	prove: Function
 	initAlgorithm: Function,
-	oprf: Function,
+	generateThresholdKeys: Function
+	oprfEvaluate: Function,
 	generateOPRFRequest: Function,
-	processOPRFResponse:Function,
+	toprfFinalize:Function,
 	koffi: typeof import('koffi')
 }
 
@@ -85,9 +86,10 @@ export async function loadGnarkLib(): Promise<GnarkLib> {
 				'InitAlgorithm', 'unsigned char',
 				['unsigned char', GoSlice, GoSlice]
 			),
-			oprf: libVerify.func('OPRF', LibReturn, [GoSlice]),
+			generateThresholdKeys: libVerify.func('GenerateThresholdKeys', LibReturn, [GoSlice]),
+			oprfEvaluate: libVerify.func('OPRFEvaluate', LibReturn, [GoSlice]),
 			generateOPRFRequest: libProve.func('GenerateOPRFRequestData', LibReturn, [GoSlice]),
-			processOPRFResponse: libProve.func('ProcessOPRFResponse', LibReturn, [GoSlice]),
+			toprfFinalize: libProve.func('TOPRFFinalize', LibReturn, [GoSlice]),
 			koffi
 		}
 	} catch(err) {

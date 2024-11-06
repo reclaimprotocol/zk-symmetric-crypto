@@ -46,10 +46,10 @@ func TestInit(t *testing.T) {
 func TestProveVerify(t *testing.T) {
 	assert := test.NewAssert(t)
 
-	proofs := make([][]byte, 0, 3)
+	proofs := make([][]byte, 0, 4)
 
 	wg := new(sync.WaitGroup)
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		assert.True(prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS))
 		params := `{"cipher":"chacha20","key":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"nonce":[3,3,3,3,3,3,3,3,3,3,3,3],"counter":3,"input":[163,247,229,146,174,218,21,7,167,245,27,53,129,45,252,80,162,99,213,166,210,223,98,94,86,59,2,228,156,8,191,48,208,231,72,63,91,19,255,7,149,50,34,78,232,251,195,26,177,137,155,24,228,83,211,109,151,147,168,53,94,176,222,233]}`
@@ -135,9 +135,20 @@ func TestProveVerify(t *testing.T) {
 		wg.Done()
 	}()
 
+	go func() {
+		assert.True(prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs))
+		params := `{"cipher":"chacha20-toprf","key":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","nonce":"AAECAwQFBgcICQoL","counter":1,"input":"ifsIACkXpUC3g0uW62lOBqQR24t/F8LU5pcvxXXApjzsgCzz5h6xmDcydthllI8jfoSpdP0ouJsSuNkHkE+e1nl4vM3lFCzpxBZNvBh83PHa3kcyb2rwPg5X8A7YfQK/Td5s8/fZJ/SxW/O3opG3gOlvVjiJXUD4T20033k/v0Y=","toprf":{"pos":10,"len":14,"mask":"fblY6lWzyAzOpIU5Fx86+iQOMDIPNyE/gWKsM9Fh6g==","domainSeparator":"cmVjbGFpbQ==","output":"FBXe6ou2AwQAvPtuC8n5To+FCa7mCp5ZR8dSO9Llb1E=","responses":[{"index":0,"publicKeyShare":"qTqvq7qLESz+y4hB7SPuN8cTmOE682R1u+jcv5YrUxo=","evaluated":"SEL2SkU0HiY3PhMZngCSsix1LQlbxEyD5ePBNiClJDA=","c":"L8I++RNA9so/KelQsb9T89WEyUpKpuBVsDbK+nFmlLg=","r":"3bCmCfYnIXpZIWafKl1JaiuDFCFrPR/SBiiItOXY9w=="},{"index":1,"publicKeyShare":"dagTfVg0fN9Dhgo1LOv2Jl16DQBixcsObQVHLehzAJ4=","evaluated":"XFcDXx227obXnM9daBLsrPSbqvvIpZzNS74NUUxog5M=","c":"JIw5UKl7K/RAzDh8oCr+i9TRDxuaFSjA3fkxg8DbFhU=","r":"A7Zn+ldkfjyqr8Mw4w4czObZPDCxPWoXHfxCspp8IxY="}]}}`
+		res := prover.Prove([]byte(params))
+		assert.NotNil(res)
+
+		var outParams *prover.OutputParams
+		json.Unmarshal(res, &outParams)
+
+	}()
+
 	wg.Wait()
 
-	assert.Equal(3, len(proofs))
+	assert.Equal(4, len(proofs))
 
 	for _, proof := range proofs {
 		assert.True(verifier.Verify(proof))
@@ -318,14 +329,14 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	nodes := threshold + 1
 
 	tParams := &oprf.InputGenerateParams{
-		Nodes:     uint8(nodes),
+		Total:     uint8(nodes),
 		Threshold: uint8(threshold),
 	}
 
 	btParams, err := json.Marshal(tParams)
 	assert.NoError(err)
 
-	bShares := oprf.TOPRFGenerateSharedKey(btParams)
+	bShares := oprf.TOPRFGenerateThresholdKeys(btParams)
 
 	var shares *oprf.OutputGenerateParams
 	err = json.Unmarshal(bShares, &shares)
@@ -345,11 +356,11 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		assert.NoError(err)
 
 		resp := &prover.TOPRFResponse{
-			Index:     uint8(idxs[i]),
-			PublicKey: shares.Shares[idxs[i]].PublicKey,
-			Evaluated: evalResult.EvaluatedPoint.Marshal(),
-			C:         evalResult.C.Bytes(),
-			R:         evalResult.R.Bytes(),
+			Index:          uint8(idxs[i]),
+			PublicKeyShare: shares.Shares[idxs[i]].PublicKey,
+			Evaluated:      evalResult.EvaluatedPoint.Marshal(),
+			C:              evalResult.C.Bytes(),
+			R:              evalResult.R.Bytes(),
 		}
 		responses[i] = resp
 	}
@@ -394,7 +405,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		r := responses[i]
 		verifyResponses[i] = &verifier.TOPRFResponse{
 			Index:     r.Index,
-			PublicKey: r.PublicKey,
+			PublicKey: r.PublicKeyShare,
 			Evaluated: r.Evaluated,
 			C:         r.C,
 			R:         r.R,

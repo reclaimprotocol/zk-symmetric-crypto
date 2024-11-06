@@ -33,7 +33,7 @@ func Prove(params []byte) (proofRes unsafe.Pointer, resLen int) {
 
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println(err)
+			fmt.Printf("%+v", err)
 			bRes, er := json.Marshal(err)
 			if er != nil {
 				fmt.Println(er)
@@ -66,8 +66,8 @@ func GenerateOPRFRequestData(params []byte) (proofRes unsafe.Pointer, resLen int
 	return C.CBytes(res), len(res)
 }
 
-//export ProcessOPRFResponse
-func ProcessOPRFResponse(params []byte) (proofRes unsafe.Pointer, resLen int) {
+//export TOPRFFinalize
+func TOPRFFinalize(params []byte) (proofRes unsafe.Pointer, resLen int) {
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -81,6 +81,6 @@ func ProcessOPRFResponse(params []byte) (proofRes unsafe.Pointer, resLen int) {
 		}
 	}()
 
-	res := oprf.ProcessOPRFResponse(params)
+	res := oprf.TOPRFFinalize(params)
 	return C.CBytes(res), len(res)
 }

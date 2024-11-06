@@ -167,7 +167,7 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 
 	for i := 0; i < toprf.Threshold; i++ {
 		resp := resps[i]
-		nodePublicKeys[i] = utils.UnmarshalPoint(resp.PublicKey)
+		nodePublicKeys[i] = utils.UnmarshalPoint(resp.PublicKeyShare)
 		evals[i] = utils.UnmarshalPoint(resp.Evaluated)
 		cs[i] = new(big.Int).SetBytes(resp.C)
 		rs[i] = new(big.Int).SetBytes(resp.R)

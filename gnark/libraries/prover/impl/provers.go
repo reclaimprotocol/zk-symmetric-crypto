@@ -28,11 +28,11 @@ func init() {
 const AES_BLOCKS = 4
 
 type TOPRFResponse struct {
-	Index     uint8   `json:"index"`
-	PublicKey []byte  `json:"publicKey"`
-	Evaluated []uint8 `json:"evaluated"`
-	C         []byte  `json:"c"`
-	R         []byte  `json:"r"`
+	Index          uint8   `json:"index"`
+	PublicKeyShare []byte  `json:"publicKeyShare"`
+	Evaluated      []uint8 `json:"evaluated"`
+	C              []byte  `json:"c"`
+	R              []byte  `json:"r"`
 }
 
 type TOPRFParams struct {
@@ -267,7 +267,7 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 		r := oprf.Responses[i]
 		idxs[i] = int(r.Index)
 		resps[i] = utils.UnmarshalTBNPoint(r.Evaluated)
-		pubKeys[i] = utils.UnmarshalTBNPoint(r.PublicKey)
+		pubKeys[i] = utils.UnmarshalTBNPoint(r.PublicKeyShare)
 		cs[i] = new(big.Int).SetBytes(r.C)
 		rs[i] = new(big.Int).SetBytes(r.R)
 	}

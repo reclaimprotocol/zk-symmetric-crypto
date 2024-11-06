@@ -14,9 +14,9 @@ type InputOPRFParams struct {
 }
 
 type OutputOPRFParams struct {
-	Response []byte `json:"response"`
-	C        []byte `json:"c"`
-	S        []byte `json:"s"`
+	Evaluated []byte `json:"evaluated"`
+	C         []byte `json:"c"`
+	R         []byte `json:"r"`
 }
 
 func OPRFEvaluate(params []byte) []byte {
@@ -37,9 +37,9 @@ func OPRFEvaluate(params []byte) []byte {
 	}
 
 	res, err := json.Marshal(&OutputOPRFParams{
-		Response: resp.EvaluatedPoint.Marshal(),
-		C:        resp.C.Bytes(),
-		S:        resp.R.Bytes(),
+		Evaluated: resp.EvaluatedPoint.Marshal(),
+		C:         resp.C.Bytes(),
+		R:         resp.R.Bytes(),
 	})
 	if err != nil {
 		panic(err)
@@ -48,7 +48,7 @@ func OPRFEvaluate(params []byte) []byte {
 }
 
 type InputGenerateParams struct {
-	Nodes     uint8 `json:"nodes"`
+	Total     uint8 `json:"total"`
 	Threshold uint8 `json:"threshold"`
 }
 
@@ -64,7 +64,7 @@ type OutputGenerateParams struct {
 	Shares     []*Share `json:"shares"`
 }
 
-func TOPRFGenerateSharedKey(params []byte) []byte {
+func TOPRFGenerateThresholdKeys(params []byte) []byte {
 
 	var inputParams *InputGenerateParams
 	err := json.Unmarshal(params, &inputParams)
@@ -73,7 +73,7 @@ func TOPRFGenerateSharedKey(params []byte) []byte {
 	}
 
 	threshold := inputParams.Threshold
-	nodes := inputParams.Nodes
+	nodes := inputParams.Total
 
 	if threshold >= nodes {
 		panic("threshold must be smaller than nodes")

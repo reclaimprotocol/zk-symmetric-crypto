@@ -7,13 +7,13 @@ const BIN_PATH = '../../bin/gnark'
 export type GnarkLib = {
 	verify: Function
 	free: Function
-	vfree:Function
+	vfree: Function
 	prove: Function
-	initAlgorithm: Function,
+	initAlgorithm: Function
 	generateThresholdKeys: Function
-	oprfEvaluate: Function,
-	generateOPRFRequest: Function,
-	toprfFinalize:Function,
+	oprfEvaluate: Function
+	generateOPRFRequest: Function
+	toprfFinalize: Function
 	koffi: typeof import('koffi')
 }
 

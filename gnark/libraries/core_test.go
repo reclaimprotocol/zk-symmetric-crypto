@@ -404,11 +404,11 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	for i := 0; i < threshold; i++ {
 		r := responses[i]
 		verifyResponses[i] = &verifier.TOPRFResponse{
-			Index:     r.Index,
-			PublicKey: r.PublicKeyShare,
-			Evaluated: r.Evaluated,
-			C:         r.C,
-			R:         r.R,
+			Index:          r.Index,
+			PublicKeyShare: r.PublicKeyShare,
+			Evaluated:      r.Evaluated,
+			C:              r.C,
+			R:              r.R,
 		}
 	}
 	oprfParams := &verifier.InputChachaTOPRFParams{

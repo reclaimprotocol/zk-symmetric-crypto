@@ -16,7 +16,7 @@ describe('TOPRF circuits Tests', () => {
 
 		const req = await operator.generateOPRFRequestData(email, domainSeparator)
 
-		const resps: [] = []
+		const resps: any[] = []
 		const threshold = 2 //hardcoded
 
 		for(let i = 0; i < threshold; i++) {

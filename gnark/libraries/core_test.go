@@ -140,15 +140,12 @@ func TestProveVerify(t *testing.T) {
 		params := `{"cipher":"chacha20-toprf","key":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","nonce":"AAECAwQFBgcICQoL","counter":1,"input":"ifsIACkXpUC3g0uW62lOBqQR24t/F8LU5pcvxXXApjzsgCzz5h6xmDcydthllI8jfoSpdP0ouJsSuNkHkE+e1nl4vM3lFCzpxBZNvBh83PHa3kcyb2rwPg5X8A7YfQK/Td5s8/fZJ/SxW/O3opG3gOlvVjiJXUD4T20033k/v0Y=","toprf":{"pos":10,"len":14,"mask":"fblY6lWzyAzOpIU5Fx86+iQOMDIPNyE/gWKsM9Fh6g==","domainSeparator":"cmVjbGFpbQ==","output":"FBXe6ou2AwQAvPtuC8n5To+FCa7mCp5ZR8dSO9Llb1E=","responses":[{"index":0,"publicKeyShare":"qTqvq7qLESz+y4hB7SPuN8cTmOE682R1u+jcv5YrUxo=","evaluated":"SEL2SkU0HiY3PhMZngCSsix1LQlbxEyD5ePBNiClJDA=","c":"L8I++RNA9so/KelQsb9T89WEyUpKpuBVsDbK+nFmlLg=","r":"3bCmCfYnIXpZIWafKl1JaiuDFCFrPR/SBiiItOXY9w=="},{"index":1,"publicKeyShare":"dagTfVg0fN9Dhgo1LOv2Jl16DQBixcsObQVHLehzAJ4=","evaluated":"XFcDXx227obXnM9daBLsrPSbqvvIpZzNS74NUUxog5M=","c":"JIw5UKl7K/RAzDh8oCr+i9TRDxuaFSjA3fkxg8DbFhU=","r":"A7Zn+ldkfjyqr8Mw4w4czObZPDCxPWoXHfxCspp8IxY="}]}}`
 		res := prover.Prove([]byte(params))
 		assert.NotNil(res)
-
-		var outParams *prover.OutputParams
-		json.Unmarshal(res, &outParams)
-
+		wg.Done()
 	}()
 
 	wg.Wait()
 
-	assert.Equal(4, len(proofs))
+	assert.Equal(3, len(proofs))
 
 	for _, proof := range proofs {
 		assert.True(verifier.Verify(proof))

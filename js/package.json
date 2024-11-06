@@ -1,0 +1,69 @@
+{
+  "name": "@reclaimprotocol/zk-symmetric-crypto",
+  "version": "2.0.5",
+  "description": "JS Wrappers for Various ZK Snark Circuits",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "NODE_ENV=test jest --forceExit --detectOpenHandles",
+    "build": "npm exec tsc",
+    "prepare": "npm run build",
+    "commitlint": "commitlint --edit",
+    "lint": "eslint ./ --ext .js,.ts,.jsx,.tsx",
+    "lint:fix": "npm run lint -- --fix",
+    "publish:pkg": "node -r @swc-node/register ./src/scripts/publish-pkg"
+  },
+  "keywords": [
+    "circom",
+    "chacha20",
+    "symmetric-crypto",
+    "zero-knowledge",
+    "zk-snark",
+    "cryptography",
+    "blockchain",
+    "privacy",
+    "encryption",
+    "decryption",
+    "reclaim-protocol"
+  ],
+  "license": "See License in <https://github.com/reclaimprotocol/.github/blob/main/LICENSE>",
+  "bugs": {
+    "url": "https://github.com/reclaimprotocol/zk-symmetric-crypto/issues"
+  },
+  "homepage": "https://github.com/reclaimprotocol/zk-symmetric-crypto/",
+  "files": [
+    "lib"
+  ],
+  "peerDependencies": {
+    "koffi": "*",
+    "snarkjs": "*"
+  },
+  "peerDependenciesMeta": {
+    "snarkjs": {
+      "optional": true
+    },
+    "koffi": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@stablelib/chacha20poly1305": "^1.0.0",
+    "js-base64": "^3.7.7"
+  },
+  "devDependencies": {
+    "@adiwajshing/eslint-config": "github:adiwajshing/eslint-config",
+    "@commitlint/cli": "^17.7.1",
+    "@commitlint/config-conventional": "^17.7.0",
+    "@swc-node/register": "^1.10.9",
+    "@swc/jest": "^0.2.36",
+    "@types/jest": "^29.5.5",
+    "@types/node": "^22.0.0",
+    "circom_tester": "^0.0.20",
+    "circomlib": "^2.0.5",
+    "compare-versions": "^6.1.1",
+    "eslint": "^8.57.1",
+    "jest": "^29.7.0",
+    "koffi": "^2.8.11",
+    "snarkjs": "git+https://github.com/reclaimprotocol/snarkjs.git",
+    "typescript": "^5.2.2"
+  }
+}

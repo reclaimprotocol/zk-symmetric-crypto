@@ -1,0 +1,95 @@
+name: Test
+
+# Run this workflow on pull requests and pushes to main
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test-js-lib:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22]
+        package-dir: [js]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm install
+      
+      - name: Check build
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm run build
+
+      - name: Check lint
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm run lint
+
+      - name: Run tests
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm test
+  test-circom-circuits:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22]
+        package-dir: [circom]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+      
+      - name: Install Circom
+        run: |
+          git clone https://github.com/iden3/circom.git -b v2.1.6 circom-lib
+          cd circom-lib
+          RUSTFLAGS="-A dead_code -A unused-imports" cargo install --path circom
+
+      - name: Install dependencies
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm install
+
+      - name: Run tests
+        working-directory: ./${{ matrix.package-dir }}
+        run: npm test
+  test-gnark-circuits:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [1.23] # Specify the Go versions you want to test with
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Install dependencies
+        working-directory: ./gnark
+        run: go mod download
+
+      - name: Run tests
+        working-directory: ./gnark
+        run: go test -v ./...

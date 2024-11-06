@@ -1,143 +1,58 @@
-# Circom Symmetric Crypto
+<div align="center">
+    <img src="https://raw.githubusercontent.com/reclaimprotocol/.github/main/assets/banners/Circom.png" alt="Circom Banner" />
+</div>
 
-This library contains circom zero-knowledge proof circuits for symmetric crypto operations. The goal is to enable a user to prove that they have the key to a symmetric encrypted message without revealing the key.
+# 🔒 Zero-Knowledge Proof Library
 
-The following algorithms are supported:
-- `chacha20`
-- `aes-256-ctr`
-- `aes-128-ctr`
-	- which includes any CTR implementation. For eg. aes-256-gcm
-	- note: this is a WIP, and may be insecure (borrowed implementation from [electron labs](https://github.com/Electron-Labs/aes-circom))
+Welcome to our library for **zero-knowledge proof circuits** designed for symmetric crypto operations! 🚀 The goal is to allow users to prove they possess the key to a symmetric encrypted message without revealing the key itself.
 
-It uses the `groth16` implementaion in `snarkjs` to generate the proof.
+## 📚 Table of Contents
+- [🔒 Zero-Knowledge Proof Library](#-zero-knowledge-proof-library)
+- [🛠️ Supported Algorithms](#-supported-algorithms)
+- [🔍 ZK Proof Systems](#-zk-proof-systems)
+- [🤝 Contributing to Our Project](#-contributing-to-our-project)
+    - [📜 Code of Conduct](#-code-of-conduct)
+    - [🔐 Security](#-security)
+    - [✍️ Contributor License Agreement](#-contributor-license-agreement)
+    - [🌱 Indie Hackers](#-indie-hackers)
+- [📄 License](#-license)
 
-## Installation
+## 🛠️ Supported Algorithms
+We currently support the following algorithms:
+- **`chacha20`**
+- **`aes-256-ctr`**
+- **`aes-128-ctr`**
+    - This includes any CTR implementation (e.g., **aes-256-gcm**).
+    - ⚠️ Note: This is a work in progress and may be insecure (borrowed implementation from [Electron Labs](https://github.com/Electron-Labs/aes-circom)).
 
-```bash
-npm install git+https://gitlab.reclaimprotocol.org/Reclaim/zk-symmetric-crypto
-```
+## 🔍 ZK Proof Systems
+Our library implements multiple ZK proof systems:
+- **[Circom Circuits](/circom/)** backed by `snarkjs` (groth16).
+- **[`gnark` Frontend Circuits](/gnark/)** backed by `gnark` (groth16).
+- **[`gnark` Frontend Circuits](/expander/)** backed by `expander` (groth16).
 
-If using on the browser, or nodejs, you will need to install `snarkjs` as well.
+All these proof systems can be accessed easily via a single **[JS Package](/js)**. This package provides user-friendly abstract interfaces for generating and verifying proofs.
 
-```bash
-npm install snarkjs
-```
+👉 If you’re just looking to integrate this library into your project, check out the **[JS Package's README](/js/readme.md)**.
 
-## Usage
+## 🤝 Contributing to Our Project
+We're thrilled that you're interested in contributing! 🎉 Before you get started, please review the following guidelines:
 
-### Generating Proof
+### 📜 Code of Conduct
+To ensure a positive and inclusive environment for all contributors, please read and follow our [Code of Conduct](https://github.com/reclaimprotocol/.github/blob/main/Code-of-Conduct.md).
 
-```ts
-import { generateProof, verifyProof, makeLocalSnarkJsZkOperator } from '@reclaimprotocol/circom-symmetric-crypto'
-import { createCipheriv, randomBytes } from 'crypto'
+### 🔐 Security
+If you discover any security-related issues, please refer to our [Security Policy](https://github.com/reclaimprotocol/.github/blob/main/SECURITY.md) for information on how to responsibly disclose vulnerabilities.
 
-async function main() {
-	const key = randomBytes(32)
-	const iv = randomBytes(12)
-	const algorithm = 'chacha20'
-	const data = 'Hello World!'
+### ✍️ Contributor License Agreement
+Before contributing to this project, please read and sign our [Contributor License Agreement (CLA)](https://github.com/reclaimprotocol/.github/blob/main/CLA.md).
 
-	const cipher = createCipheriv('chacha20-poly1305', key, iv)
-	const ciphertext = Buffer.concat([
-		cipher.update(data),
-		cipher.final()
-	])
+### 🌱 Indie Hackers
+For Indie Hackers: [Check out our guidelines and potential grant opportunities](https://github.com/reclaimprotocol/.github/blob/main/Indie-Hackers.md).
 
-	// the operator is the abstract interface for
-	// the snarkjs library to generate & verify the proof
-	const operator = await makeLocalSnarkJsZkOperator(algorithm)
-	// generate the proof that you have the key to the ciphertext
-	const {
-		// groth16-snarkjs proof as a JSON string
-		proofJson,
-		// the plaintext, obtained from the output of the circuit
-		plaintext,
-	} = await generateProof({
-		algorithm,
-		// key, iv & counter are the private inputs to the circuit
-		privateInput: {
-			key,
-			iv,
-			// this is the counter from which to start
-			// the stream cipher. Read about
-			// the counter here: https://en.wikipedia.org/wiki/Stream_cipher
-			offset: 0
-		},
-		// the public ciphertext input to the circuit
-		publicInput: { ciphertext },
-		operator,
-	})
+## 📄 License
+This project is licensed under a [custom license](https://github.com/reclaimprotocol/.github/blob/main/LICENSE). By contributing, you agree that your contributions will be licensed under its terms.
 
-	// you can check that the plaintext obtained from the circuit
-	// is the same as the plaintext obtained from the ciphertext
-	const plaintextBuffer = plaintext
-		// slice in case the plaintext was padded
-		.slice(0, data.length)
-	// "Hello World!"
-	console.log(Buffer.from(plaintextBuffer).toString())
+---
 
-	// you can verify the proof with the public inputs
-	// and the proof JSON string
-	await verifyProof({
-		proof: {
-			proofJson,
-			plaintext,
-			algorithm
-		},
-		// the public inputs to the circuit
-		publicInput: { ciphertext },
-		operator
-	})
-	console.log('Proof verified')
-}
-
-main()
-```
-
-### Verifying Proof
-
-Continuing from the above example:
-
-```ts
-// will assert the proof is valid,
-// otherwise it will throw an error
-await verifyProof(
-	{ proofJson, plaintext, algorithm: 'chacha20' },
-	{ ciphertext },
-	zkOperator
-)
-console.log('proof verified')
-
-```
-
-## Development
-
-1. Clone the repository
-2. Install dependencies via: `npm i`
-3. Install [circom](https://docs.circom.io/getting-started/installation/)
-
-### Running Tests
-
-Run the tests via `npm run test`
-
-## Building the Circuit
-
-### Prerequisites
-curl, jq
-
-Official Ptau file for bn128 with 256k max constraints can be downloaded by running
-```bash
-npm run download:ptau
-```
-
-Build the circuits via `ALG={alg} npm run build:circuit`.
-For eg. `ALG=chacha20 npm run build:circuit`
-Note: `ALG` is the same as mentioned in the first section of this readme.
-
-### Regenerating the Verification Key
-
-1. Generate bls12-381 parameters via `npm run generate:ptau`
-2. Fix `build-circuit.sh` to use `-p bls12381` parameter
-   - note: we currently use BN-128 for our circuit, but plan to switch to BLs for greater security
-   - zkey and ptau file verification is disabled right now due to a bug in the latest snarkJS version 0.7.0
-3. TODO
+Thank you for your contributions!

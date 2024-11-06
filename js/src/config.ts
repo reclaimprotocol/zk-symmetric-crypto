@@ -32,7 +32,7 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 		},
 	},
 	'aes-256-ctr': {
-		index: 1,
+		index: 2,
 		chunkSize: 64,
 		bitsPerWord: 8,
 		keySizeBytes: 32,
@@ -47,7 +47,7 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 		encrypt: makeAesCtr(256),
 	},
 	'aes-128-ctr': {
-		index: 2,
+		index: 1,
 		chunkSize: 64,
 		bitsPerWord: 8,
 		keySizeBytes: 16,

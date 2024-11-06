@@ -2,9 +2,8 @@ package chachaV3
 
 import (
 	"crypto/rand"
-	"testing"
-
 	"gnark-symmetric-crypto/utils"
+	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/frontend"

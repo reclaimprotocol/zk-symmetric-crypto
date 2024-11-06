@@ -56,11 +56,11 @@ func TestAES256(t *testing.T) {
 	// witness values preparation
 	assignment := AES256Wrapper{
 		AESWrapper{
-			Key:        make([]frontend.Variable, 32),
-			Counter:    Counter,
-			Nonce:      [12]frontend.Variable{},
-			Plaintext:  [BLOCKS * 16]frontend.Variable{},
-			Ciphertext: [BLOCKS * 16]frontend.Variable{},
+			Key:     make([]frontend.Variable, 32),
+			Counter: Counter,
+			Nonce:   [12]frontend.Variable{},
+			In:      [BLOCKS * 16]frontend.Variable{},
+			Out:     [BLOCKS * 16]frontend.Variable{},
 		},
 	}
 
@@ -69,10 +69,10 @@ func TestAES256(t *testing.T) {
 		assignment.Key[i] = keyAssign[i]
 	}
 	for i := 0; i < len(ptAssign); i++ {
-		assignment.Plaintext[i] = ptAssign[i]
+		assignment.In[i] = ptAssign[i]
 	}
 	for i := 0; i < len(ciphertext); i++ {
-		assignment.Ciphertext[i] = ciphertext[i]
+		assignment.Out[i] = ciphertext[i]
 	}
 
 	for i := 0; i < len(nonceAssign); i++ {
@@ -81,11 +81,11 @@ func TestAES256(t *testing.T) {
 
 	assert.CheckCircuit(&AES256Wrapper{
 		AESWrapper{
-			Key:        make([]frontend.Variable, 32),
-			Counter:    Counter,
-			Nonce:      [12]frontend.Variable{},
-			Plaintext:  [BLOCKS * 16]frontend.Variable{},
-			Ciphertext: [BLOCKS * 16]frontend.Variable{},
+			Key:     make([]frontend.Variable, 32),
+			Counter: Counter,
+			Nonce:   [12]frontend.Variable{},
+			In:      [BLOCKS * 16]frontend.Variable{},
+			Out:     [BLOCKS * 16]frontend.Variable{},
 		},
 	}, test.WithValidAssignment(&assignment))
 }

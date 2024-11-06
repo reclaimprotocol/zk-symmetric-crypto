@@ -8,11 +8,11 @@ import (
 const BLOCKS = 4
 
 type AESWrapper struct {
-	Key        []frontend.Variable
-	Nonce      [12]frontend.Variable          `gnark:",public"`
-	Counter    frontend.Variable              `gnark:",public"`
-	Plaintext  [BLOCKS * 16]frontend.Variable `gnark:",public"`
-	Ciphertext [BLOCKS * 16]frontend.Variable `gnark:",public"`
+	Key     []frontend.Variable
+	Nonce   [12]frontend.Variable          `gnark:",public"`
+	Counter frontend.Variable              `gnark:",public"`
+	In      [BLOCKS * 16]frontend.Variable `gnark:",public"`
+	Out     [BLOCKS * 16]frontend.Variable `gnark:",public"`
 }
 
 type AESGadget struct {

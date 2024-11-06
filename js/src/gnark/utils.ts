@@ -7,8 +7,12 @@ const BIN_PATH = '../../bin/gnark'
 export type GnarkLib = {
 	verify: Function
 	free: Function
+	vfree:Function
 	prove: Function
-	initAlgorithm: Function
+	initAlgorithm: Function,
+	oprf: Function,
+	generateOPRFRequest: Function,
+	processOPRFResponse:Function,
 	koffi: typeof import('koffi')
 }
 
@@ -50,6 +54,11 @@ export async function loadGnarkLib(): Promise<GnarkLib> {
 		r1:  'longlong',
 	})
 
+	const LibReturn = koffi.struct('LibReturn', {
+		r0: 'void *',
+		r1:  'longlong',
+	})
+
 	const arch = ARCH_MAP[process.arch] || process.arch
 	const platform = process.platform
 
@@ -70,11 +79,15 @@ export async function loadGnarkLib(): Promise<GnarkLib> {
 		return {
 			verify: libVerify.func('Verify', 'unsigned char', [GoSlice]),
 			free: libProve.func('Free', 'void', ['void *']),
+			vfree: libVerify.func('VFree', 'void', ['void *']), //free in verify library
 			prove: libProve.func('Prove', ProveReturn, [GoSlice]),
 			initAlgorithm: libProve.func(
 				'InitAlgorithm', 'unsigned char',
 				['unsigned char', GoSlice, GoSlice]
 			),
+			oprf: libVerify.func('OPRF', LibReturn, [GoSlice]),
+			generateOPRFRequest: libProve.func('GenerateOPRFRequestData', LibReturn, [GoSlice]),
+			processOPRFResponse: libProve.func('ProcessOPRFResponse', LibReturn, [GoSlice]),
 			koffi
 		}
 	} catch(err) {

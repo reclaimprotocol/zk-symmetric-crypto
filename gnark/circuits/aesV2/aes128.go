@@ -45,7 +45,7 @@ func (circuit *AES128Wrapper) Define(api frontend.API) error {
 		keystream := aes.Encrypt(circuit.Key, counterBlock)
 
 		for i := 0; i < 16; i++ {
-			api.AssertIsEqual(circuit.Ciphertext[b*16+i], aes.VariableXor(keystream[i], circuit.Plaintext[b*16+i], 8))
+			api.AssertIsEqual(circuit.Out[b*16+i], aes.VariableXor(keystream[i], circuit.In[b*16+i], 8))
 		}
 		counter = api.Add(counter, 1)
 		api.AssertIsLessOrEqual(counter, math.MaxUint32)

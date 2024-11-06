@@ -1,14 +1,11 @@
 package main
 
 import (
-	aes2 "gnark-symmetric-crypto/circuits/aesV2"
-	"gnark-symmetric-crypto/circuits/chachaV3"
+	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
 	"time"
 
 	"fmt"
 	"os"
-
-	// _ "net/http/pprof"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"
@@ -16,131 +13,75 @@ import (
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 )
 
-const GEN_FILES_DIR = "../resources/gnark/"
-
 func main() {
-	generateChaChaV3()
-	generateAES128()
-	generateAES256()
-}
 
-func generateChaChaV3() {
-	curve := ecc.BN254.ScalarField()
+	// generateCircuitFiles(&chachaV3.ChaChaCircuit{}, "chacha20")
+	generateCircuitFiles(&chachaV3_oprf.ChachaTOPRFCircuit{TOPRF: chachaV3_oprf.TOPRFData{}}, "chacha20_oprf")
 
-	witness := chachaV3.ChaChaCircuit{}
-
-	t := time.Now()
-	r1css, err := frontend.Compile(curve, r1cs.NewBuilder, &witness)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("compile took ", time.Since(t))
-
-	fmt.Printf("Blocks: %d, constraints: %d\n", chachaV3.Blocks, r1css.GetNbConstraints())
-
-	os.Remove(GEN_FILES_DIR + "r1cs.chacha20")
-	os.Remove(GEN_FILES_DIR + "pk.chacha20")
-	os.Remove("libraries/verifier/impl/generated/vk.chacha20")
-	f, err := os.OpenFile(GEN_FILES_DIR+"r1cs.chacha20", os.O_RDWR|os.O_CREATE, 0777)
-	r1css.WriteTo(f)
-	f.Close()
-
-	pk1, vk1, err := groth16.Setup(r1css)
-	if err != nil {
-		panic(err)
-	}
-
-	f2, err := os.OpenFile(GEN_FILES_DIR+"pk.chacha20", os.O_RDWR|os.O_CREATE, 0777)
-	pk1.WriteTo(f2)
-	f2.Close()
-
-	f3, err := os.OpenFile("libraries/verifier/impl/generated/vk.chacha20", os.O_RDWR|os.O_CREATE, 0777)
-	vk1.WriteTo(f3)
-	f3.Close()
-}
-
-func generateAES128() {
-	curve := ecc.BN254.ScalarField()
-
-	witness := aes2.AES128Wrapper{
-		AESWrapper: aes2.AESWrapper{
+	/*aes128 := &aesv2.AES128Wrapper{
+		AESWrapper: aesv2.AESWrapper{
 			Key: make([]frontend.Variable, 16),
 		},
 	}
 
-	t := time.Now()
-	r1css, err := frontend.Compile(curve, r1cs.NewBuilder, &witness)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("compile took ", time.Since(t))
+	generateCircuitFiles(aes128, "aes128")
 
-	fmt.Printf("constraints: %d\n", r1css.GetNbConstraints())
-
-	os.Remove(GEN_FILES_DIR + "r1cs.aes128")
-	os.Remove(GEN_FILES_DIR + "pk.aes128")
-	os.Remove("libraries/verifier/impl/generated/vk.aes128")
-	f, err := os.OpenFile(GEN_FILES_DIR+"r1cs.aes128", os.O_RDWR|os.O_CREATE, 0777)
-	r1css.WriteTo(f)
-	f.Close()
-
-	pk1, vk1, err := groth16.Setup(r1css)
-	if err != nil {
-		panic(err)
-	}
-
-	f2, err := os.OpenFile(GEN_FILES_DIR+"pk.aes128", os.O_RDWR|os.O_CREATE, 0777)
-	pk1.WriteTo(f2)
-	f2.Close()
-
-	f3, err := os.OpenFile("libraries/verifier/impl/generated/vk.aes128", os.O_RDWR|os.O_CREATE, 0777)
-	vk1.WriteTo(f3)
-	f3.Close()
-}
-
-func generateAES256() {
-	curve := ecc.BN254.ScalarField()
-
-	witness := aes2.AES256Wrapper{
-		AESWrapper: aes2.AESWrapper{
+	aes256 := &aesv2.AES256Wrapper{
+		AESWrapper: aesv2.AESWrapper{
 			Key: make([]frontend.Variable, 32),
 		},
 	}
+	generateCircuitFiles(aes256, "aes256")*/
+
+}
+
+func generateCircuitFiles(circuit frontend.Circuit, name string) {
+	curve := ecc.BN254.ScalarField()
 
 	t := time.Now()
-	r1css, err := frontend.Compile(curve, r1cs.NewBuilder, &witness)
+	r1css, err := frontend.Compile(curve, r1cs.NewBuilder, circuit)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("compile took ", time.Since(t))
 
-	fmt.Printf("constraints: %d\n", r1css.GetNbConstraints())
+	fmt.Printf("constraints: %d pub %d secret %d\n", r1css.GetNbConstraints(), r1css.GetNbPublicVariables(), r1css.GetNbSecretVariables())
 
-	os.Remove(GEN_FILES_DIR + "r1cs.aes256")
-	os.Remove(GEN_FILES_DIR + "pk.aes256")
-	os.Remove("libraries/verifier/impl/generated/vk.aes256")
-	f, err := os.OpenFile(GEN_FILES_DIR+"r1cs.aes256", os.O_RDWR|os.O_CREATE, 0777)
-	r1css.WriteTo(f)
-	f.Close()
+	_ = os.Remove("circuits/generated/r1cs." + name)
+	_ = os.Remove("circuits/generated/pk." + name)
+	_ = os.Remove("libraries/verifier/impl/generated/vk." + name)
+	f, err := os.OpenFile("circuits/generated/r1cs."+name, os.O_RDWR|os.O_CREATE, 0777)
+	_, err = r1css.WriteTo(f)
+	if err != nil {
+		panic(err)
+	}
+	err = f.Close()
+	if err != nil {
+		panic(err)
+	}
 
 	pk1, vk1, err := groth16.Setup(r1css)
 	if err != nil {
 		panic(err)
 	}
 
-	f2, err := os.OpenFile(GEN_FILES_DIR+"pk.aes256", os.O_RDWR|os.O_CREATE, 0777)
-	pk1.WriteTo(f2)
-	f2.Close()
-
-	f3, err := os.OpenFile("libraries/verifier/impl/generated/vk.aes256", os.O_RDWR|os.O_CREATE, 0777)
-	vk1.WriteTo(f3)
-	f3.Close()
-}
-
-func fetchFile(keyName string) []byte {
-	f, err := os.ReadFile(GEN_FILES_DIR + "" + keyName)
+	f2, err := os.OpenFile("circuits/generated/pk."+name, os.O_RDWR|os.O_CREATE, 0777)
+	_, err = pk1.WriteTo(f2)
 	if err != nil {
 		panic(err)
 	}
-	return f
+	err = f2.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	f3, err := os.OpenFile("libraries/verifier/impl/generated/vk."+name, os.O_RDWR|os.O_CREATE, 0777)
+	_, err = vk1.WriteTo(f3)
+	if err != nil {
+		panic(err)
+	}
+	err = f3.Close()
+	if err != nil {
+		panic(err)
+	}
 }

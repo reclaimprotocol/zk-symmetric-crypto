@@ -3,7 +3,6 @@ package chacha
 import (
 	"crypto/rand"
 	"encoding/binary"
-	"gnark-symmetric-crypto/utils"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -87,7 +86,7 @@ func TestRound(t *testing.T) {
 		0x13121110, 0x17161514, 0x1b1a1918, 0x1f1e1d1c,
 		0x00000001, 0x09000000, 0x4a000000, 0x00000000})
 
-	out := utils.BytesToUint32BE([]uint8{
+	out := BytesToUint32BE([]uint8{
 		0x10, 0xf1, 0xe7, 0xe4, 0xd1, 0x3b, 0x59, 0x15, 0x50, 0x0f, 0xdd, 0x1f, 0xa3, 0x20, 0x71, 0xc4,
 		0xc7, 0xd1, 0xf4, 0xc7, 0x33, 0xc0, 0x68, 0x03, 0x04, 0x22, 0xaa, 0x9a, 0xc3, 0xd4, 0x6c, 0x4e,
 		0xd2, 0x82, 0x64, 0x46, 0x07, 0x9f, 0xaa, 0x09, 0x14, 0xc2, 0xd7, 0x05, 0xd9, 0x8b, 0x02, 0xa2,
@@ -129,8 +128,8 @@ func TestCipher(t *testing.T) {
 	fmt.Println(hex.EncodeToString(bPt))
 	fmt.Println(hex.EncodeToString(bCt))*/
 
-	plaintext := utils.BytesToUint32BE(bPt)
-	ciphertext := utils.BytesToUint32BE(bCt)
+	plaintext := BytesToUint32BE(bPt)
+	ciphertext := BytesToUint32BE(bCt)
 
 	witness := ChaChaCircuit{}
 	copy(witness.Key[:], BytesToUint32LE(bKey))
@@ -149,6 +148,16 @@ func BytesToUint32LE(in []uint8) []uints.U32 {
 	var res []uints.U32
 	for i := 0; i < len(in); i += 4 {
 		t := binary.LittleEndian.Uint32(in[i:])
+		res = append(res, uints.NewU32(t))
+	}
+	return res
+}
+
+func BytesToUint32BE(in []uint8) []uints.U32 {
+
+	var res []uints.U32
+	for i := 0; i < len(in); i += 4 {
+		t := binary.BigEndian.Uint32(in[i:])
 		res = append(res, uints.NewU32(t))
 	}
 	return res

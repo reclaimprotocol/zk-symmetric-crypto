@@ -29,28 +29,34 @@ We currently support the following algorithms:
 Our library implements multiple ZK proof systems:
 - **[Circom Circuits](/circom/)** backed by `snarkjs` (groth16).
 - **[`gnark` Frontend Circuits](/gnark/)** backed by `gnark` (groth16).
-- **[`gnark` Frontend Circuits](/expander/)** backed by `expander` (groth16).
+- **[`gnark` Frontend Circuits](/expander/)** backed by `expander` (GKR):
+    - Note: This is a work in progress and may be insecure. It is also only available for `chacha20` at the moment.
 
 All these proof systems can be accessed easily via a single **[JS Package](/js)**. This package provides user-friendly abstract interfaces for generating and verifying proofs.
 
 👉 If you’re just looking to integrate this library into your project, check out the **[JS Package's README](/js/readme.md)**.
 
 ## 🤝 Contributing to Our Project
+
 We're thrilled that you're interested in contributing! 🎉 Before you get started, please review the following guidelines:
 
 ### 📜 Code of Conduct
+
 To ensure a positive and inclusive environment for all contributors, please read and follow our [Code of Conduct](https://github.com/reclaimprotocol/.github/blob/main/Code-of-Conduct.md).
 
 ### 🔐 Security
 If you discover any security-related issues, please refer to our [Security Policy](https://github.com/reclaimprotocol/.github/blob/main/SECURITY.md) for information on how to responsibly disclose vulnerabilities.
 
 ### ✍️ Contributor License Agreement
+
 Before contributing to this project, please read and sign our [Contributor License Agreement (CLA)](https://github.com/reclaimprotocol/.github/blob/main/CLA.md).
 
 ### 🌱 Indie Hackers
+
 For Indie Hackers: [Check out our guidelines and potential grant opportunities](https://github.com/reclaimprotocol/.github/blob/main/Indie-Hackers.md).
 
 ## 📄 License
+
 This project is licensed under a [custom license](https://github.com/reclaimprotocol/.github/blob/main/LICENSE). By contributing, you agree that your contributions will be licensed under its terms.
 
 ---

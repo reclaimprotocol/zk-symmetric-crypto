@@ -27,14 +27,14 @@ const ARCH_MAP = {
 }
 
 export async function loadGnarkLib(): Promise<GnarkLib> {
-	const koffi = await import('koffi')
+	const koffiMod = await import('koffi')
 		.catch(() => undefined)
-	if(!koffi) {
+	if(!koffiMod) {
 		throw new Error('Koffi not available, cannot use gnark')
 	}
 
 	const { join } = await import('path')
-
+	const { default: koffi } = koffiMod
 	koffi.reset() //otherwise tests will fail
 
 	// define object GoSlice to map to:

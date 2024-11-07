@@ -27,7 +27,6 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 			const res = generateThresholdKeys(bParams)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
 			vfree(res.r0) // Avoid memory leak!
-			console.log(resJson)
 			const parsed = JSON.parse(resJson)
 
 			const shares: KeyShare[] = []
@@ -65,7 +64,6 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 			const res = generateOPRFRequest(wtns)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
 			free(res.r0) // Avoid memory leak!
-			console.log(resJson)
 			const parsed = JSON.parse(resJson)
 			return Promise.resolve({
 				mask: toUint8Array(parsed.mask),
@@ -80,8 +78,10 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 			const { toprfFinalize, free } = lib
 
 			const resps: any[] = []
-			for(const { evaluated, c, r } of responses) {
+			for(const { index, publicKeyShare, evaluated, c, r } of responses) {
 				const resp = {
+					index: index,
+					publicKeyShare: fromUint8Array(publicKeyShare),
 					evaluated: fromUint8Array(evaluated),
 					c: fromUint8Array(c),
 					r: fromUint8Array(r),
@@ -108,7 +108,6 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 			const res = toprfFinalize(libReq)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
 			free(res.r0) // Avoid memory leak!
-			console.log(resJson)
 			const parsed = JSON.parse(resJson)
 			return Promise.resolve(toUint8Array(parsed.output))
 		},
@@ -130,7 +129,6 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 			const res = oprfEvaluate(libParams)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
 			vfree(res.r0) // Avoid memory leak!
-			console.log(resJson)
 			const parsed = JSON.parse(resJson)
 			return Promise.resolve({
 				evaluated: toUint8Array(parsed.evaluated),

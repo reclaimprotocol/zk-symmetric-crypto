@@ -12,7 +12,7 @@ describe('TOPRF circuits Tests', () => {
 		const fetcher = makeLocalFileFetch()
 		const operator = makeLocalGnarkTOPRFOperator(fetcher)
 
-		const email = 'test@email.comtest@email.comtest@email.com'
+		const email = 'test@email.com'
 		const domainSeparator = 'reclaim'
 
 		const keys = await operator.GenerateThresholdKeys(3, 2)

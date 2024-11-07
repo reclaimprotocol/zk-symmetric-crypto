@@ -128,9 +128,7 @@ export function generateGnarkWitness(cipher: EncryptionAlgorithm, input) {
 		toprf: generateTOPRFParams()
 	}
 
-	const paramsJson = JSON.stringify(proofParams)
-	console.log(paramsJson)
-	return strToUint8Array(paramsJson)
+	return strToUint8Array(JSON.stringify(proofParams))
 
 
 	function generateTOPRFParams() {

@@ -72,13 +72,8 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 		blocksPerChunk: 1,
 		// chacha20 circuit uses LE encoding
 		isLittleEndian: true,
-		uint8ArrayToBits: (arr: Uint8Array) => (
-			uintArrayToBits(toUintArray(arr)).flat()
-		),
-		bitsToUint8Array: (bits: number[]) => {
-			const arr = bitsToUintArray(bits)
-			return toUint8Array(arr)
-		},
+		uint8ArrayToBits,
+		bitsToUint8Array,
 		encrypt({ key, iv, in: data }) {
 			const cipher = new ChaCha20Poly1305(key)
 			const ciphertext = cipher.seal(iv, data)

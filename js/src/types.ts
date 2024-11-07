@@ -3,7 +3,7 @@ export type EncryptionAlgorithm = 'aes-256-ctr'
 	| 'chacha20'
 	| 'chacha20-toprf'
 
-export type ZKEngine = 'snarkjs' | 'gnark'
+export type ZKEngine = 'snarkjs' | 'gnark' | 'expander'
 
 // the Array type used in the circuit
 // it's a Uint32Array, as all ChaCha20 operations
@@ -12,8 +12,8 @@ export type UintArray = Uint32Array
 
 export type Proof = {
 	algorithm: EncryptionAlgorithm
-	/** serialised SnarkJS proof */
-	proofJson: string
+	/** serialised proof */
+	proofData: ZKProof
 	/**
 	 * the plaintext obtained as an output
 	 * of the ZK circuit
@@ -106,16 +106,16 @@ export type AlgorithmConfig = {
 	}): Promise<Uint8Array> | Uint8Array
 }
 
-type ZKProof = { [_: string]: unknown } | string
+type ZKProof = string | Uint8Array
 
 type ZKProofOutput = {
 	proof: ZKProof
 	publicSignals?: number[]
 }
 
-type ZKInputItem = number[] | number[][]
+type ZKInputItem = number[]
 
-type ZKTOPRFResponseInputItem = {
+type ZKTOPRFResponsePublicSignals = {
 	index: ZKInputItem
 	publicKeyShare: ZKInputItem
 	evaluated: ZKInputItem
@@ -123,23 +123,27 @@ type ZKTOPRFResponseInputItem = {
 	r: ZKInputItem
 }
 
-type ZKTOPRFInputItem = {
+type ZKTOPRFPublicSignals = {
 	pos: ZKInputItem
 	len: ZKInputItem
-	mask: ZKInputItem
 	domainSeparator: ZKInputItem
-	output: ZKInputItem // actual TOPRF hash to be used elsewhere
-	responses: ZKTOPRFResponseInputItem[]
+	output: ZKInputItem
+	responses: ZKTOPRFResponsePublicSignals[]
 }
 
-type ZKProofInput = {
-	key: ZKInputItem
+type ZKProofPublicSignals = {
 	nonce: ZKInputItem
 	counter: ZKInputItem
 	in: ZKInputItem
 	out: ZKInputItem
-	toprf?: ZKTOPRFInputItem
+	toprf?: ZKTOPRFPublicSignals
 }
+
+type ZKProofAllSignals = {
+	key: ZKInputItem
+	mask?: ZKInputItem
+} & ZKProofPublicSignals
+
 
 /**
  * the operator to use for proving and verifying the groth16
@@ -149,10 +153,13 @@ type ZKProofInput = {
  * for different implementations
  */
 export type ZKOperator = {
-	generateWitness(input: ZKProofInput, logger?: Logger): Promise<Uint8Array>
+	generateWitness(
+		input: ZKProofAllSignals,
+		logger?: Logger
+	): Promise<Uint8Array> | Uint8Array
 	groth16Prove(witness: Uint8Array, logger?: Logger): Promise<ZKProofOutput>
 	groth16Verify(
-		publicSignals: number[],
+		publicSignals: ZKProofPublicSignals,
 		proof: ZKProof,
 		logger?: Logger
 	): Promise<boolean>

@@ -1,7 +1,7 @@
 import { Base64 } from 'js-base64'
 import { CONFIG } from '../config'
 import { Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
-import { ALGS_MAP, generateGnarkWitness, loadGnarkLib, strToUint8Array } from './utils'
+import { ALGS_MAP, generateGnarkPublicWitness, generateGnarkWitness, loadGnarkLib, strToUint8Array } from './utils'
 
 export let globalGnarkLib: ReturnType<typeof loadGnarkLib> | undefined
 
@@ -36,17 +36,28 @@ export function makeGnarkZkOperator({
 
 			const { bitsToUint8Array } = CONFIG[algorithm]
 
-			const bSignals = bitsToUint8Array(publicSignals.flat())
-			const sSignals = Buffer.from(bSignals).toString()
-			console.log(sSignals)
+			let pubSignals = ''
+
+			if(publicSignals.toprf) {
+				const signals = generateGnarkPublicWitness(algorithm, publicSignals)
+				pubSignals = Base64.fromUint8Array(strToUint8Array(JSON.stringify(signals)))
+
+			} else {
+				pubSignals = Base64.fromUint8Array(
+					bitsToUint8Array([
+						...publicSignals.out,
+						...publicSignals.nonce,
+						...publicSignals.counter,
+						...publicSignals.in
+					])
+				)
+			}
 
 			const proofStr = proof['proofJson']
 			const verifyParams = {
 				cipher: algorithm,
 				proof: proofStr,
-				publicSignals: Base64.fromUint8Array(
-					bSignals
-				),
+				publicSignals: pubSignals,
 			}
 
 			const paramsJson = JSON.stringify(verifyParams)

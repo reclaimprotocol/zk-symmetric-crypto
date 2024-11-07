@@ -33,14 +33,14 @@ const ARCH_MAP = {
 }
 
 export async function loadGnarkLib(): Promise<GnarkLib> {
-	const koffi = await import('koffi')
+	const koffiMod = await import('koffi')
 		.catch(() => undefined)
-	if(!koffi) {
+	if(!koffiMod) {
 		throw new Error('Koffi not available, cannot use gnark')
 	}
 
 	const { join } = await import('path')
-
+	const { default: koffi } = koffiMod
 	koffi.reset() //otherwise tests will fail
 
 	// define object GoSlice to map to:
@@ -115,32 +115,51 @@ export function strToUint8Array(str: string) {
 export function generateGnarkWitness(cipher: EncryptionAlgorithm, input) {
 	const {
 		bitsToUint8Array,
+	} = CONFIG[cipher]
+
+	//input is bits, we convert them back to bytes
+	const proofParams = generateGnarkPublicWitness(cipher, input)
+	if(input.mask) {
+		proofParams.toprf.mask = Base64.fromUint8Array(bitsToUint8Array(input.mask))
+	}
+
+	return strToUint8Array(JSON.stringify({
+		...proofParams,
+		key:Base64.fromUint8Array(bitsToUint8Array(input.key)),
+	}))
+
+
+}
+
+
+export function generateGnarkPublicWitness(cipher: EncryptionAlgorithm, input) {
+	const {
+		bitsToUint8Array,
 		isLittleEndian
 	} = CONFIG[cipher]
 
 	//input is bits, we convert them back to bytes
 	const proofParams = {
 		cipher:cipher,
-		key: Base64.fromUint8Array(bitsToUint8Array(input.key.flat())),
-		nonce: Base64.fromUint8Array(bitsToUint8Array(input.nonce.flat())),
+		nonce: Base64.fromUint8Array(bitsToUint8Array(input.nonce)),
 		counter: deserializeNumber(input.counter),
-		input: Base64.fromUint8Array(bitsToUint8Array(input.in.flat())),
+		input: Base64.fromUint8Array(bitsToUint8Array(input.in)),
 		toprf: generateTOPRFParams()
 	}
 
-	return strToUint8Array(JSON.stringify(proofParams))
+	return proofParams
 
 
 	function generateTOPRFParams() {
 		if(input.toprf) {
-			const { pos, len, mask, domainSeparator, output, responses } = input.toprf
+			const { pos, len, domainSeparator, output, responses } = input.toprf
 			return {
 				pos: deserializeNumber(pos),
 				len: deserializeNumber(len),
-				mask: Base64.fromUint8Array(bitsToUint8Array(mask.flat())),
-				domainSeparator: Base64.fromUint8Array(bitsToUint8Array(domainSeparator.flat())),
-				output: Base64.fromUint8Array(bitsToUint8Array(output.flat())),
-				responses: generateResponses(responses)
+				domainSeparator: Base64.fromUint8Array(bitsToUint8Array(domainSeparator)),
+				output: Base64.fromUint8Array(bitsToUint8Array(output)),
+				responses: generateResponses(responses),
+				mask:''
 			}
 		} else {
 			return {}
@@ -152,10 +171,10 @@ export function generateGnarkWitness(cipher: EncryptionAlgorithm, input) {
 		for(const {	index, publicKeyShare,	evaluated,	c,	r } of responses) {
 			const resp = {
 				index: deserializeNumber(index),
-				publicKeyShare: Base64.fromUint8Array(bitsToUint8Array(publicKeyShare.flat())),
-				evaluated: Base64.fromUint8Array(bitsToUint8Array(evaluated.flat())),
-				c: Base64.fromUint8Array(bitsToUint8Array(c.flat())),
-				r: Base64.fromUint8Array(bitsToUint8Array(r.flat())),
+				publicKeyShare: Base64.fromUint8Array(bitsToUint8Array(publicKeyShare)),
+				evaluated: Base64.fromUint8Array(bitsToUint8Array(evaluated)),
+				c: Base64.fromUint8Array(bitsToUint8Array(c)),
+				r: Base64.fromUint8Array(bitsToUint8Array(r)),
 			}
 			resps.push(resp)
 		}

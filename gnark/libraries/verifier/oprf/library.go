@@ -53,7 +53,7 @@ type InputGenerateParams struct {
 }
 
 type Share struct {
-	Index      int
+	Index      int    `json:"index"`
 	PrivateKey []byte `json:"privateKey"`
 	PublicKey  []byte `json:"publicKey"`
 }

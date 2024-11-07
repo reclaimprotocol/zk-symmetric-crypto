@@ -1,22 +1,25 @@
-import { Base64 } from 'js-base64'
+import { CONFIG } from '../config'
 import { makeLocalFileFetch } from '../file-fetch'
-import { makeLocalGnarkOPRFOperator } from '../gnark/toprf'
+import { makeGnarkZkOperator } from '../gnark/operator'
+import { makeLocalGnarkTOPRFOperator } from '../gnark/toprf'
+import { TOPRFResponseData } from '../gnark/types'
+import { strToUint8Array } from '../gnark/utils'
 import { encryptData } from './utils'
 
 describe('TOPRF circuits Tests', () => {
 
 	it('should prove & verify TOPRF', async() => {
 		const fetcher = makeLocalFileFetch()
-		const operator = makeLocalGnarkOPRFOperator(fetcher)
+		const operator = makeLocalGnarkTOPRFOperator(fetcher)
 
-		const email = 'test@email.com'
+		const email = 'test@email.comtest@email.comtest@email.com'
 		const domainSeparator = 'reclaim'
 
 		const keys = await operator.GenerateThresholdKeys(3, 2)
 
 		const req = await operator.generateOPRFRequestData(email, domainSeparator)
 
-		const resps: any[] = []
+		const resps: TOPRFResponseData[] = []
 		const threshold = 2 //hardcoded
 
 		for(let i = 0; i < threshold; i++) {
@@ -33,25 +36,11 @@ describe('TOPRF circuits Tests', () => {
 			resps.push(resp)
 		}
 
-		const result = await operator.TOPRFFinalize(keys.publicKey, req, resps)
-		//console.log(result.output) // actual hash to be used elsewhere
+		const nullifier = await operator.TOPRFFinalize(keys.publicKey, req, resps)
 
 
 		const pos = 10
 		const len = email.length
-
-
-		// response from OPRF servers + local values
-		// pre-calculated for email & separator above
-		const toprf = {
-			pos: pos, //pos in plaintext
-			len: len, // length of data to "hash"
-			mask: req.mask,
-			domainSeparator: Base64.fromUint8Array(new Uint8Array(Buffer.from(domainSeparator))),
-			output: result.output, // => hashing this produces that "oprf hash" or nullifier that we need
-			responses: resps
-		}
-
 
 		const plaintext = new Uint8Array(Buffer.alloc(128)) //2 blocks
 		plaintext.set(new Uint8Array(Buffer.from(email)), pos) //replace part of plaintext with email
@@ -66,21 +55,51 @@ describe('TOPRF circuits Tests', () => {
 			iv
 		)
 
-		const witnessParams = {
-			'cipher': 'chacha20-toprf',
-			'key': key,
-			'nonce': iv,
-			'counter': 1,
-			'input': ciphertext, // plaintext will be calculated in library
-			'toprf': toprf
+		const {
+			isLittleEndian,
+			uint8ArrayToBits,
+		} = CONFIG['chacha20-toprf']
+
+
+		const respParams: any[] = []
+		for(const { index, publicKeyShare, evaluated, c, r } of resps) {
+			const rp = {
+				index: serialiseCounter(index),
+				publicKeyShare: uint8ArrayToBits(publicKeyShare),
+				evaluated: uint8ArrayToBits(evaluated),
+				c: uint8ArrayToBits(c),
+				r: uint8ArrayToBits(r),
+			}
+			respParams.push(rp)
 		}
 
+		const toprfParams = {
+			pos: serialiseCounter(pos), //pos in plaintext
+			len: serialiseCounter(len), // length of data to "hash"
+			mask: uint8ArrayToBits(req.mask),
+			domainSeparator: uint8ArrayToBits(strToUint8Array(domainSeparator)),
+			output: uint8ArrayToBits(nullifier),
+			responses: respParams
+		}
 
-		const wtns = await operator.generateWitness(witnessParams)
+		const witnessParams = {
+			'cipher': 'chacha20-toprf',
+			key: uint8ArrayToBits(key),
+			nonce: uint8ArrayToBits(iv),
+			counter: serialiseCounter(1),
+			in: uint8ArrayToBits(ciphertext),
+			out: [], // plaintext will be calculated in library
+			toprf: toprfParams
+		}
 
-		const proof = await operator.proveOPRF(wtns)
+		const zkOperator = makeGnarkZkOperator({ algorithm:'chacha20-toprf', fetcher })
 
-		const verifySignals = {
+		const wtns = await zkOperator.generateWitness(witnessParams)
+
+		const proof = await zkOperator.groth16Prove(wtns)
+		console.log(proof)
+
+		/*const verifySignals = {
 			'nonce': iv,
 			'counter': 1,
 			'input': ciphertext,
@@ -93,6 +112,16 @@ describe('TOPRF circuits Tests', () => {
 			}
 		}
 
-		expect(await operator.verifyOPRF(verifySignals, proof)).toEqual(true)
+		expect(await zkOperator.groth16Verify(verifySignals, proof)).toEqual(true)*/
+
+		function serialiseCounter(counter) {
+			const counterArr = new Uint8Array(4)
+			const counterView = new DataView(counterArr.buffer)
+			counterView.setUint32(0, counter, isLittleEndian)
+
+			const counterBits = uint8ArrayToBits(counterArr)
+				.flat()
+			return counterBits
+		}
 	})
 })

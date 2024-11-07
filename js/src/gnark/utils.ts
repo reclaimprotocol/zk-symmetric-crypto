@@ -23,6 +23,7 @@ export const ALGS_MAP: {
 	'chacha20': { ext: 'chacha20' },
 	'aes-128-ctr': { ext: 'aes128' },
 	'aes-256-ctr': { ext: 'aes256' },
+	'chacha20-toprf': { ext: 'chacha20_oprf' },
 }
 
 // golang uses different arch names
@@ -122,15 +123,50 @@ export function generateGnarkWitness(cipher: EncryptionAlgorithm, input) {
 		cipher:cipher,
 		key: Base64.fromUint8Array(bitsToUint8Array(input.key.flat())),
 		nonce: Base64.fromUint8Array(bitsToUint8Array(input.nonce.flat())),
-		counter: deSerialiseCounter(),
+		counter: deserializeNumber(input.counter),
 		input: Base64.fromUint8Array(bitsToUint8Array(input.in.flat())),
+		toprf: generateTOPRFParams()
 	}
 
 	const paramsJson = JSON.stringify(proofParams)
+	console.log(paramsJson)
 	return strToUint8Array(paramsJson)
 
-	function deSerialiseCounter() {
-		const bytes = bitsToUint8Array(input.counter)
+
+	function generateTOPRFParams() {
+		if(input.toprf) {
+			const { pos, len, mask, domainSeparator, output, responses } = input.toprf
+			return {
+				pos: deserializeNumber(pos),
+				len: deserializeNumber(len),
+				mask: Base64.fromUint8Array(bitsToUint8Array(mask.flat())),
+				domainSeparator: Base64.fromUint8Array(bitsToUint8Array(domainSeparator.flat())),
+				output: Base64.fromUint8Array(bitsToUint8Array(output.flat())),
+				responses: generateResponses(responses)
+			}
+		} else {
+			return {}
+		}
+	}
+
+	function generateResponses(responses) {
+		const resps: any[] = []
+		for(const {	index, publicKeyShare,	evaluated,	c,	r } of responses) {
+			const resp = {
+				index: deserializeNumber(index),
+				publicKeyShare: Base64.fromUint8Array(bitsToUint8Array(publicKeyShare.flat())),
+				evaluated: Base64.fromUint8Array(bitsToUint8Array(evaluated.flat())),
+				c: Base64.fromUint8Array(bitsToUint8Array(c.flat())),
+				r: Base64.fromUint8Array(bitsToUint8Array(r.flat())),
+			}
+			resps.push(resp)
+		}
+
+		return resps
+	}
+
+	function deserializeNumber(num) {
+		const bytes = bitsToUint8Array(num)
 		const counterView = new DataView(bytes.buffer)
 		return counterView.getUint32(0, isLittleEndian)
 	}

@@ -1,6 +1,7 @@
 export type EncryptionAlgorithm = 'aes-256-ctr'
 	| 'aes-128-ctr'
 	| 'chacha20'
+	| 'chacha20-toprf'
 
 export type ZKEngine = 'snarkjs' | 'gnark'
 
@@ -114,12 +115,30 @@ type ZKProofOutput = {
 
 type ZKInputItem = number[] | number[][]
 
+type ZKTOPRFResponseInputItem = {
+	index: ZKInputItem
+	publicKeyShare: ZKInputItem
+	evaluated: ZKInputItem
+	c: ZKInputItem
+	r: ZKInputItem
+}
+
+type ZKTOPRFInputItem = {
+	pos: ZKInputItem
+	len: ZKInputItem
+	mask: ZKInputItem
+	domainSeparator: ZKInputItem
+	output: ZKInputItem // actual TOPRF hash to be used elsewhere
+	responses: ZKTOPRFResponseInputItem[]
+}
+
 type ZKProofInput = {
 	key: ZKInputItem
 	nonce: ZKInputItem
 	counter: ZKInputItem
 	in: ZKInputItem
 	out: ZKInputItem
+	toprf?: ZKTOPRFInputItem
 }
 
 /**

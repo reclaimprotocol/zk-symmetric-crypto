@@ -1,72 +1,15 @@
-import { toBase64 } from 'js-base64'
+import { fromUint8Array, toUint8Array } from 'js-base64'
 import * as koffi from 'koffi'
 import { Logger } from '../types'
+import { KeygenResult, KeyShare, OPRFRequestData, OPRFResponseData, TOPRFResponseData } from './types'
 import { GnarkLib, loadGnarkLib, strToUint8Array } from './utils'
 
 
-export function makeLocalGnarkOPRFOperator(fetcher) {
+export function makeLocalGnarkTOPRFOperator(fetcher) {
 	let initDone = false
 	let gLib: GnarkLib
 	return {
-		async generateWitness(input): Promise<Uint8Array> {
-			const witness = {
-				cipher: input.cipher,
-				key: toBase64(input.key),
-				nonce: toBase64(input.nonce),
-				counter: input.counter,
-				input: toBase64(input.input),
-				toprf: input.toprf
-			}
-			const paramsJson = JSON.stringify(witness)
-			return strToUint8Array(paramsJson)
-		},
-
-		async proveOPRF(witness: Uint8Array, logger?: Logger) {
-			const lib = await initGnark(logger)
-
-			const { prove, free } = lib
-			const wtns = {
-				data: Buffer.from(witness),
-				len:witness.length,
-				cap:witness.length
-			}
-			const res = prove(wtns)
-			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
-			free(res.r0) // Avoid memory leak!
-			const proof = JSON.parse(resJson)
-			return Promise.resolve(proof)
-		},
-
-		async verifyOPRF(input, proof, logger?: Logger) {
-			const lib = await initGnark(logger)
-			const signals = {
-				nonce: toBase64(input.nonce),
-				counter: input.counter,
-				input: toBase64(input.input),
-				toprf: input.toprf
-			}
-
-			const strSignals = JSON.stringify(signals)
-			const verifyParams = {
-				cipher:'chacha20-toprf',
-				proof: proof.proof.proofJson,
-				publicSignals: toBase64(strSignals),
-			}
-
-			const paramsJson = JSON.stringify(verifyParams)
-			const paramsBuf = strToUint8Array(paramsJson)
-
-			const params = {
-				data: paramsBuf,
-				len:paramsJson.length,
-				cap:paramsJson.length
-
-			}
-
-			return lib.verify(params) === 1
-		},
-
-		async GenerateThresholdKeys(total, threshold, logger?: Logger) {
+		async GenerateThresholdKeys(total: number, threshold: number, logger?: Logger): Promise<KeygenResult> {
 			const lib = await initGnark(logger)
 			const { generateThresholdKeys, vfree } = lib
 
@@ -84,11 +27,27 @@ export function makeLocalGnarkOPRFOperator(fetcher) {
 			const res = generateThresholdKeys(bParams)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
 			vfree(res.r0) // Avoid memory leak!
-			const req = JSON.parse(resJson)
-			return Promise.resolve(req)
+			console.log(resJson)
+			const parsed = JSON.parse(resJson)
+
+			const shares: KeyShare[] = []
+			for(let i = 0; i < parsed.shares.length; i++) {
+				const share = parsed.shares[i]
+				shares.push({
+					index:share.index,
+					publicKey: toUint8Array(share.publicKey),
+					privateKey: toUint8Array(share.privateKey),
+				})
+			}
+
+			return Promise.resolve({
+				publicKey: toUint8Array(parsed.publicKey),
+				privateKey: toUint8Array(parsed.privateKey),
+				shares: shares,
+			})
 		},
 
-		async generateOPRFRequestData(data, domainSeparator: string, logger?: Logger) {
+		async generateOPRFRequestData(data, domainSeparator: string, logger?: Logger): Promise<OPRFRequestData> {
 			const lib = await initGnark(logger)
 			const { generateOPRFRequest, free } = lib
 
@@ -106,18 +65,38 @@ export function makeLocalGnarkOPRFOperator(fetcher) {
 			const res = generateOPRFRequest(wtns)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
 			free(res.r0) // Avoid memory leak!
-			const req = JSON.parse(resJson)
-			return Promise.resolve(req)
+			console.log(resJson)
+			const parsed = JSON.parse(resJson)
+			return Promise.resolve({
+				mask: toUint8Array(parsed.mask),
+				maskedData: toUint8Array(parsed.maskedData),
+				secretElements: [toUint8Array(parsed.secretElements[0]), toUint8Array(parsed.secretElements[1])]
+			})
 		},
 
-		async TOPRFFinalize(serverPublicKey, request, responses, logger?: Logger) {
+		async TOPRFFinalize(serverPublicKey: Uint8Array, request: OPRFRequestData, responses: TOPRFResponseData[], logger?: Logger): Promise<Uint8Array> {
 
 			const lib = await initGnark(logger)
 			const { toprfFinalize, free } = lib
+
+			const resps: any[] = []
+			for(const { evaluated, c, r } of responses) {
+				const resp = {
+					evaluated: fromUint8Array(evaluated),
+					c: fromUint8Array(c),
+					r: fromUint8Array(r),
+				}
+				resps.push(resp)
+			}
+
 			const params = {
-				serverPublicKey: serverPublicKey,
-				request: request,
-				responses: responses
+				serverPublicKey: fromUint8Array(serverPublicKey),
+				request: {
+					mask: fromUint8Array(request.mask),
+					maskedData: fromUint8Array(request.maskedData),
+					secretElements: [fromUint8Array(request.secretElements[0]), fromUint8Array(request.secretElements[1])]
+				},
+				responses: resps
 			}
 
 			const pamamsJson = strToUint8Array(JSON.stringify(params))
@@ -129,16 +108,17 @@ export function makeLocalGnarkOPRFOperator(fetcher) {
 			const res = toprfFinalize(libReq)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
 			free(res.r0) // Avoid memory leak!
-			const req = JSON.parse(resJson)
-			return Promise.resolve(req)
+			console.log(resJson)
+			const parsed = JSON.parse(resJson)
+			return Promise.resolve(toUint8Array(parsed.output))
 		},
 
-		async OPRFEvaluate(serverPrivate, maskedData: string, logger?: Logger) {
+		async OPRFEvaluate(serverPrivate: Uint8Array, maskedData: Uint8Array, logger?: Logger): Promise<OPRFResponseData> {
 			const lib = await initGnark(logger)
 			const { oprfEvaluate, vfree } = lib
 			const params = {
-				serverPrivate: serverPrivate,
-				maskedData: maskedData,
+				serverPrivate: fromUint8Array(serverPrivate),
+				maskedData: fromUint8Array(maskedData),
 			}
 
 			const pamamsJson = strToUint8Array(JSON.stringify(params))
@@ -150,8 +130,13 @@ export function makeLocalGnarkOPRFOperator(fetcher) {
 			const res = oprfEvaluate(libParams)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
 			vfree(res.r0) // Avoid memory leak!
-			const req = JSON.parse(resJson)
-			return Promise.resolve(req)
+			console.log(resJson)
+			const parsed = JSON.parse(resJson)
+			return Promise.resolve({
+				evaluated: toUint8Array(parsed.evaluated),
+				c: toUint8Array(parsed.c),
+				r: toUint8Array(parsed.r),
+			})
 		},
 	}
 

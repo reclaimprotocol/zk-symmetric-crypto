@@ -18,11 +18,11 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 				threshold: threshold,
 			}
 
-			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			const paramsJson = strToUint8Array(JSON.stringify(params))
 			const bParams = {
-				data: Buffer.from(pamamsJson),
-				len:pamamsJson.length,
-				cap:pamamsJson.length
+				data: Buffer.from(paramsJson),
+				len:paramsJson.length,
+				cap:paramsJson.length
 			}
 			const res = generateThresholdKeys(bParams)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
@@ -55,11 +55,11 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 				domainSeparator: domainSeparator,
 			}
 
-			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			const paramsJson = strToUint8Array(JSON.stringify(params))
 			const wtns = {
-				data: Buffer.from(pamamsJson),
-				len:pamamsJson.length,
-				cap:pamamsJson.length
+				data: Buffer.from(paramsJson),
+				len:paramsJson.length,
+				cap:paramsJson.length
 			}
 			const res = generateOPRFRequest(wtns)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
@@ -99,11 +99,11 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 				responses: resps
 			}
 
-			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			const paramsJson = strToUint8Array(JSON.stringify(params))
 			const libReq = {
-				data: Buffer.from(pamamsJson),
-				len:pamamsJson.length,
-				cap:pamamsJson.length
+				data: Buffer.from(paramsJson),
+				len:paramsJson.length,
+				cap:paramsJson.length
 			}
 			const res = toprfFinalize(libReq)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()
@@ -120,11 +120,11 @@ export function makeLocalGnarkTOPRFOperator(fetcher) {
 				maskedData: fromUint8Array(maskedData),
 			}
 
-			const pamamsJson = strToUint8Array(JSON.stringify(params))
+			const paramsJson = strToUint8Array(JSON.stringify(params))
 			const libParams = {
-				data: Buffer.from(pamamsJson),
-				len:pamamsJson.length,
-				cap:pamamsJson.length
+				data: Buffer.from(paramsJson),
+				len:paramsJson.length,
+				cap:paramsJson.length
 			}
 			const res = oprfEvaluate(libParams)
 			const resJson = Buffer.from(koffi.decode(res.r0, 'unsigned char', res.r1)).toString()

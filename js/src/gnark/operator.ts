@@ -36,12 +36,16 @@ export function makeGnarkZkOperator({
 
 			const { bitsToUint8Array } = CONFIG[algorithm]
 
+			const bSignals = bitsToUint8Array(publicSignals.flat())
+			const sSignals = Buffer.from(bSignals).toString()
+			console.log(sSignals)
+
 			const proofStr = proof['proofJson']
 			const verifyParams = {
 				cipher: algorithm,
 				proof: proofStr,
 				publicSignals: Base64.fromUint8Array(
-					bitsToUint8Array(publicSignals.flat())
+					bSignals
 				),
 			}
 

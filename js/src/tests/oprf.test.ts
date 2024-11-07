@@ -1,3 +1,4 @@
+import { fromUint8Array } from 'js-base64'
 import { CONFIG } from '../config'
 import { makeLocalFileFetch } from '../file-fetch'
 import { makeGnarkZkOperator } from '../gnark/operator'
@@ -97,22 +98,34 @@ describe('TOPRF circuits Tests', () => {
 		const wtns = await zkOperator.generateWitness(witnessParams)
 
 		const proof = await zkOperator.groth16Prove(wtns)
-		console.log(proof)
 
-		/*const verifySignals = {
-			'nonce': iv,
+
+		const respSignals: any[] = []
+		for(const { index, publicKeyShare, evaluated, c, r } of resps) {
+			const rp = {
+				index: index,
+				publicKeyShare: fromUint8Array(publicKeyShare),
+				evaluated: fromUint8Array(evaluated),
+				c: fromUint8Array(c),
+				r: fromUint8Array(r),
+			}
+			respSignals.push(rp)
+		}
+
+		const verifySignals = {
+			'nonce': fromUint8Array(iv),
 			'counter': 1,
-			'input': ciphertext,
+			'input': fromUint8Array(ciphertext),
 			'toprf': {
-				pos: pos, //pos in plaintext
-				len: len, // length of data to "hash"
-				domainSeparator: toprf.domainSeparator,
-				output: toprf.output,
-				responses: resps
+				pos: pos,
+				len: len,
+				domainSeparator: fromUint8Array(strToUint8Array(domainSeparator)),
+				output: fromUint8Array(nullifier),
+				responses: respSignals
 			}
 		}
 
-		expect(await zkOperator.groth16Verify(verifySignals, proof)).toEqual(true)*/
+		expect(await zkOperator.groth16Verify(uint8ArrayToBits(strToUint8Array(JSON.stringify(verifySignals))), proof.proof)).toEqual(true)
 
 		function serialiseCounter(counter) {
 			const counterArr = new Uint8Array(4)

@@ -93,8 +93,7 @@ export function uint8ArrayToBits(buff: Uint8Array | number[]) {
 export function bitsToUint8Array(bits: number[]) {
 	const arr = new Uint8Array(bits.length / 8)
 	for(let i = 0;i < bits.length;i += 8) {
-		const uint = bitsToNum(bits.slice(i, i + 8))
-		arr[i / 8] = uint
+		arr[i / 8] = bitsToNum(bits.slice(i, i + 8))
 	}
 
 	return arr
@@ -116,8 +115,7 @@ export function uintArrayToBits(uintArray: UintArray | number[]) {
 export function bitsToUintArray(bits: number[]) {
 	const uintArray = new Uint32Array(bits.length / BITS_PER_WORD)
 	for(let i = 0;i < bits.length;i += BITS_PER_WORD) {
-		const uint = bitsToNum(bits.slice(i, i + BITS_PER_WORD))
-		uintArray[i / BITS_PER_WORD] = uint
+		uintArray[i / BITS_PER_WORD] = bitsToNum(bits.slice(i, i + BITS_PER_WORD))
 	}
 
 	return uintArray
@@ -149,8 +147,19 @@ function serialiseNumberToBits(
 	const counterArr = new Uint8Array(4)
 	const counterView = new DataView(counterArr.buffer)
 	counterView.setUint32(0, num, isLittleEndian)
-	return uint8ArrayToBits(counterArr)
+	return uint8ArrayToBits(serialiseNumberTo4Bytes(algorithm, num))
 		.flat()
+}
+
+export function serialiseNumberTo4Bytes(
+	algorithm: EncryptionAlgorithm,
+	num: number
+) {
+	const { isLittleEndian } = CONFIG[algorithm]
+	const counterArr = new Uint8Array(4)
+	const counterView = new DataView(counterArr.buffer)
+	counterView.setUint32(0, num, isLittleEndian)
+	return counterArr
 }
 
 function numToBitsNumerical(num: number, bitCount = BITS_PER_WORD) {

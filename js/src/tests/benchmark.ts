@@ -94,11 +94,12 @@ async function prepareDataForAlgo(
 		const { witness } = await generateZkWitness({
 			algorithm: algo,
 			privateInput,
-			publicInput,
-			operator
+			publicInput
 		})
 
-		witnesses.push(witness)
+		const wtnsSerialised = await operator.generateWitness(witness)
+
+		witnesses.push(wtnsSerialised)
 	}
 
 	return witnesses

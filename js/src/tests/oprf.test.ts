@@ -1,10 +1,8 @@
-import { CONFIG } from '../config'
 import { makeLocalFileFetch } from '../file-fetch'
 import { makeGnarkOPRFOperator } from '../gnark/toprf'
 import { TOPRFResponseData } from '../gnark/types'
 import { strToUint8Array } from '../gnark/utils'
-import { ZKProofInputOPRF } from '../types'
-import { uint8ArrayToBits } from '../utils'
+import { ZKProofInputOPRF, ZKProofPublicSignalsOPRF } from '../types'
 import { encryptData } from './utils'
 
 const fetcher = makeLocalFileFetch()
@@ -18,7 +16,6 @@ describe('TOPRF circuits Tests', () => {
 		const threshold = 2
 
 		const keys = await operator.generateThresholdKeys(3, threshold)
-
 		const req = await operator
 			.generateOPRFRequestData(email, domainSeparator)
 
@@ -55,46 +52,43 @@ describe('TOPRF circuits Tests', () => {
 
 		const ciphertext = encryptData('chacha20', plaintext, key, iv)
 
-		const { isLittleEndian } = CONFIG['chacha20']
-
 		const respParams: any[] = []
 		for(const { index, publicKeyShare, evaluated, c, r } of resps) {
 			const rp = {
-				index: serialiseCounter(index),
-				publicKeyShare: uint8ArrayToBits(publicKeyShare),
-				evaluated: uint8ArrayToBits(evaluated),
-				c: uint8ArrayToBits(c),
-				r: uint8ArrayToBits(r),
+				index: index,
+				publicKeyShare: publicKeyShare,
+				evaluated: evaluated,
+				c: c,
+				r: r,
 			}
 			respParams.push(rp)
 		}
 
-		const toprfParams = {
-			pos: serialiseCounter(pos), //pos in plaintext
-			len: serialiseCounter(len), // length of data to "hash"
-			domainSeparator: uint8ArrayToBits(strToUint8Array(domainSeparator)),
-			output: uint8ArrayToBits(nullifier),
-			responses: respParams
-		}
-
+		const domainSeparatorArr = strToUint8Array(domainSeparator)
 		const witnessParams: ZKProofInputOPRF = {
-			key: uint8ArrayToBits(key),
-			nonce: uint8ArrayToBits(iv),
-			counter: serialiseCounter(1),
-			in: uint8ArrayToBits(ciphertext),
-			out: [], // plaintext will be calculated in library
-			mask: uint8ArrayToBits(req.mask),
-			toprf: toprfParams
+			key: key,
+			nonce: iv,
+			counter: 1,
+			in: ciphertext,
+			out: new Uint8Array(), // plaintext will be calculated in library
+			mask: req.mask,
+			toprf: {
+				pos: pos, //pos in plaintext
+				len: len, // length of data to "hash"
+				domainSeparator: domainSeparatorArr,
+				output: nullifier,
+				responses: respParams
+			}
 		}
 
 		const wtns = await operator.generateWitness(witnessParams)
 		const proof = await operator.groth16Prove(wtns)
 
-		const verifySignals = {
+		const verifySignals: ZKProofPublicSignalsOPRF = {
 			nonce: witnessParams.nonce,
 			counter: witnessParams.counter,
 			in: witnessParams.in,
-			out:[],
+			out: new Uint8Array(),
 			toprf: {
 				pos: witnessParams.toprf.pos,
 				len: witnessParams.toprf.len,
@@ -107,13 +101,5 @@ describe('TOPRF circuits Tests', () => {
 		expect(
 			await operator.groth16Verify(verifySignals, proof.proof)
 		).toEqual(true)
-
-		function serialiseCounter(counter) {
-			const counterArr = new Uint8Array(4)
-			const counterView = new DataView(counterArr.buffer)
-			counterView.setUint32(0, counter, isLittleEndian)
-
-			return uint8ArrayToBits(counterArr)
-		}
 	})
 })

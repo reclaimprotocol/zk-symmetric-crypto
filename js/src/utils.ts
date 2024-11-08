@@ -123,6 +123,36 @@ export function bitsToUintArray(bits: number[]) {
 	return uintArray
 }
 
+export function serialiseValuesToBits(
+	algorithm: EncryptionAlgorithm,
+	...data: (Uint8Array | number)[]
+) {
+	const { uint8ArrayToBits } = CONFIG[algorithm]
+
+	const bits: number[] = []
+	for(const element of data) {
+		if(typeof element === 'number') {
+			bits.push(...serialiseNumberToBits(algorithm, element))
+		} else {
+			bits.push(...uint8ArrayToBits(element))
+		}
+	}
+
+	return bits
+}
+
+function serialiseNumberToBits(
+	algorithm: EncryptionAlgorithm,
+	num: number
+) {
+	const { uint8ArrayToBits, isLittleEndian } = CONFIG[algorithm]
+	const counterArr = new Uint8Array(4)
+	const counterView = new DataView(counterArr.buffer)
+	counterView.setUint32(0, num, isLittleEndian)
+	return uint8ArrayToBits(counterArr)
+		.flat()
+}
+
 function numToBitsNumerical(num: number, bitCount = BITS_PER_WORD) {
 	const bits: number[] = []
 	for(let i = 2 ** (bitCount - 1);i >= 1;i /= 2) {

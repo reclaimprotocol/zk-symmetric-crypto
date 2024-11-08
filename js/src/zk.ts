@@ -1,5 +1,5 @@
 import { CONFIG } from './config'
-import { EncryptionAlgorithm, GenerateProofOpts, Proof, VerifyProofOpts } from './types'
+import { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, Proof, VerifyProofOpts, ZKProofInput } from './types'
 import { getCounterForChunk } from './utils'
 
 /**
@@ -11,13 +11,10 @@ import { getCounterForChunk } from './utils'
 export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
 	const { algorithm, operator, logger } = opts
 	const { witness, plaintextArray } = await generateZkWitness(opts)
-	const { proof } = await operator.groth16Prove(witness, logger)
+	const wtnsSerialised = await operator.generateWitness(witness)
+	const { proof } = await operator.groth16Prove(wtnsSerialised, logger)
 
-	return {
-		algorithm,
-		proofData: proof,
-		plaintext: plaintextArray
-	}
+	return { algorithm, proofData: proof, plaintext: plaintextArray }
 }
 
 /**
@@ -29,14 +26,11 @@ export async function generateZkWitness({
 	algorithm,
 	privateInput: { key },
 	publicInput: { ciphertext, iv, offset },
-	operator,
-}: GenerateProofOpts,
+}: GenerateWitnessOpts,
 ) {
 	const {
 		keySizeBytes,
 		ivSizeBytes,
-		isLittleEndian,
-		uint8ArrayToBits,
 	} = CONFIG[algorithm]
 	if(key.length !== keySizeBytes) {
 		throw new Error(`key must be ${keySizeBytes} bytes`)
@@ -59,25 +53,15 @@ export async function generateZkWitness({
 		ciphertext: ciphertextArray,
 	})
 
-	const witness = await operator.generateWitness({
-		key: uint8ArrayToBits(key),
-		nonce: uint8ArrayToBits(iv),
-		counter: serialiseCounter(),
-		in: uint8ArrayToBits(ciphertextArray),
-		out: uint8ArrayToBits(plaintextArray),
-	},)
+	const witness: ZKProofInput = {
+		key,
+		nonce: iv,
+		counter: startCounter,
+		in: ciphertextArray,
+		out: plaintextArray,
+	}
 
 	return { witness, plaintextArray }
-
-	function serialiseCounter() {
-		const counterArr = new Uint8Array(4)
-		const counterView = new DataView(counterArr.buffer)
-		counterView.setUint32(0, startCounter, isLittleEndian)
-
-		const counterBits = uint8ArrayToBits(counterArr)
-			.flat()
-		return counterBits
-	}
 }
 
 /**
@@ -93,7 +77,6 @@ export async function verifyProof({
 	operator,
 	logger
 }: VerifyProofOpts): Promise<void> {
-	const { uint8ArrayToBits, isLittleEndian } = CONFIG[algorithm]
 	const startCounter = getCounterForChunk(algorithm, offset)
 	const ciphertextArray = padCiphertextToChunkSize(
 		algorithm,
@@ -107,10 +90,10 @@ export async function verifyProof({
 	// serialise to array of numbers for the ZK circuit
 	const verified = await operator.groth16Verify(
 		{
-			nonce: uint8ArrayToBits(iv),
-			counter: serialiseCounter(),
-			in: uint8ArrayToBits(ciphertextArray),
-			out: uint8ArrayToBits(plaintext),
+			nonce: iv,
+			counter: startCounter,
+			in: ciphertextArray,
+			out: plaintext,
 		},
 		proofData,
 		logger
@@ -118,14 +101,6 @@ export async function verifyProof({
 
 	if(!verified) {
 		throw new Error('invalid proof')
-	}
-
-	function serialiseCounter() {
-		const counterArr = new Uint8Array(4)
-		const counterView = new DataView(counterArr.buffer)
-		counterView.setUint32(0, startCounter, isLittleEndian)
-		return uint8ArrayToBits(counterArr)
-			.flat()
 	}
 }
 

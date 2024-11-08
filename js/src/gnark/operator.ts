@@ -1,6 +1,7 @@
 import { Base64 } from 'js-base64'
 import { CONFIG } from '../config'
 import { EncryptionAlgorithm, Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
+import { serialiseValuesToBits } from '../utils'
 import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils'
 
 const ALGS_MAP: {
@@ -32,15 +33,17 @@ export function makeGnarkZkOperator({
 		},
 		async groth16Verify(publicSignals, proofStr, logger) {
 			const lib = await initGnark(logger)
-
-			const { bitsToUint8Array } = CONFIG[algorithm]
+			console.log('publicSignals', publicSignals)
 			const pubSignals = Base64.fromUint8Array(
-				bitsToUint8Array([
-					...publicSignals.out,
-					...publicSignals.nonce,
-					...publicSignals.counter,
-					...publicSignals.in
-				])
+				new Uint8Array(
+					serialiseValuesToBits(
+						algorithm,
+						publicSignals.out,
+						publicSignals.nonce,
+						publicSignals.counter,
+						publicSignals.in
+					)
+				)
 			)
 
 			const verifyParams = JSON.stringify({

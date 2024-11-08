@@ -50,6 +50,26 @@ export type VerificationKey = {
 
 export type CircuitWasm = Uint8Array | string
 
+
+export type GenerateWitnessOpts = {
+	/**
+	 * the algorithm to use for the encryption
+	 * circuit. Used to correctly slice the
+	 * IV, counters etc.
+	 */
+	algorithm: EncryptionAlgorithm
+	/**
+	 * private input to the circuit (i.e. key)
+	 */
+	privateInput: PrivateInput
+	/**
+	 * public input to the circuit,
+	 * i.e. the ciphertext to decrypt
+	 */
+	publicInput: PublicInput
+	logger?: Logger
+}
+
 export type GenerateProofOpts = {
 	/**
 	 * the algorithm to use for the encryption
@@ -112,10 +132,10 @@ type ZKProofOutput = {
 	publicSignals?: number[]
 }
 
-type ZKInputItem = number[]
+type ZKInputItem = Uint8Array
 
 export type ZKTOPRFResponsePublicSignals = {
-	index: ZKInputItem
+	index: number
 	publicKeyShare: ZKInputItem
 	evaluated: ZKInputItem
 	c: ZKInputItem
@@ -123,8 +143,8 @@ export type ZKTOPRFResponsePublicSignals = {
 }
 
 type ZKTOPRFPublicSignals = {
-	pos: ZKInputItem
-	len: ZKInputItem
+	pos: number
+	len: number
 	domainSeparator: ZKInputItem
 	output: ZKInputItem
 	responses: ZKTOPRFResponsePublicSignals[]
@@ -132,7 +152,7 @@ type ZKTOPRFPublicSignals = {
 
 export type ZKProofPublicSignals = {
 	nonce: ZKInputItem
-	counter: ZKInputItem
+	counter: number
 	in: ZKInputItem
 	out: ZKInputItem
 }

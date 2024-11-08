@@ -1,7 +1,5 @@
 import { Base64 } from 'js-base64'
-import { CONFIG } from '../config'
 import { EncryptionAlgorithm, FileFetch, Logger, ZKProofInput, ZKProofInputOPRF, ZKProofPublicSignals, ZKProofPublicSignalsOPRF, ZKTOPRFResponsePublicSignals } from '../types'
-import { bitsToUint8Array } from '../utils'
 
 const BIN_PATH = '../../bin/gnark'
 
@@ -150,17 +148,15 @@ export function generateGnarkWitness(
 	input: ZKProofInput | ZKProofInputOPRF
 		| ZKProofPublicSignals | ZKProofPublicSignalsOPRF
 ) {
-	const { isLittleEndian } = CONFIG[cipher]
-
 	//input is bits, we convert them back to bytes
 	return {
 		cipher: cipher + ('toprf' in input ? '-toprf' : ''),
 		key: 'key' in input
-			? Base64.fromUint8Array(bitsToUint8Array(input.key))
+			? Base64.fromUint8Array(input.key)
 			: undefined,
-		nonce: Base64.fromUint8Array(bitsToUint8Array(input.nonce)),
-		counter: deserializeNumber(input.counter),
-		input: Base64.fromUint8Array(bitsToUint8Array(input.in)),
+		nonce: Base64.fromUint8Array(input.nonce),
+		counter: input.counter,
+		input: Base64.fromUint8Array(input.in),
 		toprf: generateTOPRFParams()
 	}
 
@@ -171,40 +167,28 @@ export function generateGnarkWitness(
 
 		const { pos, len, domainSeparator, output, responses } = input.toprf
 		return {
-			pos: deserializeNumber(pos),
-			len: deserializeNumber(len),
+			pos: pos,
+			len: len,
 			domainSeparator: Base64
-				.fromUint8Array(bitsToUint8Array(domainSeparator)),
-			output: Base64.fromUint8Array(bitsToUint8Array(output)),
-			responses: generateResponses(responses),
+				.fromUint8Array(domainSeparator),
+			output: Base64.fromUint8Array(output),
+			responses: responses.map(mapResponse),
 			mask: 'mask' in input
-				? Base64.fromUint8Array(bitsToUint8Array(input.mask))
+				? Base64.fromUint8Array(input.mask)
 				: ''
 		}
 	}
+}
 
-	function generateResponses(responses: ZKTOPRFResponsePublicSignals[]) {
-		const resps: any[] = []
-		for(const {	index, publicKeyShare,	evaluated,	c,	r } of responses) {
-			const resp = {
-				index: deserializeNumber(index),
-				publicKeyShare: Base64
-					.fromUint8Array(bitsToUint8Array(publicKeyShare)),
-				evaluated: Base64
-					.fromUint8Array(bitsToUint8Array(evaluated)),
-				c: Base64.fromUint8Array(bitsToUint8Array(c)),
-				r: Base64.fromUint8Array(bitsToUint8Array(r)),
-			}
-			resps.push(resp)
-		}
-
-		return resps
-	}
-
-	function deserializeNumber(num: number[]) {
-		const bytes = bitsToUint8Array(num)
-		const counterView = new DataView(bytes.buffer)
-		return counterView.getUint32(0, isLittleEndian)
+function mapResponse({
+	index, publicKeyShare, evaluated, c, r
+}: ZKTOPRFResponsePublicSignals) {
+	return {
+		index,
+		publicKeyShare: Base64.fromUint8Array(publicKeyShare),
+		evaluated: Base64.fromUint8Array(evaluated),
+		c: Base64.fromUint8Array(c),
+		r: Base64.fromUint8Array(r),
 	}
 }
 

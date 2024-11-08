@@ -33,7 +33,6 @@ export function makeGnarkZkOperator({
 		},
 		async groth16Verify(publicSignals, proofStr, logger) {
 			const lib = await initGnark(logger)
-			console.log('publicSignals', publicSignals)
 			const pubSignals = Base64.fromUint8Array(
 				new Uint8Array(
 					serialiseValuesToBits(

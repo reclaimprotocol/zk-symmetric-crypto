@@ -46,6 +46,16 @@ type ConfigItem = 'snarkjs'
 	| 'expander-single-thread'
 	| 'expander-multi-thread'
 
+export function getEngineForConfigItem(item: ConfigItem) {
+	return item === 'snarkjs'
+		? 'snarkjs'
+		: (
+			item === 'gnark'
+				? 'gnark'
+				: 'expander'
+		)
+}
+
 export const ZK_CONFIG_MAP: {
 	[E in ConfigItem]: (algorithm: EncryptionAlgorithm) => ZKOperator
 } = {

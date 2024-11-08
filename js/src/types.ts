@@ -1,7 +1,6 @@
 export type EncryptionAlgorithm = 'aes-256-ctr'
 	| 'aes-128-ctr'
 	| 'chacha20'
-	| 'chacha20-toprf'
 
 export type ZKEngine = 'snarkjs' | 'gnark' | 'expander'
 
@@ -115,7 +114,7 @@ type ZKProofOutput = {
 
 type ZKInputItem = number[]
 
-type ZKTOPRFResponsePublicSignals = {
+export type ZKTOPRFResponsePublicSignals = {
 	index: ZKInputItem
 	publicKeyShare: ZKInputItem
 	evaluated: ZKInputItem
@@ -131,19 +130,25 @@ type ZKTOPRFPublicSignals = {
 	responses: ZKTOPRFResponsePublicSignals[]
 }
 
-type ZKProofPublicSignals = {
+export type ZKProofPublicSignals = {
 	nonce: ZKInputItem
 	counter: ZKInputItem
 	in: ZKInputItem
 	out: ZKInputItem
-	toprf?: ZKTOPRFPublicSignals
 }
 
-type ZKProofAllSignals = {
+export type ZKProofPublicSignalsOPRF = ZKProofPublicSignals & {
+	toprf: ZKTOPRFPublicSignals
+}
+
+export type ZKProofInput = {
 	key: ZKInputItem
-	mask?: ZKInputItem
 } & ZKProofPublicSignals
 
+export type ZKProofInputOPRF = {
+	key: ZKInputItem
+	mask: ZKInputItem
+} & ZKProofPublicSignalsOPRF
 
 /**
  * the operator to use for proving and verifying the groth16
@@ -154,7 +159,7 @@ type ZKProofAllSignals = {
  */
 export type ZKOperator = {
 	generateWitness(
-		input: ZKProofAllSignals,
+		input: ZKProofInput,
 		logger?: Logger
 	): Promise<Uint8Array> | Uint8Array
 	groth16Prove(witness: Uint8Array, logger?: Logger): Promise<ZKProofOutput>
@@ -163,6 +168,79 @@ export type ZKOperator = {
 		proof: ZKProof,
 		logger?: Logger
 	): Promise<boolean>
+	/**
+	 * Release any used resources. The operator
+	 * should still be usable after this call.
+	 *
+	 * This is useful for releasing any resources
+	 * in case ZK operations are not going to be
+	 * used for a while.
+	 */
+	release?(): void
+}
+
+export type OPRFRequestData = {
+    mask: Uint8Array
+    maskedData: Uint8Array
+    secretElements: Uint8Array[]
+}
+
+type OPRFResponse = {
+    evaluated: Uint8Array
+    c: Uint8Array
+    r: Uint8Array
+}
+
+export type OPRFResponseData = OPRFResponse & {
+    index: number
+    publicKeyShare: Uint8Array
+}
+
+export type KeyShare = {
+    index: number
+    publicKey: Uint8Array
+    privateKey: Uint8Array
+}
+
+export type KeygenResult = {
+    publicKey: Uint8Array
+    privateKey: Uint8Array
+    shares: KeyShare[]
+}
+
+export type OPRFOperator = {
+	generateWitness(input: ZKProofInputOPRF, logger?: Logger): Promise<Uint8Array>
+	groth16Prove(witness: Uint8Array, logger?: Logger): Promise<ZKProofOutput>
+	groth16Verify(
+		publicSignals: ZKProofPublicSignalsOPRF,
+		proof: ZKProof,
+		logger?: Logger
+	): Promise<boolean>
+
+	generateThresholdKeys(
+		total: number,
+		threshold: number,
+		logger?: Logger
+	): Promise<KeygenResult>
+
+	generateOPRFRequestData(
+		data: unknown,
+		domainSeparator: string,
+		logger?: Logger
+	): Promise<OPRFRequestData>
+
+	finaliseOPRF(
+		serverPublicKey: Uint8Array,
+		request: OPRFRequestData,
+		responses: OPRFResponseData[],
+		logger?: Logger
+	): Promise<Uint8Array>
+
+	evaluateOPRF(
+		serverPrivateKey: Uint8Array,
+		request: Uint8Array,
+		logger?: Logger
+	): Promise<OPRFResponse>
 	/**
 	 * Release any used resources. The operator
 	 * should still be usable after this call.

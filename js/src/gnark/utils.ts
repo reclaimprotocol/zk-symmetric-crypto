@@ -1,8 +1,11 @@
 import { Base64 } from 'js-base64'
 import { CONFIG } from '../config'
-import { EncryptionAlgorithm } from '../types'
+import { EncryptionAlgorithm, FileFetch, Logger, ZKProofInput, ZKProofInputOPRF, ZKProofPublicSignals, ZKProofPublicSignalsOPRF, ZKTOPRFResponsePublicSignals } from '../types'
+import { bitsToUint8Array } from '../utils'
 
 const BIN_PATH = '../../bin/gnark'
+
+let globalGnarkLib: ReturnType<typeof loadGnarkLib> | undefined
 
 export type GnarkLib = {
 	verify: Function
@@ -17,22 +20,15 @@ export type GnarkLib = {
 	koffi: typeof import('koffi')
 }
 
-export const ALGS_MAP: {
-	[key in EncryptionAlgorithm]: { ext: string }
-} = {
-	'chacha20': { ext: 'chacha20' },
-	'aes-128-ctr': { ext: 'aes128' },
-	'aes-256-ctr': { ext: 'aes256' },
-	'chacha20-toprf': { ext: 'chacha20_oprf' },
-}
-
 // golang uses different arch names
 // for some archs -- so this map corrects the name
 const ARCH_MAP = {
 	'x64': 'x86_64',
 }
 
-export async function loadGnarkLib(): Promise<GnarkLib> {
+const INIT_ALGS: { [key: number]: boolean } = {}
+
+async function loadGnarkLib(): Promise<GnarkLib> {
 	const koffiMod = await import('koffi')
 		.catch(() => undefined)
 	if(!koffiMod) {
@@ -108,71 +104,94 @@ export async function loadGnarkLib(): Promise<GnarkLib> {
 	}
 }
 
+export async function initGnarkAlgorithm(
+	id: number,
+	fileExt: string,
+	fetcher: FileFetch,
+	logger?: Logger
+) {
+	globalGnarkLib ??= loadGnarkLib()
+	const lib = await globalGnarkLib
+	if(INIT_ALGS[id]) {
+		return lib
+	}
+
+	const [pk, r1cs] = await Promise.all([
+		fetcher.fetch('gnark', `pk.${fileExt}`, logger),
+		fetcher.fetch('gnark', `r1cs.${fileExt}`, logger),
+	])
+
+	const f1 = { data: pk, len: pk.length, cap: pk.length }
+	const f2 = { data: r1cs, len: r1cs.length, cap: r1cs.length }
+
+	await lib.initAlgorithm(id, f1, f2)
+
+	INIT_ALGS[id] = true
+
+	return lib
+}
+
 export function strToUint8Array(str: string) {
 	return new TextEncoder().encode(str)
 }
 
-export function generateGnarkWitness(cipher: EncryptionAlgorithm, input) {
-	const {
-		bitsToUint8Array,
-	} = CONFIG[cipher]
-
-	//input is bits, we convert them back to bytes
-	const proofParams = generateGnarkPublicWitness(cipher, input)
-	if(input.mask) {
-		proofParams.toprf.mask = Base64.fromUint8Array(bitsToUint8Array(input.mask))
-	}
-
-	return strToUint8Array(JSON.stringify({
-		...proofParams,
-		key:Base64.fromUint8Array(bitsToUint8Array(input.key)),
-	}))
-
-
+export function serialiseGnarkWitness(
+	cipher: EncryptionAlgorithm,
+	input: ZKProofInput | ZKProofInputOPRF | ZKProofPublicSignals | ZKProofPublicSignalsOPRF
+) {
+	const json = generateGnarkWitness(cipher, input)
+	return strToUint8Array(JSON.stringify(
+		json
+	))
 }
 
-
-export function generateGnarkPublicWitness(cipher: EncryptionAlgorithm, input) {
-	const {
-		bitsToUint8Array,
-		isLittleEndian
-	} = CONFIG[cipher]
+export function generateGnarkWitness(
+	cipher: EncryptionAlgorithm,
+	input: ZKProofInput | ZKProofInputOPRF
+		| ZKProofPublicSignals | ZKProofPublicSignalsOPRF
+) {
+	const { isLittleEndian } = CONFIG[cipher]
 
 	//input is bits, we convert them back to bytes
-	const proofParams = {
-		cipher:cipher,
+	return {
+		cipher: cipher + ('toprf' in input ? '-toprf' : ''),
+		key: 'key' in input
+			? Base64.fromUint8Array(bitsToUint8Array(input.key))
+			: undefined,
 		nonce: Base64.fromUint8Array(bitsToUint8Array(input.nonce)),
 		counter: deserializeNumber(input.counter),
 		input: Base64.fromUint8Array(bitsToUint8Array(input.in)),
 		toprf: generateTOPRFParams()
 	}
 
-	return proofParams
-
-
 	function generateTOPRFParams() {
-		if(input.toprf) {
-			const { pos, len, domainSeparator, output, responses } = input.toprf
-			return {
-				pos: deserializeNumber(pos),
-				len: deserializeNumber(len),
-				domainSeparator: Base64.fromUint8Array(bitsToUint8Array(domainSeparator)),
-				output: Base64.fromUint8Array(bitsToUint8Array(output)),
-				responses: generateResponses(responses),
-				mask:''
-			}
-		} else {
+		if(!('toprf' in input)) {
 			return {}
+		}
+
+		const { pos, len, domainSeparator, output, responses } = input.toprf
+		return {
+			pos: deserializeNumber(pos),
+			len: deserializeNumber(len),
+			domainSeparator: Base64
+				.fromUint8Array(bitsToUint8Array(domainSeparator)),
+			output: Base64.fromUint8Array(bitsToUint8Array(output)),
+			responses: generateResponses(responses),
+			mask: 'mask' in input
+				? Base64.fromUint8Array(bitsToUint8Array(input.mask))
+				: ''
 		}
 	}
 
-	function generateResponses(responses) {
+	function generateResponses(responses: ZKTOPRFResponsePublicSignals[]) {
 		const resps: any[] = []
 		for(const {	index, publicKeyShare,	evaluated,	c,	r } of responses) {
 			const resp = {
 				index: deserializeNumber(index),
-				publicKeyShare: Base64.fromUint8Array(bitsToUint8Array(publicKeyShare)),
-				evaluated: Base64.fromUint8Array(bitsToUint8Array(evaluated)),
+				publicKeyShare: Base64
+					.fromUint8Array(bitsToUint8Array(publicKeyShare)),
+				evaluated: Base64
+					.fromUint8Array(bitsToUint8Array(evaluated)),
 				c: Base64.fromUint8Array(bitsToUint8Array(c)),
 				r: Base64.fromUint8Array(bitsToUint8Array(r)),
 			}
@@ -182,9 +201,36 @@ export function generateGnarkPublicWitness(cipher: EncryptionAlgorithm, input) {
 		return resps
 	}
 
-	function deserializeNumber(num) {
+	function deserializeNumber(num: number[]) {
 		const bytes = bitsToUint8Array(num)
 		const counterView = new DataView(bytes.buffer)
 		return counterView.getUint32(0, isLittleEndian)
 	}
+}
+
+export function executeGnarkFn(
+	fn: Function,
+	jsonInput: string | Uint8Array
+) {
+	const wtns = {
+		data: typeof jsonInput === 'string'
+			? Buffer.from(jsonInput)
+			: jsonInput,
+		len: jsonInput.length,
+		cap: jsonInput.length
+	}
+	return fn(wtns)
+}
+
+export async function executeGnarkFnAndGetJson(
+	fn: Function,
+	jsonInput: string | Uint8Array
+) {
+	const { free, koffi } = await globalGnarkLib!
+	const res = executeGnarkFn(fn, jsonInput)
+	const proofJson = Buffer.from(
+		koffi.decode(res.r0, 'unsigned char', res.r1)
+	).toString()
+	free(res.r0) // Avoid memory leak!
+	return JSON.parse(proofJson)
 }

@@ -22,10 +22,7 @@ export type OPRFResponseData = {
     r: Uint8Array
 }
 
-export type TOPRFResponseData = {
+export type TOPRFResponseData = OPRFResponseData & {
     index: number
     publicKeyShare: Uint8Array
-    evaluated: Uint8Array
-    c: Uint8Array
-    r: Uint8Array
 }

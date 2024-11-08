@@ -61,25 +61,6 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 		bitsToUint8Array,
 		encrypt: makeAesCtr(128),
 	},
-	'chacha20-toprf': {
-		index: 3,
-		chunkSize: 16,
-		bitsPerWord: 32,
-		keySizeBytes: 32,
-		ivSizeBytes: 12,
-		startCounter: 1,
-		// num of blocks per chunk
-		blocksPerChunk: 1,
-		// chacha20 circuit uses LE encoding
-		isLittleEndian: true,
-		uint8ArrayToBits,
-		bitsToUint8Array,
-		encrypt({ key, iv, in: data }) {
-			const cipher = new ChaCha20Poly1305(key)
-			const ciphertext = cipher.seal(iv, data)
-			return ciphertext.slice(0, data.length)
-		},
-	},
 }
 
 function makeAesCtr(keyLenBits: number): AlgorithmConfig['encrypt'] {

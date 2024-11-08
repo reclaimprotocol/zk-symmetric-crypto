@@ -464,7 +464,7 @@ func Benchmark_ProveChacha(b *testing.B) {
 }
 
 func fetchFile(keyName string) ([]byte, error) {
-	f, err := os.ReadFile("../circuits/generated/" + keyName)
+	f, err := os.ReadFile("../../resources/gnark/" + keyName)
 	if err != nil {
 		panic(err)
 	}

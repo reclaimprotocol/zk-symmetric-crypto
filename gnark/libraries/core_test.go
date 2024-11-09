@@ -64,14 +64,14 @@ func TestProveVerify(t *testing.T) {
 		params, err := json.Marshal(&params_struct)
 		assert.NoError(err)
 
-		res := prover.Prove([]byte(params))
+		res := prover.Prove(params)
 
 		assert.NotNil(res)
 		var outParams *prover.OutputParams
 		json.Unmarshal(res, &outParams)
 
 		var inParams *prover.InputParams
-		json.Unmarshal([]byte(params), &inParams)
+		json.Unmarshal(params, &inParams)
 
 		signals := outParams.PublicSignals
 		signals = append(signals, inParams.Nonce...)
@@ -179,7 +179,7 @@ func TestFullChaCha20(t *testing.T) {
 	assert.True(prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS))
 	bKey := make([]byte, 32)
 	bNonce := make([]byte, 12)
-	bIn := make([]byte, 64)
+	bIn := make([]byte, 64*CHACHA20_BLOCKS)
 	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
 	counter := uint32(tmp.Uint64())
 

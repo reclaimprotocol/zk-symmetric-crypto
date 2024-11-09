@@ -1,5 +1,6 @@
 import { CONFIG } from '../config'
 import { Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
+import { serialiseValuesToBits } from '../utils'
 import { initWorker } from './node-worker'
 import { loadCircuitIfRequired, loadExpander, loadProverCircuitIfRequired, makeWorkerPool } from './utils'
 import { prove, verify } from './wasm-binding'
@@ -33,11 +34,14 @@ export function makeExpanderZkOperator({
 			const witness = new Uint8Array([
 				// let's just call this the version flag
 				1,
-				...input.counter,
-				...input.nonce,
-				...input.in,
-				...input.out,
-				...input.key
+				...serialiseValuesToBits(
+					algorithm,
+					input.counter,
+					input.nonce,
+					input.in,
+					input.out,
+					input.key
+				)
 			])
 			return witness
 		},
@@ -47,6 +51,7 @@ export function makeExpanderZkOperator({
 				throw new Error(`Unsupported witness version: ${version}`)
 			}
 
+			// * 8 because we're reading bits
 			const pubBits = readFromWitness(-keySizeBytes * 8)
 			const privBits = witness
 
@@ -76,12 +81,15 @@ export function makeExpanderZkOperator({
 
 			await loadCircuitAsRequired(logger)
 
-			const pubSignals = new Uint8Array([
-				...publicSignals.counter,
-				...publicSignals.nonce,
-				...publicSignals.in,
-				...publicSignals.out,
-			])
+			const pubSignals = new Uint8Array(
+				serialiseValuesToBits(
+					algorithm,
+					publicSignals.counter,
+					publicSignals.nonce,
+					publicSignals.in,
+					publicSignals.out,
+				)
+			)
 
 			return verify(id, pubSignals, proof)
 		},

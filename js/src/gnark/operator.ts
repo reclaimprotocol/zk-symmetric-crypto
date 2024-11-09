@@ -1,89 +1,57 @@
 import { Base64 } from 'js-base64'
 import { CONFIG } from '../config'
-import { Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
-import { ALGS_MAP, generateGnarkWitness, loadGnarkLib, strToUint8Array } from './utils'
+import { EncryptionAlgorithm, Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
+import { serialiseNumberTo4Bytes } from '../utils'
+import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils'
 
-export let globalGnarkLib: ReturnType<typeof loadGnarkLib> | undefined
+const ALGS_MAP: {
+	[key in EncryptionAlgorithm]: { ext: string }
+} = {
+	'chacha20': { ext: 'chacha20' },
+	'aes-128-ctr': { ext: 'aes128' },
+	'aes-256-ctr': { ext: 'aes256' },
+}
 
 export function makeGnarkZkOperator({
 	algorithm,
 	fetcher
 }: MakeZKOperatorOpts<{}>): ZKOperator {
-	let initDone = false
-
 	return {
-		async generateWitness(input): Promise<Uint8Array> {
-			return generateGnarkWitness(algorithm, input)
+		async generateWitness(input) {
+			return serialiseGnarkWitness(algorithm, input)
 		},
 		async groth16Prove(witness, logger) {
 			const lib = await initGnark(logger)
-
-			const { prove, koffi, free } = lib
-			const wtns = {
-				data: Buffer.from(witness),
-				len:witness.length,
-				cap:witness.length
+			const {
+				proof: { proofJson },
+				publicSignals
+			} = await executeGnarkFnAndGetJson(lib.prove, witness)
+			return {
+				proof: proofJson,
+				publicSignals: Array.from(Base64.toUint8Array(publicSignals))
 			}
-			const res = prove(wtns)
-			const proofJson = Buffer.from(
-				koffi.decode(res.r0, 'unsigned char', res.r1)
-			).toString()
-			free(res.r0) // Avoid memory leak!
-			return JSON.parse(proofJson)
 		},
-		async groth16Verify(publicSignals, proof, logger) {
+		async groth16Verify(publicSignals, proofStr, logger) {
 			const lib = await initGnark(logger)
+			const pubSignals = Base64.fromUint8Array(new Uint8Array([
+				...publicSignals.out,
+				...publicSignals.nonce,
+				...serialiseNumberTo4Bytes(algorithm, publicSignals.counter),
+				...publicSignals.in
+			]))
 
-			const { bitsToUint8Array } = CONFIG[algorithm]
-
-			const proofStr = proof['proofJson']
-			const verifyParams = {
+			const verifyParams = JSON.stringify({
 				cipher: algorithm,
 				proof: proofStr,
-				publicSignals: Base64.fromUint8Array(
-					bitsToUint8Array([
-						...publicSignals.out,
-						...publicSignals.nonce,
-						...publicSignals.counter,
-						...publicSignals.in
-					])
-				),
-			}
-
-			const paramsJson = JSON.stringify(verifyParams)
-			const paramsBuf = strToUint8Array(paramsJson)
-
-			const params = {
-				data: paramsBuf,
-				len:paramsJson.length,
-				cap:paramsJson.length
-			}
-
-			return lib.verify(params) === 1
+				publicSignals: pubSignals,
+			})
+			return executeGnarkFn(lib.verify, verifyParams) === 1
 		},
 	}
 
 	async function initGnark(logger?: Logger) {
-		globalGnarkLib ||= loadGnarkLib()
-		const lib = await globalGnarkLib
-		if(initDone) {
-			return lib
-		}
-
 		const { ext } = ALGS_MAP[algorithm]
 		const { index: id } = CONFIG[algorithm]
-		const [pk, r1cs] = await Promise.all([
-			fetcher.fetch('gnark', `pk.${ext}`, logger),
-			fetcher.fetch('gnark', `r1cs.${ext}`, logger),
-		])
-
-		const f1 = { data: pk, len: pk.length, cap: pk.length }
-		const f2 = { data: r1cs, len: r1cs.length, cap: r1cs.length }
-
-		await lib.initAlgorithm(id, f1, f2)
-
-		initDone = true
-
-		return lib
+		return initGnarkAlgorithm(id, ext, fetcher, logger)
 	}
 }

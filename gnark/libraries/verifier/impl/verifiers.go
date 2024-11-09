@@ -3,36 +3,27 @@ package impl
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"gnark-symmetric-crypto/circuits/chachaV3"
+	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
+	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
+	"math/big"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/frontend"
-	"github.com/rs/zerolog/log"
+	"github.com/consensys/gnark/std/algebra/native/twistededwards"
 )
-
-const BITS_PER_WORD = 32
-const CHACHA_BLOCKS = 1
-
-type ChaChaCircuit struct {
-	Counter [BITS_PER_WORD]frontend.Variable                     `gnark:",public"`
-	Nonce   [3][BITS_PER_WORD]frontend.Variable                  `gnark:",public"`
-	In      [16 * CHACHA_BLOCKS][BITS_PER_WORD]frontend.Variable `gnark:",public"`
-	Out     [16 * CHACHA_BLOCKS][BITS_PER_WORD]frontend.Variable `gnark:",public"`
-}
-
-func (c *ChaChaCircuit) Define(_ frontend.API) error {
-	return nil
-}
 
 const AES_BLOCKS = 4
 
 type AESWrapper struct {
-	Nonce      [12]frontend.Variable              `gnark:",public"`
-	Counter    frontend.Variable                  `gnark:",public"`
-	Plaintext  [AES_BLOCKS * 16]frontend.Variable `gnark:",public"`
-	Ciphertext [AES_BLOCKS * 16]frontend.Variable `gnark:",public"`
+	Nonce   [12]frontend.Variable              `gnark:",public"`
+	Counter frontend.Variable                  `gnark:",public"`
+	In      [AES_BLOCKS * 16]frontend.Variable `gnark:",public"`
+	Out     [AES_BLOCKS * 16]frontend.Variable `gnark:",public"`
 }
 
 func (circuit *AESWrapper) Define(_ frontend.API) error {
@@ -48,45 +39,33 @@ type ChachaVerifier struct {
 }
 
 func (cv *ChachaVerifier) Verify(proof []byte, publicSignals []uint8) bool {
-
-	if len(publicSignals) != 128+12+4 { // plaintext, nonce, counter, ciphertext
-		fmt.Printf("public signals must be 144 bytes, not %d\n", len(publicSignals))
+	chunkLen := 64 * chachaV3.Blocks
+	pubLen := chunkLen*2 + 12 + 4     // in & out, nonce, counter
+	if len(publicSignals) != pubLen { // in, nonce, counter, out
+		fmt.Printf("public signals must be %d bytes, not %d\n", pubLen, len(publicSignals))
 		return false
 	}
 
-	witness := &ChaChaCircuit{}
+	witness := &chachaV3.ChaChaCircuit{}
 
-	bct := publicSignals[:64]
-	bpt := publicSignals[64+12+4:]
-	bNonce := publicSignals[64 : 64+12]
-	bCounter := publicSignals[64+12 : 64+12+4]
+	bOut := publicSignals[:chunkLen]
+	bIn := publicSignals[chunkLen+12+4:]
+	bNonce := publicSignals[chunkLen : chunkLen+12]
+	bCounter := publicSignals[chunkLen+12 : chunkLen+12+4]
 
-	ciphertext := utils.BytesToUint32BEBits(bct)
-	plaintext := utils.BytesToUint32BEBits(bpt)
-
+	out := utils.BytesToUint32BEBits(bOut)
+	in := utils.BytesToUint32BEBits(bIn)
 	nonce := utils.BytesToUint32LEBits(bNonce)
 	counter := utils.BytesToUint32LEBits(bCounter)
 
-	for i := 0; i < len(witness.In); i++ {
-		for j := 0; j < len(witness.In[i]); j++ {
-			witness.In[i][j] = plaintext[i][j]
-			witness.Out[i][j] = ciphertext[i][j]
-		}
-	}
-
-	for i := 0; i < len(witness.Nonce); i++ {
-		for j := 0; j < len(witness.Nonce[i]); j++ {
-			witness.Nonce[i][j] = nonce[i][j]
-		}
-	}
-
-	for i := 0; i < len(witness.Counter); i++ {
-		witness.Counter[i] = counter[0][i]
-	}
+	copy(witness.In[:], in)
+	copy(witness.Out[:], out)
+	copy(witness.Nonce[:], nonce)
+	witness.Counter = counter[0]
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {
-		log.Err(err)
+		fmt.Println(err)
 		return false
 	}
 
@@ -119,9 +98,10 @@ func (av *AESVerifier) Verify(bProof []byte, publicSignals []uint8) bool {
 	bCounter := publicSignals[64+12 : 64+12+4]
 
 	witness := &AESWrapper{}
+
 	for i := 0; i < len(plaintext); i++ {
-		witness.Plaintext[i] = plaintext[i]
-		witness.Ciphertext[i] = ciphertext[i]
+		witness.In[i] = plaintext[i]
+		witness.Out[i] = ciphertext[i]
 	}
 
 	for i := 0; i < len(nonce); i++ {
@@ -149,4 +129,89 @@ func (av *AESVerifier) Verify(bProof []byte, publicSignals []uint8) bool {
 	}
 
 	return true
+}
+
+type ChachaOPRFVerifier struct {
+	vk groth16.VerifyingKey
+}
+
+func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
+	var iParams *InputChachaTOPRFParams
+	err := json.Unmarshal(publicSignals, &iParams)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	oprf := iParams.TOPRF
+	if oprf == nil || oprf.Responses == nil {
+		fmt.Println("TOPRF params are empty")
+		return false
+	}
+
+	resps := oprf.Responses
+	if len(resps) != toprf.Threshold {
+		fmt.Println("TOPRF params are invalid")
+		return false
+	}
+
+	var nodePublicKeys [toprf.Threshold]twistededwards.Point
+	var evals [toprf.Threshold]twistededwards.Point
+	var cs [toprf.Threshold]frontend.Variable
+	var rs [toprf.Threshold]frontend.Variable
+	var coeffs [toprf.Threshold]frontend.Variable
+
+	idxs := make([]int, toprf.Threshold)
+	for i := 0; i < toprf.Threshold; i++ {
+		idxs[i] = int(resps[i].Index)
+	}
+
+	for i := 0; i < toprf.Threshold; i++ {
+		resp := resps[i]
+		nodePublicKeys[i] = utils.UnmarshalPoint(resp.PublicKeyShare)
+		evals[i] = utils.UnmarshalPoint(resp.Evaluated)
+		cs[i] = new(big.Int).SetBytes(resp.C)
+		rs[i] = new(big.Int).SetBytes(resp.R)
+		coeffs[i] = utils.Coeff(idxs[i], idxs)
+	}
+
+	witness := &chachaV3_oprf.ChachaTOPRFCircuit{
+		TOPRF: chachaV3_oprf.TOPRFData{
+			DomainSeparator:   new(big.Int).SetBytes(oprf.DomainSeparator),
+			EvaluatedElements: evals,
+			Coefficients:      coeffs,
+			PublicKeys:        nodePublicKeys,
+			C:                 cs,
+			R:                 rs,
+			Output:            new(big.Int).SetBytes(oprf.Output),
+		},
+	}
+
+	nonce := utils.BytesToUint32LEBits(iParams.Nonce)
+	counter := utils.Uint32ToBits(iParams.Counter)
+
+	copy(witness.In[:], utils.BytesToUint32BEBits(iParams.Input))
+	copy(witness.Nonce[:], nonce)
+	witness.Counter = counter
+
+	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	witness.Len = oprf.Len
+
+	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	gProof := groth16.NewProof(ecc.BN254)
+	_, err = gProof.ReadFrom(bytes.NewBuffer(proof))
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	err = groth16.Verify(gProof, cv.vk, wtns)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return err == nil
 }

@@ -51,12 +51,24 @@ template ChaCha20(N, BITS_PER_WORD) {
 		counter,
 		nonce[0], nonce[1], nonce[2]
 	];
+
+	// 1 in 32-bit words
+	signal one[BITS_PER_WORD];
+	one <== [
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 1
+	];
+
 	var i = 0;
 	var j = 0;
 
 	// do the ChaCha20 rounds
 	component rounds[N/16];
 	component xors[N];
+	component counter_adder[N/16 - 1];
+
 	for(i = 0; i < N/16; i++) {
 		rounds[i] = Round(BITS_PER_WORD);
 		rounds[i].in <== tmp;
@@ -67,9 +79,14 @@ template ChaCha20(N, BITS_PER_WORD) {
 			xors[i*16 + j].b <== rounds[i].out[j];
 			out[i*16 + j] <== xors[i*16 + j].out;
 		}
-		// increment the counter
-		// TODO: we only use one block
-		// at a time, so isn't required
-		// tmp[12] = tmp[12] + 1;
+
+		if(i < N/16 - 1) {
+			counter_adder[i] = AddBits(BITS_PER_WORD);
+			counter_adder[i].a <== tmp[12];
+			counter_adder[i].b <== one;
+
+			// increment the counter
+			tmp[12] = counter_adder[i].out;
+		}
 	}
 }

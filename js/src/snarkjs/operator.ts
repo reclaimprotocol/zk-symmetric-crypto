@@ -1,5 +1,6 @@
 import PQueue from 'p-queue'
 import { CircuitWasm, Logger, MakeZKOperatorOpts, VerificationKey, ZKOperator } from '../types'
+import { serialiseValuesToBits } from '../utils'
 
 type WitnessData = {
 	type: 'mem'
@@ -79,16 +80,23 @@ export function makeSnarkJsZKOperator({
 				}
 			})()
 
+			const inputBits = {
+				key: serialiseValuesToBits(algorithm, input.key),
+				nonce: serialiseValuesToBits(algorithm, input.nonce),
+				counter: serialiseValuesToBits(algorithm, input.counter),
+				in: serialiseValuesToBits(algorithm, input.in),
+			}
+
 			const wtns: WitnessData = { type: 'mem' }
 			if(await wc) {
 				await snarkjs.wtns.wtnsCalculateWithCalculator(
-					input,
+					inputBits,
 					await wc,
 					wtns,
 				)
 			} else {
 				await snarkjs.wtns.calculate(
-					input,
+					inputBits,
 					await circuitWasm,
 					wtns,
 				)
@@ -123,12 +131,13 @@ export function makeSnarkJsZKOperator({
 
 			return snarkjs.groth16.verify(
 				zkeyResult.json,
-				[
-					...publicSignals.out,
-					...publicSignals.nonce,
-					...publicSignals.counter,
-					...publicSignals.in
-				],
+				serialiseValuesToBits(
+					algorithm,
+					publicSignals.out,
+					publicSignals.nonce,
+					publicSignals.counter,
+					publicSignals.in
+				),
 				JSON.parse(proof),
 				logger
 			)

@@ -18,8 +18,8 @@ Official Ptau file for bn128 with 256k max constraints can be downloaded by runn
 npm run download:ptau
 ```
 
-Build the circuits via `ALG={alg} npm run build:circuit`.
-For eg. `ALG=chacha20 npm run build:circuit`
+Build the circuits via `ALG={alg} npm run build`.
+For eg. `ALG=chacha20 npm run build`
 Note: `ALG` is the same as mentioned in the first section of this readme.
 
 ### Regenerating the Verification Key

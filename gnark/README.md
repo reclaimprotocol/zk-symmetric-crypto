@@ -61,6 +61,8 @@ For Linux:
 GOARCH=arm64 sh scripts/build.sh
 # linux x86
 GOARCH=x86_64 sh scripts/build.sh
+# macos arm64
+GOOS=darwin GOARCH=arm64 sh scripts/build.sh
 
 # Android x86 & arm64
 CC=android/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android30-clang CXX=android/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android30-clang++ GOOS=android GOARCH=amd64 sh scripts/build.sh

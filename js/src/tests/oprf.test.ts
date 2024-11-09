@@ -1,8 +1,8 @@
 import { makeLocalFileFetch } from '../file-fetch'
 import { makeGnarkOPRFOperator } from '../gnark/toprf'
 import { TOPRFResponseData } from '../gnark/types'
-import { strToUint8Array } from '../gnark/utils'
-import { ZKProofInputOPRF, ZKProofPublicSignalsOPRF } from '../types'
+import { ZKTOPRFPublicSignals } from '../types'
+import { generateProof, verifyProof } from '../zk'
 import { encryptData } from './utils'
 
 const fetcher = makeLocalFileFetch()
@@ -43,7 +43,7 @@ describe('TOPRF circuits Tests', () => {
 		const pos = 10
 		const len = email.length
 
-		const plaintext = new Uint8Array(Buffer.alloc(128)) //2 blocks
+		const plaintext = new Uint8Array(Buffer.alloc(64))
 		//replace part of plaintext with email
 		plaintext.set(new Uint8Array(Buffer.from(email)), pos)
 
@@ -52,54 +52,40 @@ describe('TOPRF circuits Tests', () => {
 
 		const ciphertext = encryptData('chacha20', plaintext, key, iv)
 
-		const respParams: any[] = []
-		for(const { index, publicKeyShare, evaluated, c, r } of resps) {
-			const rp = {
-				index: index,
-				publicKeyShare: publicKeyShare,
-				evaluated: evaluated,
-				c: c,
-				r: r,
-			}
-			respParams.push(rp)
+		const toprf: ZKTOPRFPublicSignals = {
+			pos: pos, //pos in plaintext
+			len: len, // length of data to "hash"
+			domainSeparator,
+			output: nullifier,
+			responses: resps
 		}
 
-		const domainSeparatorArr = strToUint8Array(domainSeparator)
-		const witnessParams: ZKProofInputOPRF = {
-			key: key,
-			nonce: iv,
-			counter: 1,
-			in: ciphertext,
-			out: new Uint8Array(), // plaintext will be calculated in library
+		const proof = await generateProof({
+			algorithm: 'chacha20',
+			privateInput: {
+				key,
+			},
+			publicInput: {
+				iv,
+				ciphertext,
+				offset: 0
+			},
+			operator,
 			mask: req.mask,
-			toprf: {
-				pos: pos, //pos in plaintext
-				len: len, // length of data to "hash"
-				domainSeparator: domainSeparatorArr,
-				output: nullifier,
-				responses: respParams
-			}
-		}
+			toprf,
+		})
 
-		const wtns = await operator.generateWitness(witnessParams)
-		const proof = await operator.groth16Prove(wtns)
-
-		const verifySignals: ZKProofPublicSignalsOPRF = {
-			nonce: witnessParams.nonce,
-			counter: witnessParams.counter,
-			in: witnessParams.in,
-			out: new Uint8Array(),
-			toprf: {
-				pos: witnessParams.toprf.pos,
-				len: witnessParams.toprf.len,
-				domainSeparator: witnessParams.toprf.domainSeparator,
-				output: witnessParams.toprf.output,
-				responses: witnessParams.toprf.responses
-			}
-		}
-
-		expect(
-			await operator.groth16Verify(verifySignals, proof.proof)
-		).toEqual(true)
+		await expect(
+			verifyProof({
+				proof,
+				publicInput: {
+					iv,
+					ciphertext,
+					offset: 0
+				},
+				toprf,
+				operator
+			})
+		).resolves.toBeUndefined()
 	})
 })

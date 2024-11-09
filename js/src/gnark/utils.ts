@@ -170,7 +170,7 @@ export function generateGnarkWitness(
 			pos: pos,
 			len: len,
 			domainSeparator: Base64
-				.fromUint8Array(domainSeparator),
+				.fromUint8Array(strToUint8Array(domainSeparator)),
 			output: Base64.fromUint8Array(output),
 			responses: responses.map(mapResponse),
 			mask: 'mask' in input

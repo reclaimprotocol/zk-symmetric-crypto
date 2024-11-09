@@ -93,8 +93,8 @@ func (cp *ChaChaProver) Prove(params *InputParams) (proof []byte, output []uint8
 	if len(nonce) != 12 {
 		log.Panicf("nonce length must be 12: %d", len(nonce))
 	}
-	if len(input) != 64 {
-		log.Panicf("input length must be 64: %d", len(input))
+	if len(input) != 64*chachaV3.Blocks {
+		log.Panicf("input length must be %d: %d", 64*chachaV3.Blocks, len(input))
 	}
 
 	// calculate output ourselves
@@ -231,7 +231,7 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 		log.Panicf("nonce length must be 12: %d", len(nonce))
 	}
 	if len(input) != chachaV3_oprf.Blocks*64 {
-		log.Panicf("input length must be 64: %d", len(input))
+		log.Panicf("input length must be %d: %d", chachaV3_oprf.Blocks*64, len(input))
 	}
 
 	// calculate ciphertext ourselves

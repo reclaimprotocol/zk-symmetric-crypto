@@ -31,8 +31,8 @@ var algorithmNames = map[uint8]string{
 
 var provers = map[string]*ProverParams{
 	"chacha20": {
-		KeyHash:     "e27a459c9cf0aa3c87cf49b4a3bc352b15495e2e420b65bac97795941df97f46",
-		CircuitHash: "39df55c578041ac435a5ead1573af4132c269063847359b8ba56c906e2ce4a77",
+		KeyHash:     "967e55bd35f1333735fb62b9bda363dd307a294979c543bfc400c859b5f45fe5",
+		CircuitHash: "4aa80775a6721404bf8f82fd2d78d335fabbdf517762b82a7d13e6d2446c49bf",
 		Prover:      &ChaChaProver{},
 	},
 	"aes-128-ctr": {
@@ -106,7 +106,7 @@ func InitAlgorithm(algorithmID uint8, provingKey []byte, r1csData []byte) (res b
 		circuitHash := mustHex(proverParams.CircuitHash)
 
 		if subtle.ConstantTimeCompare(inHash[:], circuitHash) != 1 {
-			fmt.Println(fmt.Errorf("circuit hash mismatch"))
+			fmt.Println(fmt.Errorf("circuit hash mismatch, expected %0x, got %0x", circuitHash, inHash[:]))
 			return false
 		}
 

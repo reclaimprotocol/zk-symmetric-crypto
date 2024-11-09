@@ -39,18 +39,19 @@ type ChachaVerifier struct {
 }
 
 func (cv *ChachaVerifier) Verify(proof []byte, publicSignals []uint8) bool {
-
-	if len(publicSignals) != 128+12+4 { // in, nonce, counter, out
-		fmt.Printf("public signals must be 144 bytes, not %d\n", len(publicSignals))
+	chunkLen := 64 * chachaV3.Blocks
+	pubLen := chunkLen*2 + 12 + 4     // in & out, nonce, counter
+	if len(publicSignals) != pubLen { // in, nonce, counter, out
+		fmt.Printf("public signals must be %d bytes, not %d\n", pubLen, len(publicSignals))
 		return false
 	}
 
 	witness := &chachaV3.ChaChaCircuit{}
 
-	bOut := publicSignals[:64]
-	bIn := publicSignals[64+12+4:]
-	bNonce := publicSignals[64 : 64+12]
-	bCounter := publicSignals[64+12 : 64+12+4]
+	bOut := publicSignals[:chunkLen]
+	bIn := publicSignals[chunkLen+12+4:]
+	bNonce := publicSignals[chunkLen : chunkLen+12]
+	bCounter := publicSignals[chunkLen+12 : chunkLen+12+4]
 
 	out := utils.BytesToUint32BEBits(bOut)
 	in := utils.BytesToUint32BEBits(bIn)

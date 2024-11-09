@@ -22,6 +22,8 @@ import (
 
 var chachaKey, aes128Key, aes256Key, chachaOprfKey, chachaR1CS, aes128r1cs, aes256r1cs, chachaOprfr1cs []byte
 
+const CHACHA20_BLOCKS = 2
+
 func init() {
 	chachaKey, _ = fetchFile("pk.chacha20")
 	aes128Key, _ = fetchFile("pk.aes128")
@@ -52,8 +54,18 @@ func TestProveVerify(t *testing.T) {
 	wg.Add(4)
 	go func() {
 		assert.True(prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS))
-		params := `{"cipher":"chacha20","key":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"nonce":[3,3,3,3,3,3,3,3,3,3,3,3],"counter":3,"input":[163,247,229,146,174,218,21,7,167,245,27,53,129,45,252,80,162,99,213,166,210,223,98,94,86,59,2,228,156,8,191,48,208,231,72,63,91,19,255,7,149,50,34,78,232,251,195,26,177,137,155,24,228,83,211,109,151,147,168,53,94,176,222,233]}`
+		params_struct := prover.InputParams{
+			Cipher:  "chacha20",
+			Key:     []byte{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
+			Nonce:   []byte{3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
+			Counter: 3,
+			Input:   make([]uint8, 64*CHACHA20_BLOCKS),
+		}
+		params, err := json.Marshal(&params_struct)
+		assert.NoError(err)
+
 		res := prover.Prove([]byte(params))
+
 		assert.NotNil(res)
 		var outParams *prover.OutputParams
 		json.Unmarshal(res, &outParams)

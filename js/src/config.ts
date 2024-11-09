@@ -9,13 +9,13 @@ export const GIT_COMMIT_HASH = 'd82fab41fa4033aa13feda3374f80a9df7af52b2'
 export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 	'chacha20': {
 		index: 0,
-		chunkSize: 16,
+		chunkSize: 32,
 		bitsPerWord: 32,
 		keySizeBytes: 32,
 		ivSizeBytes: 12,
 		startCounter: 1,
 		// num of blocks per chunk
-		blocksPerChunk: 1,
+		blocksPerChunk: 2,
 		// chacha20 circuit uses LE encoding
 		isLittleEndian: true,
 		uint8ArrayToBits: (arr: Uint8Array) => (

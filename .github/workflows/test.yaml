@@ -86,6 +86,7 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
           check-latest: true
+          cache-dependency-path: "**/go.sum"
 
       - name: Install dependencies
         working-directory: ./gnark

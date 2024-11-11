@@ -1,7 +1,6 @@
 import { Base64, fromUint8Array, toUint8Array } from 'js-base64'
 import * as koffi from 'koffi'
-import { EncryptionAlgorithm, Logger, MakeZKOperatorOpts, OPRFOperator } from '../types'
-import { KeyShare } from './types'
+import { EncryptionAlgorithm, KeyShare, Logger, MakeZKOperatorOpts, OPRFOperator } from '../types'
 import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils'
 
 const ALGS_MAP: {

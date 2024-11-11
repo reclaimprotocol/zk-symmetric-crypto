@@ -1,7 +1,6 @@
 import { makeLocalFileFetch } from '../file-fetch'
 import { makeGnarkOPRFOperator } from '../gnark/toprf'
-import { TOPRFResponseData } from '../gnark/types'
-import { ZKTOPRFPublicSignals } from '../types'
+import { OPRFResponseData, ZKTOPRFPublicSignals } from '../types'
 import { generateProof, verifyProof } from '../zk'
 import { encryptData } from './utils'
 
@@ -19,22 +18,20 @@ describe('TOPRF circuits Tests', () => {
 		const req = await operator
 			.generateOPRFRequestData(email, domainSeparator)
 
-		const resps: TOPRFResponseData[] = []
+		const resps: OPRFResponseData[] = []
 		for(let i = 0; i < threshold; i++) {
 			const evalResult = await operator.evaluateOPRF(
 				keys.shares[i].privateKey,
 				req.maskedData
 			)
 
-			const resp = {
+			resps.push({
 				index: i,
 				publicKeyShare: keys.shares[i].publicKey,
 				evaluated: evalResult.evaluated,
 				c: evalResult.c,
 				r: evalResult.r,
-			}
-
-			resps.push(resp)
+			})
 		}
 
 		const nullifier = await operator

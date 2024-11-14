@@ -99,9 +99,8 @@ export function makeGnarkOPRFOperator({
 						fromUint8Array(request.secretElements[1])
 					]
 				},
-				responses: responses.map(({ index, publicKeyShare, evaluated, c, r }) => (
+				responses: responses.map(({ publicKeyShare, evaluated, c, r }) => (
 					{
-						index: index,
 						publicKeyShare: fromUint8Array(publicKeyShare),
 						evaluated: fromUint8Array(evaluated),
 						c: fromUint8Array(c),

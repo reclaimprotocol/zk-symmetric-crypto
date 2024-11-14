@@ -36,6 +36,8 @@ export type MakeZKOperatorOpts<T> = {
 
 export type MakeZKOperator<T> = (opts: MakeZKOperatorOpts<T>) => ZKOperator
 
+export type MakeOPRFOperator<T> = (opts: MakeZKOperatorOpts<T>) => OPRFOperator
+
 /**
  * provide Uint8array for file data loaded into memory
  * or string, that is the path to load said file
@@ -129,7 +131,6 @@ type ZKProofOutput = {
 type ZKInputItem = Uint8Array
 
 export type ZKTOPRFResponsePublicSignals = {
-	index: number
 	publicKeyShare: ZKInputItem
 	evaluated: ZKInputItem
 	c: ZKInputItem
@@ -177,7 +178,6 @@ type OPRFResponse = {
 }
 
 export type OPRFResponseData = OPRFResponse & {
-    index: number
     publicKeyShare: Uint8Array
 }
 

@@ -26,7 +26,6 @@ describe('TOPRF circuits Tests', () => {
 			)
 
 			resps.push({
-				index: i,
 				publicKeyShare: keys.shares[i].publicKey,
 				evaluated: evalResult.evaluated,
 				c: evalResult.c,

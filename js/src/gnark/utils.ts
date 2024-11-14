@@ -181,10 +181,9 @@ export function generateGnarkWitness(
 }
 
 function mapResponse({
-	index, publicKeyShare, evaluated, c, r
+	publicKeyShare, evaluated, c, r
 }: ZKTOPRFResponsePublicSignals) {
 	return {
-		index,
 		publicKeyShare: Base64.fromUint8Array(publicKeyShare),
 		evaluated: Base64.fromUint8Array(evaluated),
 		c: Base64.fromUint8Array(c),

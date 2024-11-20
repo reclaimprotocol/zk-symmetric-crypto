@@ -138,9 +138,7 @@ export function serialiseGnarkWitness(
 	input: ZKProofInput | ZKProofInputOPRF | ZKProofPublicSignals | ZKProofPublicSignalsOPRF
 ) {
 	const json = generateGnarkWitness(cipher, input)
-	return strToUint8Array(JSON.stringify(
-		json
-	))
+	return strToUint8Array(JSON.stringify(json))
 }
 
 export function generateGnarkWitness(

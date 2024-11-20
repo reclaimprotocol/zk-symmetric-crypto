@@ -115,12 +115,13 @@ export function makeSnarkJsZKOperator({
 					logger
 				)
 			))
+
 			return { proof: JSON.stringify(proof) }
 		},
 		async groth16Verify(publicSignals, proof, logger) {
-			if(typeof proof !== 'string') {
-				throw new Error('Proof must be a string')
-			}
+			proof = typeof proof !== 'string'
+				? Buffer.from(proof).toString()
+				: proof
 
 			zkey ||= getZkey()
 			const zkeyResult = await zkey

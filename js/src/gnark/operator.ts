@@ -27,11 +27,11 @@ export function makeGnarkZkOperator({
 				publicSignals
 			} = await executeGnarkFnAndGetJson(lib.prove, witness)
 			return {
-				proof: proofJson,
+				proof: Base64.toUint8Array(proofJson),
 				publicSignals: Array.from(Base64.toUint8Array(publicSignals))
 			}
 		},
-		async groth16Verify(publicSignals, proofStr, logger) {
+		async groth16Verify(publicSignals, proof, logger) {
 			const lib = await initGnark(logger)
 			const pubSignals = Base64.fromUint8Array(new Uint8Array([
 				...publicSignals.out,
@@ -42,7 +42,9 @@ export function makeGnarkZkOperator({
 
 			const verifyParams = JSON.stringify({
 				cipher: algorithm,
-				proof: proofStr,
+				proof: typeof proof === 'string'
+					? proof
+					: Base64.fromUint8Array(proof),
 				publicSignals: pubSignals,
 			})
 			return executeGnarkFn(lib.verify, verifyParams) === 1

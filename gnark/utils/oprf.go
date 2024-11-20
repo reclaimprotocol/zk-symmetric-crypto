@@ -26,8 +26,7 @@ type OPRFResponse struct {
 	R              *big.Int
 }
 
-func OPRFGenerateRequest(secretData, domainSeparator string) (*OPRFRequest, error) {
-	secretBytes := []byte(secretData)
+func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFRequest, error) {
 	if len(secretBytes) > 31*2 {
 		return nil, errors.New("secret data too big")
 	}

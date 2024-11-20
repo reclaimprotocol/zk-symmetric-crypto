@@ -24,7 +24,9 @@ func TestOPRF(t *testing.T) {
 	email := "test@example.com"
 	ds := "reclaim"
 
-	req, err := OPRFGenerateRequest(email, ds)
+	emailBytes := []byte(email)
+
+	req, err := OPRFGenerateRequest(emailBytes, ds)
 	require.NoError(t, err)
 
 	resp, err := OPRFEvaluate(sk, req.MaskedData)

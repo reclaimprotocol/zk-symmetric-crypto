@@ -2,6 +2,7 @@ package oprf
 
 import (
 	"encoding/json"
+	"fmt"
 	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
 	"math/big"
@@ -10,7 +11,7 @@ import (
 )
 
 type InputGenerateParams struct {
-	Data            string `json:"data"`
+	Data            []byte `json:"data"`
 	DomainSeparator string `json:"domainSeparator"`
 }
 type OPRFRequest struct {
@@ -85,7 +86,7 @@ func TOPRFFinalize(params []byte) []byte {
 	}
 
 	if len(inputParams.Responses) != toprf.Threshold {
-		panic("wrong number of responses")
+		panic(fmt.Sprintf("Must provide exactly %d responses", toprf.Threshold))
 	}
 
 	elements := make([]*twistededwards.PointAffine, toprf.Threshold)

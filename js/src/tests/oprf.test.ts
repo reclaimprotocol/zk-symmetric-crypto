@@ -1,22 +1,28 @@
 import { makeLocalFileFetch } from '../file-fetch'
 import { makeGnarkOPRFOperator } from '../gnark/toprf'
+import { strToUint8Array } from '../gnark/utils'
 import { OPRFResponseData, ZKTOPRFPublicSignals } from '../types'
 import { generateProof, verifyProof } from '../zk'
 import { encryptData } from './utils'
 
 const fetcher = makeLocalFileFetch()
 const operator = makeGnarkOPRFOperator({ fetcher, algorithm: 'chacha20' })
+const threshold = 1
+
+const POSITIONS = [
+	0,
+	10
+]
 
 describe('TOPRF circuits Tests', () => {
 
-	it('should prove & verify TOPRF', async() => {
+	it.each(POSITIONS)('should prove & verify TOPRF at pos=%s', async pos => {
 		const email = 'test@email.com'
 		const domainSeparator = 'reclaim'
-		const threshold = 2
 
-		const keys = await operator.generateThresholdKeys(3, threshold)
+		const keys = await operator.generateThresholdKeys(5, threshold)
 		const req = await operator
-			.generateOPRFRequestData(email, domainSeparator)
+			.generateOPRFRequestData(strToUint8Array(email), domainSeparator)
 
 		const resps: OPRFResponseData[] = []
 		for(let i = 0; i < threshold; i++) {
@@ -35,8 +41,6 @@ describe('TOPRF circuits Tests', () => {
 
 		const nullifier = await operator
 			.finaliseOPRF(keys.publicKey, req, resps)
-
-		const pos = 10
 		const len = email.length
 
 		const plaintext = new Uint8Array(Buffer.alloc(64))

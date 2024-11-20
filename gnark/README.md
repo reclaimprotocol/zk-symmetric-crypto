@@ -28,9 +28,13 @@ These optimized versions provide the best balance of speed and resource usage fo
 
 ## Compile all circuits, generate proving and verification keys
 
-```
+``` sh
 go run keygen/keygen.go
+# to build a specific circuit
+go run keygen/keygen.go --circuit chacha20
 ```
+
+Do note: the key & circuit hashes need to be updated after this. TODO: automate this process
 
 Proving keys & compiled circuits will be [here](resources/gnark)
 Verification keys will be [here](libraries/verifier/impl/generated)

@@ -9,7 +9,7 @@ import (
 	"github.com/consensys/gnark/std/math/emulated"
 )
 
-const Threshold = 2
+const Threshold = 1
 
 type TOPRFParams struct {
 	SecretData      [2]frontend.Variable
@@ -91,22 +91,21 @@ func VerifyTOPRF(api frontend.API, p *TOPRFParams) error {
 func toprfMul(curve twistededwards.Curve, points [Threshold]twistededwards.Point, coeffs [Threshold]frontend.Variable) twistededwards.Point {
 
 	// We can use DoubleBaseScalarMul to reduce constraints if Threshold is 2
-	if Threshold == 2 {
-		return curve.DoubleBaseScalarMul(points[0], points[1], coeffs[0], coeffs[1])
-	} else {
-		result := twistededwards.Point{
-			X: 0,
-			Y: 1,
-		}
-
-		for i := 0; i < len(points); i++ {
-			lPoly := coeffs[i]
-			gki := curve.ScalarMul(points[i], lPoly)
-			result = curve.Add(result, gki)
-		}
-		return result
+	// if Threshold == 2 {
+	// 	return curve.DoubleBaseScalarMul(points[0], points[1], coeffs[0], coeffs[1])
+	// } else {
+	result := twistededwards.Point{
+		X: 0,
+		Y: 1,
 	}
 
+	for i := 0; i < len(points); i++ {
+		lPoly := coeffs[i]
+		gki := curve.ScalarMul(points[i], lPoly)
+		result = curve.Add(result, gki)
+	}
+	return result
+	//}
 }
 
 func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, serverPublicKey twistededwards.Point, c, r frontend.Variable) error {

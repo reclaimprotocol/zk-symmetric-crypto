@@ -40,8 +40,7 @@ func TestInit(t *testing.T) {
 	assert.True(prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS))
 	assert.True(prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs))
 	assert.True(prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs))
-	//	assert.True(prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs))
-
+	assert.True(prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs))
 }
 
 func TestPanic(t *testing.T) {
@@ -203,6 +202,9 @@ func TestFullChaCha20OPRF(t *testing.T) {
 
 	email := "test@email.com"
 	domainSeparator := "reclaim"
+
+	emailBytes := []byte(email)
+
 	pos := uint32(59)
 	copy(bOutput[pos:], email)
 
@@ -230,7 +232,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	err = json.Unmarshal(bShares, &shares)
 	assert.NoError(err)
 
-	req, err := utils.OPRFGenerateRequest(email, domainSeparator)
+	req, err := utils.OPRFGenerateRequest(emailBytes, domainSeparator)
 	assert.NoError(err)
 
 	// TOPRF requests

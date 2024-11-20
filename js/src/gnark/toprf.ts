@@ -27,7 +27,7 @@ export function makeGnarkOPRFOperator({
 			const {
 				proof: { proofJson }
 			} = await executeGnarkFnAndGetJson(lib.prove, witness)
-			return { proof: proofJson }
+			return { proof: Base64.toUint8Array(proofJson) }
 		},
 		async groth16Verify(publicSignals, proof, logger) {
 			const lib = await initGnark(logger)
@@ -35,7 +35,9 @@ export function makeGnarkOPRFOperator({
 
 			const verifyParams = JSON.stringify({
 				cipher: `${algorithm}-toprf`,
-				proof: proof,
+				proof: typeof proof === 'string'
+					? proof
+					: Base64.fromUint8Array(proof),
 				publicSignals: Base64.fromUint8Array(pubSignals),
 			})
 			return executeGnarkFn(lib.verify, verifyParams) === 1

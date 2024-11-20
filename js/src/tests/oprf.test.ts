@@ -9,9 +9,14 @@ const fetcher = makeLocalFileFetch()
 const operator = makeGnarkOPRFOperator({ fetcher, algorithm: 'chacha20' })
 const threshold = 1
 
+const POSITIONS = [
+	0,
+	10
+]
+
 describe('TOPRF circuits Tests', () => {
 
-	it('should prove & verify TOPRF', async() => {
+	it.each(POSITIONS)('should prove & verify TOPRF at pos=%s', async pos => {
 		const email = 'test@email.com'
 		const domainSeparator = 'reclaim'
 
@@ -36,8 +41,6 @@ describe('TOPRF circuits Tests', () => {
 
 		const nullifier = await operator
 			.finaliseOPRF(keys.publicKey, req, resps)
-
-		const pos = 10
 		const len = email.length
 
 		const plaintext = new Uint8Array(Buffer.alloc(64))

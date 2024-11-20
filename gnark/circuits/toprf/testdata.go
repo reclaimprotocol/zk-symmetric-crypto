@@ -25,9 +25,8 @@ type TestData struct {
 	Proof      *Proof
 }
 
-func PrepareTestData(secretData, domainSeparator string) (*TOPRFParams, error) {
-
-	req, err := utils.OPRFGenerateRequest(secretData, domainSeparator)
+func PrepareTestData(secretData string, domainSeparator string) (*TOPRFParams, error) {
+	req, err := utils.OPRFGenerateRequest([]byte(secretData), domainSeparator)
 	if err != nil {
 		return nil, err
 	}

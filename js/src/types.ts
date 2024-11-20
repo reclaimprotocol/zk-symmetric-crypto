@@ -238,7 +238,7 @@ export type OPRFOperator = {
 	): Promise<KeygenResult>
 
 	generateOPRFRequestData(
-		data: unknown,
+		data: Uint8Array,
 		domainSeparator: string,
 		logger?: Logger
 	): Promise<OPRFRequestData>

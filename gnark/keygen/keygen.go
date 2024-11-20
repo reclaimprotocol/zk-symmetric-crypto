@@ -40,6 +40,14 @@ func main() {
 }
 
 func generateCircuitFiles(circuit frontend.Circuit, name string) {
+	circuitArg, err := getArg("--circuit")
+	if err == nil {
+		if circuitArg != name {
+			fmt.Println("skipping circuit ", name)
+			return
+		}
+	}
+
 	curve := ecc.BN254.ScalarField()
 
 	t := time.Now()
@@ -102,4 +110,22 @@ func generateCircuitFiles(circuit frontend.Circuit, name string) {
 	}
 
 	fmt.Println("generated circuit for ", name)
+}
+
+/**
+ * Helper function to get the value of a command line argument
+ * Expects args in the form of "[name] [value]"
+ */
+func getArg(name string) (string, error) {
+	for i, arg := range os.Args {
+		if arg == name {
+			if i+1 < len(os.Args) {
+				return os.Args[i+1], nil
+			}
+
+			return "", fmt.Errorf("arg %s has no value", name)
+		}
+	}
+
+	return "", fmt.Errorf("arg %s not found", name)
 }

@@ -69,7 +69,7 @@ export function makeGnarkOPRFOperator({
 		async generateOPRFRequestData(data, domainSeparator, logger) {
 			const lib = await initGnark(logger)
 			const params = {
-				data: data,
+				data: Base64.fromUint8Array(data),
 				domainSeparator: domainSeparator,
 			}
 

@@ -149,7 +149,7 @@ func TestProveVerify(t *testing.T) {
 
 	go func() {
 		assert.True(prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs))
-		params := `{"cipher":"chacha20-toprf","key":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","nonce":"AAECAwQFBgcICQoL","counter":1,"input":"ifsIACkXpUC3g0uW62lOBqQR24t/F8LU5pcvxXXApjzsgCzz5h6xmDcydthllI8jfoSpdP0ouJsSuNkHkE+e1nl4vM3lFCzpxBZNvBh83PHa3kcyb2rwPg5X8A7YfQK/Td5s8/fZJ/SxW/O3opG3gOlvVjiJXUD4T20033k/v0Y=","toprf":{"pos":10,"len":14,"mask":"fblY6lWzyAzOpIU5Fx86+iQOMDIPNyE/gWKsM9Fh6g==","domainSeparator":"cmVjbGFpbQ==","output":"FBXe6ou2AwQAvPtuC8n5To+FCa7mCp5ZR8dSO9Llb1E=","responses":[{"index":0,"publicKeyShare":"qTqvq7qLESz+y4hB7SPuN8cTmOE682R1u+jcv5YrUxo=","evaluated":"SEL2SkU0HiY3PhMZngCSsix1LQlbxEyD5ePBNiClJDA=","c":"L8I++RNA9so/KelQsb9T89WEyUpKpuBVsDbK+nFmlLg=","r":"3bCmCfYnIXpZIWafKl1JaiuDFCFrPR/SBiiItOXY9w=="},{"index":1,"publicKeyShare":"dagTfVg0fN9Dhgo1LOv2Jl16DQBixcsObQVHLehzAJ4=","evaluated":"XFcDXx227obXnM9daBLsrPSbqvvIpZzNS74NUUxog5M=","c":"JIw5UKl7K/RAzDh8oCr+i9TRDxuaFSjA3fkxg8DbFhU=","r":"A7Zn+ldkfjyqr8Mw4w4czObZPDCxPWoXHfxCspp8IxY="}]}}`
+		params := `{"cipher":"chacha20-toprf","key":"cmTjtxcDYzMlAMqtmjhQq2yxxN1syhocwhK3iOAOd34=","nonce":"KIDzQFfJemUYKf2r","counter":38538388,"input":"wJwt+53oiXWmev7LPuPR/nNVaLknXp83Y/zkg4R3NDE7tmmx+LEbiC97IpAryMpMpg2+XXAwrp/6EP17zmS9ywjBsq8kUjAlmILM9z3a3QlN2/k6UILaYWfhH73/Mxjjt44zYb+Sl7n95wMHMx/2e65awMUfi3F9TbmfT+Ez7lA=","toprf":{"pos":59,"len":14,"mask":"pxXilBb2iX9ayGvl9PUIsaLQ0gXQ217kqCOEtW3NCg==","domainSeparator":"cmVjbGFpbQ==","output":"Evt2a6W9F/kFC9i/TBVHDjvAhUIzq07q+Ug0Ky9Wq74=","responses":[{"index":0,"publicKeyShare":"xP7+zxUAQV3NXAIxGH1snWFy8ZuouuTZT8P/Tz178ao=","evaluated":"zRcJ2TLzWoMoMAb9xWkqXy7c1yXQvgdM0HDTcUqZ3q0=","c":"KMQFGM3WFCBS3Ds91sQkiRajWY5JhNg6Y1OiQU4KRR0=","r":"A7bEbIuK1zjaQJdCNrehfDU2XXZ+v2cul7KzXBbCPR0="}]}}`
 		res := prover.Prove([]byte(params))
 		assert.NotNil(res)
 		wg.Done()
@@ -323,6 +323,9 @@ func TestFullChaCha20OPRF(t *testing.T) {
 
 	email := "test@email.com"
 	domainSeparator := "reclaim"
+
+	emailBytes := []byte(email)
+
 	pos := uint32(59)
 	copy(bOutput[pos:], email)
 
@@ -351,7 +354,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	err = json.Unmarshal(bShares, &shares)
 	assert.NoError(err)
 
-	req, err := utils.OPRFGenerateRequest(email, domainSeparator)
+	req, err := utils.OPRFGenerateRequest(emailBytes, domainSeparator)
 	assert.NoError(err)
 
 	// TOPRF requests

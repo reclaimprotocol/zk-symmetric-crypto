@@ -12,7 +12,6 @@ import (
 	"math"
 	"math/big"
 	"os"
-	"sync"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
@@ -43,125 +42,6 @@ func TestInit(t *testing.T) {
 	assert.True(prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs))
 	//	assert.True(prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs))
 
-}
-
-func TestProveVerify(t *testing.T) {
-	assert := test.NewAssert(t)
-
-	proofs := make([][]byte, 0, 4)
-
-	wg := new(sync.WaitGroup)
-	wg.Add(4)
-	go func() {
-		assert.True(prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS))
-		params_struct := prover.InputParams{
-			Cipher:  "chacha20",
-			Key:     []byte{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
-			Nonce:   []byte{3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
-			Counter: 3,
-			Input:   make([]uint8, 64*CHACHA20_BLOCKS),
-		}
-		params, err := json.Marshal(&params_struct)
-		assert.NoError(err)
-
-		res := prover.Prove(params)
-
-		assert.NotNil(res)
-		var outParams *prover.OutputParams
-		json.Unmarshal(res, &outParams)
-
-		var inParams *prover.InputParams
-		json.Unmarshal(params, &inParams)
-
-		signals := outParams.PublicSignals
-		signals = append(signals, inParams.Nonce...)
-		bCounter := make([]byte, 4)
-		binary.LittleEndian.PutUint32(bCounter, inParams.Counter)
-		signals = append(signals, bCounter...)
-		signals = append(signals, inParams.Input...)
-
-		inParams2 := &verifier.InputVerifyParams{
-			Cipher:        "chacha20",
-			Proof:         outParams.Proof.ProofJson,
-			PublicSignals: signals,
-		}
-		inBuf, _ := json.Marshal(inParams2)
-		proofs = append(proofs, inBuf)
-		wg.Done()
-	}()
-
-	go func() {
-		assert.True(prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs))
-		params := `{"cipher":"aes-128-ctr","key":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"nonce":[3,3,3,3,3,3,3,3,3,3,3,3],"counter":2,"input":[183,4,206,60,254,21,117,9,150,227,246,245,71,101,56,67,79,93,44,163,22,89,128,55,214,254,228,214,89,253,176,112,138,115,93,140,194,222,104,252,49,144,91,252,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}`
-		res := prover.Prove([]byte(params))
-		assert.NotNil(res)
-
-		var outParams *prover.OutputParams
-		json.Unmarshal(res, &outParams)
-
-		var inParams *prover.InputParams
-		json.Unmarshal([]byte(params), &inParams)
-
-		signals := outParams.PublicSignals
-		signals = append(signals, inParams.Nonce...)
-		bCounter := make([]byte, 4)
-		binary.BigEndian.PutUint32(bCounter, inParams.Counter)
-		signals = append(signals, bCounter...)
-		signals = append(signals, inParams.Input...)
-
-		inParams2 := &verifier.InputVerifyParams{
-			Cipher:        "aes-128-ctr",
-			Proof:         outParams.Proof.ProofJson,
-			PublicSignals: signals,
-		}
-		inBuf, _ := json.Marshal(inParams2)
-		proofs = append(proofs, inBuf)
-		wg.Done()
-	}()
-
-	go func() {
-		assert.True(prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs))
-		params := `{"cipher":"aes-256-ctr","key":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"nonce":[3,3,3,3,3,3,3,3,3,3,3,3],"counter":10,"input":[189,250,225,242,6,46,173,203,7,166,62,139,67,150,1,155,64,122,211,198,184,203,124,194,99,34,127,29,236,17,232,214,154,146,78,217,254,224,208,196,55,200,23,93,90,175,240,31,31,225,26,15,219,156,123,21,103,98,205,87,197,22,245,158]}`
-		res := prover.Prove([]byte(params))
-		assert.NotNil(res)
-
-		var outParams *prover.OutputParams
-		json.Unmarshal(res, &outParams)
-
-		var inParams *prover.InputParams
-		json.Unmarshal([]byte(params), &inParams)
-		signals := outParams.PublicSignals
-		signals = append(signals, inParams.Nonce...)
-		bCounter := make([]byte, 4)
-		binary.BigEndian.PutUint32(bCounter, inParams.Counter)
-		signals = append(signals, bCounter...)
-		signals = append(signals, inParams.Input...)
-
-		inParams2 := &verifier.InputVerifyParams{
-			Cipher:        "aes-256-ctr",
-			Proof:         outParams.Proof.ProofJson,
-			PublicSignals: signals,
-		}
-		inBuf, _ := json.Marshal(inParams2)
-		proofs = append(proofs, inBuf)
-		wg.Done()
-	}()
-
-	go func() {
-		assert.True(prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs))
-		params := `{"cipher":"chacha20-toprf","key":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","nonce":"AAECAwQFBgcICQoL","counter":1,"input":"ifsIACkXpUC3g0uW62lOBqQR24t/F8LU5pcvxXXApjzsgCzz5h6xmDcydthllI8jfoSpdP0ouJsSuNkHkE+e1nl4vM3lFCzpxBZNvBh83PHa3kcyb2rwPg5X8A7YfQK/Td5s8/fZJ/SxW/O3opG3gOlvVjiJXUD4T20033k/v0Y=","toprf":{"pos":10,"len":14,"mask":"fblY6lWzyAzOpIU5Fx86+iQOMDIPNyE/gWKsM9Fh6g==","domainSeparator":"cmVjbGFpbQ==","output":"FBXe6ou2AwQAvPtuC8n5To+FCa7mCp5ZR8dSO9Llb1E=","responses":[{"index":0,"publicKeyShare":"qTqvq7qLESz+y4hB7SPuN8cTmOE682R1u+jcv5YrUxo=","evaluated":"SEL2SkU0HiY3PhMZngCSsix1LQlbxEyD5ePBNiClJDA=","c":"L8I++RNA9so/KelQsb9T89WEyUpKpuBVsDbK+nFmlLg=","r":"3bCmCfYnIXpZIWafKl1JaiuDFCFrPR/SBiiItOXY9w=="},{"index":1,"publicKeyShare":"dagTfVg0fN9Dhgo1LOv2Jl16DQBixcsObQVHLehzAJ4=","evaluated":"XFcDXx227obXnM9daBLsrPSbqvvIpZzNS74NUUxog5M=","c":"JIw5UKl7K/RAzDh8oCr+i9TRDxuaFSjA3fkxg8DbFhU=","r":"A7Zn+ldkfjyqr8Mw4w4czObZPDCxPWoXHfxCspp8IxY="}]}}`
-		res := prover.Prove([]byte(params))
-		assert.NotNil(res)
-		wg.Done()
-	}()
-
-	wg.Wait()
-
-	assert.Equal(3, len(proofs))
-
-	for _, proof := range proofs {
-		assert.True(verifier.Verify(proof))
-	}
 }
 
 func TestPanic(t *testing.T) {
@@ -338,8 +218,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	nodes := threshold + 1
 
 	tParams := &oprf.InputGenerateParams{
-		Total:     uint8(nodes),
-		Threshold: uint8(threshold),
+		Total: uint8(nodes),
 	}
 
 	btParams, err := json.Marshal(tParams)

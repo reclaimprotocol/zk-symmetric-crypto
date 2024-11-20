@@ -1,8 +1,6 @@
 package aes_v2
 
 import (
-	"math"
-
 	"github.com/consensys/gnark/frontend"
 )
 
@@ -33,7 +31,6 @@ func (circuit *AES256Wrapper) Define(api frontend.API) error {
 			api.AssertIsEqual(circuit.Out[b*16+i], aes.VariableXor(keystream[i], circuit.In[b*16+i], 8))
 		}
 		counter = api.Add(counter, 1)
-		api.AssertIsLessOrEqual(counter, math.MaxUint32)
 	}
 
 	api.AssertIsEqual(counter, api.Add(circuit.Counter, BLOCKS))

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package aes_v2
+package aes_v2_oprf
 
 import (
 	"github.com/consensys/gnark/frontend"
@@ -48,7 +48,8 @@ func (circuit *AES128Wrapper) Define(api frontend.API) error {
 		counter = api.Add(counter, 1)
 	}
 	api.AssertIsEqual(counter, api.Add(circuit.Counter, BLOCKS))
-	return nil
+
+	return circuit.TOPRFVerify(api)
 }
 
 type AES128 struct {

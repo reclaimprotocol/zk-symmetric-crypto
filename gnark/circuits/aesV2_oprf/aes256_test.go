@@ -43,7 +43,7 @@ func TestAES256(t *testing.T) {
 	d, err := toprf.PrepareTestData(secretStr, "reclaim")
 	assert.NoError(err)
 
-	pos := 128 - 62
+	pos := 30
 	Counter := 12345
 	plaintext := make([]byte, BLOCKS*16)
 	copy(plaintext[pos:], secretBytes)

@@ -10,7 +10,7 @@ import (
 	"github.com/consensys/gnark/std/math/cmp"
 )
 
-const BLOCKS = 4 * 2
+const BLOCKS = 4
 const BytesPerElement = 31
 
 type TOPRFData struct {
@@ -72,10 +72,6 @@ func NewAESGadget(api frontend.API) AESGadget {
 
 // aes128 encrypt function
 func (aes *AESGadget) SubBytes(state [16]frontend.Variable) (res [16]frontend.Variable) {
-	/*var newState [16]frontend.Variable
-	for i := 0; i < 16; i++ {
-		newState[i] = aes.Subw(aes.sbox, state[i])
-	}*/
 	t := aes.Subws(aes.sbox, state[:]...)
 	copy(res[:], t)
 	return res
@@ -185,9 +181,9 @@ func (circuit *AESWrapper) TOPRFVerify(api frontend.API) error {
 
 	api.AssertIsDifferent(circuit.Len, 0) // Len != 0
 
-	comparator := cmp.NewBoundedComparator(api, big.NewInt(int64(len(outBits)-BytesPerElement*8*2)), false) // max diff is 1024-496
-	comparator.AssertIsLessEq(totalBits, BytesPerElement*8*2)                                               // check that number of processed bits <= 62 bytes
-	api.AssertIsEqual(totalBits, api.Mul(circuit.Len, 8))                                                   // and that it corresponds to Len
+	comparator := cmp.NewBoundedComparator(api, big.NewInt(512), false) // max diff is 512-496
+	comparator.AssertIsLessEq(totalBits, BytesPerElement*8*2)           // check that number of processed bits <= 62 bytes
+	api.AssertIsEqual(totalBits, api.Mul(circuit.Len, 8))               // and that it corresponds to Len
 
 	// check that TOPRF output was created from secret data by a server with a specific public key
 	oprfData := &toprf.TOPRFParams{

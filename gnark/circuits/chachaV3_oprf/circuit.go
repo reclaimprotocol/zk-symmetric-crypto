@@ -128,9 +128,9 @@ func (c *ChachaTOPRFCircuit) Define(api frontend.API) error {
 
 	api.AssertIsDifferent(c.Len, 0) // Len != 0
 
-	comparator := cmp.NewBoundedComparator(api, big.NewInt(16*Blocks*BITS_PER_WORD-BytesPerElement*8*2), false) // max diff is 1024-496
-	comparator.AssertIsLessEq(totalBits, BytesPerElement*8*2)                                                   // check that number of processed bits <= 62 bytes
-	api.AssertIsEqual(totalBits, api.Mul(c.Len, 8))                                                             // and that it corresponds to Len
+	comparator := cmp.NewBoundedComparator(api, big.NewInt(16*Blocks*BITS_PER_WORD), false) // max diff is number of bits
+	comparator.AssertIsLessEq(totalBits, BytesPerElement*8*2)                               // check that number of processed bits <= 62 bytes
+	api.AssertIsEqual(totalBits, api.Mul(c.Len, 8))                                         // and that it corresponds to Len
 
 	// check that TOPRF output was created from secret data by a server with a specific public key
 	oprfData := &toprf.TOPRFParams{

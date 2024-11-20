@@ -43,7 +43,7 @@ func TestAES128(t *testing.T) {
 	d, err := toprf.PrepareTestData(secretStr, "reclaim")
 	assert.NoError(err)
 
-	pos := 128 - 62
+	pos := 1
 	Counter := 12345
 	plaintext := make([]byte, BLOCKS*16)
 	copy(plaintext[pos:], secretBytes)
@@ -78,22 +78,6 @@ func TestAES128(t *testing.T) {
 	}
 
 	fmt.Printf("constraints: %d\n", r1css.GetNbConstraints())
-}
-
-func StrToIntSlice(inputData string, hexRepresentation bool) []int {
-	var byteSlice []byte
-	if hexRepresentation {
-		hexBytes, _ := hex.DecodeString(inputData)
-		byteSlice = hexBytes
-	} else {
-		byteSlice = []byte(inputData)
-	}
-
-	var data []int
-	for i := 0; i < len(byteSlice); i++ {
-		data = append(data, int(byteSlice[i]))
-	}
-	return data
 }
 
 func mustHex(s string) []byte {

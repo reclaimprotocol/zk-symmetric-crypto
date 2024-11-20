@@ -60,7 +60,7 @@ jobs:
       
       - name: Install Circom
         run: |
-          git clone https://github.com/iden3/circom.git -b v2.1.6 circom-lib
+          git clone https://github.com/iden3/circom.git -b v2.2.1 circom-lib
           cd circom-lib
           RUSTFLAGS="-A dead_code -A unused-imports" cargo install --path circom
 

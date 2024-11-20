@@ -2,6 +2,7 @@ package oprf
 
 import (
 	"encoding/json"
+	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
 	"math/big"
 
@@ -48,8 +49,7 @@ func OPRFEvaluate(params []byte) []byte {
 }
 
 type InputGenerateParams struct {
-	Total     uint8 `json:"total"`
-	Threshold uint8 `json:"threshold"`
+	Total uint8 `json:"total"`
 }
 
 type Share struct {
@@ -72,14 +72,13 @@ func TOPRFGenerateThresholdKeys(params []byte) []byte {
 		panic(err)
 	}
 
-	threshold := inputParams.Threshold
 	nodes := inputParams.Total
 
-	if threshold >= nodes {
-		panic("threshold must be smaller than nodes")
+	if toprf.Threshold >= nodes {
+		panic("threshold must be smaller than number of nodes ")
 	}
 
-	keyParams := utils.TOPRFGenerateSharedKey(int(nodes), int(threshold))
+	keyParams := utils.TOPRFGenerateSharedKey(int(nodes), toprf.Threshold)
 	shareParams := make([]*Share, nodes)
 	for i, share := range keyParams.Shares {
 		shareParams[i] = &Share{

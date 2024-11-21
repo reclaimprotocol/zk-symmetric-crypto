@@ -152,8 +152,8 @@ func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 	if len(nonce) != 12 {
 		log.Panicf("nonce length must be 12: %d", len(nonce))
 	}
-	if len(input) != 64 {
-		log.Panicf("input length must be 64: %d", len(input))
+	if len(input) != aes_v2.BLOCKS*16 {
+		log.Panicf("input length must be %d: %d", aes_v2.BLOCKS*16, len(input))
 	}
 
 	block, err := aes.NewCipher(key)

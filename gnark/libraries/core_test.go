@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
+	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
 	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
 	"gnark-symmetric-crypto/circuits/toprf"
 	prover "gnark-symmetric-crypto/libraries/prover/impl"
@@ -113,7 +114,7 @@ func TestFullAES256(t *testing.T) {
 	assert.True(prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs))
 	bKey := make([]byte, 32)
 	bNonce := make([]byte, 12)
-	bPt := make([]byte, 64)
+	bPt := make([]byte, aes_v2.BLOCKS*16)
 	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
 	counter := uint32(tmp.Uint64())
 
@@ -157,7 +158,7 @@ func TestFullAES128(t *testing.T) {
 	assert.True(prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs))
 	bKey := make([]byte, 16)
 	bNonce := make([]byte, 12)
-	bPt := make([]byte, 64)
+	bPt := make([]byte, aes_v2.BLOCKS*16)
 	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
 	counter := uint32(tmp.Uint64())
 

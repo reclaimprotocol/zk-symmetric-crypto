@@ -35,32 +35,32 @@ var algorithmNames = map[uint8]string{
 
 var provers = map[string]*ProverParams{
 	"chacha20": {
-		KeyHash:     "78ab307e3d5065d21b2c068824286054846724e5f1f868cd22ed273902b9c440",
+		KeyHash:     "bf4901012e00a7517a6da2e4c4d3922d90051609726c8488b2a6045b030e44eb",
 		CircuitHash: "4aa80775a6721404bf8f82fd2d78d335fabbdf517762b82a7d13e6d2446c49bf",
 		Prover:      &ChaChaProver{},
 	},
 	"aes-128-ctr": {
-		KeyHash:     "7f89cf1ef3476069ed1c107abbe02080d5eecd50ebd0ff3a858d9f557cf0ae7d",
-		CircuitHash: "e59bd07d4450f98663b62a2ef06b2d7de4044601c755c74da7dde3cb0a6e8893",
+		KeyHash:     "a3c41ab381f31a0820817a8d2e928f276487da3bf3e61285791689388af27017",
+		CircuitHash: "b1ee478f009fe81946e6e2768ef0b6d62ab266525f186baaa4e8dec61b6e3ea6",
 		Prover:      &AESProver{},
 	},
 	"aes-256-ctr": {
-		KeyHash:     "233d52d78ef5ff9f9e8d97d238524acdbaf007121d56bcd7b26b72df74488fc0",
-		CircuitHash: "32c0eeb1c59c45b05eeefa00f637a4d02b208990ae1ff33b62d85c8bcef73b2d",
+		KeyHash:     "94a9df9edad28462f1d523b191c9caf3aa07751ca5f5e4cf458614f1fc72c198",
+		CircuitHash: "e62f8e74b17cad4012513cf23971ddf58faa63a4a87676047bccd255021dee13",
 		Prover:      &AESProver{},
 	},
 	"chacha20-toprf": {
-		KeyHash:     "75386aa3fd0cb51a74d02df3e1a66b60edb11a8925a89a5bfd8d3333106f6ce0",
+		KeyHash:     "14ee5e7b36ce6b47ee4e344deafd7573a8dc9554f899f410328764a84c77f719",
 		CircuitHash: "b5fbd1900eabb8e3a12cf0896cfd7f5b2b6290d536e0f6bd7b9eb09caf9c0f7e",
 		Prover:      &ChaChaOPRFProver{},
 	},
 	"aes-128-ctr-toprf": {
-		KeyHash:     "c74414b5417a01d795a28d4cb78bc64f2597690a09bd35c333198636a558eab6",
+		KeyHash:     "a8171697bc39e84446f27652ccd6d2dfca1829e93833780068a8e0e16e44410a",
 		CircuitHash: "38dfce7e54a8872035c5b67e70cf74aaf6b2cc37a5ea2b7f86bea1191e7647b0",
 		Prover:      &AESOPRFProver{},
 	},
 	"aes-256-ctr-toprf": {
-		KeyHash:     "d8a32865925a2bbe85976a1ab44fb7bd78ded2998c277f051ce0859086e440dd",
+		KeyHash:     "e9259ca30016f85e4c9377aee4524ebaf8af8d54e045a1d4753b04ceada68c08",
 		CircuitHash: "182e1cfabfdddbf91bf475544f173e74b48d40debef1e85bcf02068ffee08c97",
 		Prover:      &AESOPRFProver{},
 	},

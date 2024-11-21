@@ -7,7 +7,7 @@ import (
 	"github.com/consensys/gnark/std/lookup/logderivlookup"
 )
 
-const BLOCKS = 4
+const BLOCKS = 5
 const NB = 4
 
 type AESWrapper struct {

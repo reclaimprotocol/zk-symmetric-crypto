@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
 	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
 	"gnark-symmetric-crypto/circuits/chachaV3"
 	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
@@ -17,19 +18,6 @@ import (
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/std/algebra/native/twistededwards"
 )
-
-const AES_BLOCKS = 4
-
-type AESWrapper struct {
-	Nonce   [12]frontend.Variable              `gnark:",public"`
-	Counter frontend.Variable                  `gnark:",public"`
-	In      [AES_BLOCKS * 16]frontend.Variable `gnark:",public"`
-	Out     [AES_BLOCKS * 16]frontend.Variable `gnark:",public"`
-}
-
-func (circuit *AESWrapper) Define(_ frontend.API) error {
-	return nil
-}
 
 type Verifier interface {
 	Verify(proof []byte, publicSignals []uint8) bool
@@ -89,16 +77,20 @@ type AESVerifier struct {
 
 func (av *AESVerifier) Verify(bProof []byte, publicSignals []uint8) bool {
 
-	if len(publicSignals) != 128+12+4 { // plaintext, nonce, counter, ciphertext
+	bytesPerInput := aes_v2.BLOCKS * 16
+
+	if len(publicSignals) != bytesPerInput*2+12+4 { // plaintext, nonce, counter, ciphertext
 		return false
 	}
 
-	ciphertext := publicSignals[:64]
-	plaintext := publicSignals[64+12+4:]
-	nonce := publicSignals[64 : 64+12]
-	bCounter := publicSignals[64+12 : 64+12+4]
+	ciphertext := publicSignals[:bytesPerInput]
+	plaintext := publicSignals[bytesPerInput+12+4:]
+	nonce := publicSignals[bytesPerInput : bytesPerInput+12]
+	bCounter := publicSignals[bytesPerInput+12 : bytesPerInput+12+4]
 
-	witness := &AESWrapper{}
+	witness := &aes_v2.AESWrapper{
+		Key: make([]frontend.Variable, 1), // avoid warnings
+	}
 
 	for i := 0; i < len(plaintext); i++ {
 		witness.In[i] = plaintext[i]

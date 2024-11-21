@@ -33,13 +33,13 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 	},
 	'aes-256-ctr': {
 		index: 2,
-		chunkSize: 64,
+		chunkSize: 80,
 		bitsPerWord: 8,
 		keySizeBytes: 32,
 		ivSizeBytes: 12,
 		startCounter: 2,
 		// num of blocks per chunk
-		blocksPerChunk: 4,
+		blocksPerChunk: 5,
 		// AES circuit uses BE encoding
 		isLittleEndian: false,
 		uint8ArrayToBits,
@@ -48,13 +48,13 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 	},
 	'aes-128-ctr': {
 		index: 1,
-		chunkSize: 64,
+		chunkSize: 80,
 		bitsPerWord: 8,
 		keySizeBytes: 16,
 		ivSizeBytes: 12,
 		startCounter: 2,
 		// num of blocks per chunk
-		blocksPerChunk: 4,
+		blocksPerChunk: 5,
 		// AES circuit uses BE encoding
 		isLittleEndian: false,
 		uint8ArrayToBits,

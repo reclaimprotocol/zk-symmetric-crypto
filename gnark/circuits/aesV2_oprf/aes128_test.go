@@ -46,14 +46,12 @@ func TestAES128(t *testing.T) {
 
 	witness := createWitness(d, keyAssign, nonceAssign, Counter, ciphertext, plaintext, pos, len(secretBytes))
 
-	assert.CheckCircuit(&AES128Wrapper{
-		AESWrapper{
-			Key:     make([]frontend.Variable, 16),
-			Counter: Counter,
-			Nonce:   [12]frontend.Variable{},
-			In:      [BLOCKS * 16]frontend.Variable{},
-			Out:     [BLOCKS * 16]frontend.Variable{},
-		},
+	assert.CheckCircuit(&AESWrapper{
+		Key:     make([]frontend.Variable, 16),
+		Counter: Counter,
+		Nonce:   [12]frontend.Variable{},
+		In:      [BLOCKS * 16]frontend.Variable{},
+		Out:     [BLOCKS * 16]frontend.Variable{},
 	}, test.WithValidAssignment(&witness), test.WithCurves(ecc.BN254))
 
 	r1css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &witness)
@@ -72,26 +70,23 @@ func mustHex(s string) []byte {
 	return b
 }
 
-func createWitness(d *toprf.TOPRFParams, bKey []uint8, bNonce []uint8, counter int, ciphertext []byte, plaintext []byte, pos, l int) AES128Wrapper {
-	witness := AES128Wrapper{
-
-		AESWrapper{
-			Key:     make([]frontend.Variable, 16),
-			Nonce:   [12]frontend.Variable{},
-			Counter: counter,
-			In:      [BLOCKS * 16]frontend.Variable{},
-			Out:     [BLOCKS * 16]frontend.Variable{},
-			Len:     l,
-			TOPRF: TOPRFData{
-				Mask:              d.Mask,
-				DomainSeparator:   d.DomainSeparator,
-				EvaluatedElements: d.Responses,
-				Coefficients:      d.Coefficients,
-				Output:            d.Output,
-				PublicKeys:        d.SharePublicKeys,
-				C:                 d.C,
-				R:                 d.R,
-			},
+func createWitness(d *toprf.TOPRFParams, bKey []uint8, bNonce []uint8, counter int, ciphertext []byte, plaintext []byte, pos, l int) AESWrapper {
+	witness := AESWrapper{
+		Key:     make([]frontend.Variable, 16),
+		Nonce:   [12]frontend.Variable{},
+		Counter: counter,
+		In:      [BLOCKS * 16]frontend.Variable{},
+		Out:     [BLOCKS * 16]frontend.Variable{},
+		Len:     l,
+		TOPRF: TOPRFData{
+			Mask:              d.Mask,
+			DomainSeparator:   d.DomainSeparator,
+			EvaluatedElements: d.Responses,
+			Coefficients:      d.Coefficients,
+			Output:            d.Output,
+			PublicKeys:        d.SharePublicKeys,
+			C:                 d.C,
+			R:                 d.R,
 		},
 	}
 

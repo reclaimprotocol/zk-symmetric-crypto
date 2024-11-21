@@ -38,14 +38,12 @@ func TestAES128(t *testing.T) {
 	nonceAssign := StrToIntSlice(Nonce, true)
 
 	// witness values preparation
-	assignment := AES128Wrapper{
-		AESWrapper{
-			Key:     make([]frontend.Variable, 16),
-			Counter: Counter,
-			Nonce:   [12]frontend.Variable{},
-			In:      [BLOCKS * 16]frontend.Variable{},
-			Out:     [BLOCKS * 16]frontend.Variable{},
-		},
+	assignment := AESWrapper{
+		Key:     make([]frontend.Variable, 16),
+		Counter: Counter,
+		Nonce:   [12]frontend.Variable{},
+		In:      [BLOCKS * 16]frontend.Variable{},
+		Out:     [BLOCKS * 16]frontend.Variable{},
 	}
 
 	// assign values here because required to use make in assignment
@@ -63,14 +61,12 @@ func TestAES128(t *testing.T) {
 		assignment.Nonce[i] = nonceAssign[i]
 	}
 
-	assert.CheckCircuit(&AES128Wrapper{
-		AESWrapper{
-			Key:     make([]frontend.Variable, 16),
-			Counter: Counter,
-			Nonce:   [12]frontend.Variable{},
-			In:      [BLOCKS * 16]frontend.Variable{},
-			Out:     [BLOCKS * 16]frontend.Variable{},
-		},
+	assert.CheckCircuit(&AESWrapper{
+		Key:     make([]frontend.Variable, 16),
+		Counter: Counter,
+		Nonce:   [12]frontend.Variable{},
+		In:      [BLOCKS * 16]frontend.Variable{},
+		Out:     [BLOCKS * 16]frontend.Variable{},
 	}, test.WithValidAssignment(&assignment))
 }
 
@@ -101,10 +97,8 @@ func mustHex(s string) []byte {
 func TestCompile(t *testing.T) {
 	curve := ecc.BN254.ScalarField()
 
-	witness := AES128Wrapper{
-		AESWrapper: AESWrapper{
-			Key: make([]frontend.Variable, 16),
-		},
+	witness := AESWrapper{
+		Key: make([]frontend.Variable, 16),
 	}
 
 	r1css, err := frontend.Compile(curve, r1cs.NewBuilder, &witness)

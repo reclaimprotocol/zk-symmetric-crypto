@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
+	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
 	"gnark-symmetric-crypto/circuits/chachaV3"
 	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
 	"regexp"
@@ -35,6 +36,16 @@ var algMappings = map[string]*algCircuit{
 		AESWrapper: aes_v2.AESWrapper{
 			Key: make([]frontend.Variable, 32)}}},
 	"chacha20_oprf": {"chacha20-toprf", &chachaV3_oprf.ChachaTOPRFCircuit{TOPRF: chachaV3_oprf.TOPRFData{}}},
+	"aes128_oprf": {"aes-128-ctr-oprf", &aes_v2_oprf.AES128Wrapper{
+		AESWrapper: aes_v2_oprf.AESWrapper{
+			Key:   make([]frontend.Variable, 16),
+			TOPRF: aes_v2_oprf.TOPRFData{},
+		}}},
+	"aes256_oprf": {"aes-256-ctr-oprf", &aes_v2_oprf.AES256Wrapper{
+		AESWrapper: aes_v2_oprf.AESWrapper{
+			Key:   make([]frontend.Variable, 32),
+			TOPRF: aes_v2_oprf.TOPRFData{},
+		}}},
 }
 
 func main() {

@@ -35,7 +35,7 @@ type TOPRFParams struct {
 	Responses       []*TOPRFResponse `json:"responses"`
 }
 
-type InputChachaTOPRFParams struct {
+type InputTOPRFParams struct {
 	Nonce   []uint8      `json:"nonce"`
 	Counter uint32       `json:"counter"`
 	Input   []uint8      `json:"input"` // usually it's redacted ciphertext
@@ -55,6 +55,12 @@ var vkAES256Embedded []byte
 
 //go:embed generated/vk.chacha20_oprf
 var vkChachaOPRFEmbedded []byte
+
+//go:embed generated/vk.aes128_oprf
+var vkAES128OPRFEmbedded []byte
+
+//go:embed generated/vk.aes256_oprf
+var vkAES256OPRFEmbedded []byte
 
 func init() {
 	logger.Disable()
@@ -90,6 +96,22 @@ func init() {
 	}
 
 	verifiers["chacha20-toprf"] = &ChachaOPRFVerifier{vk: vk}
+
+	vk = groth16.NewVerifyingKey(ecc.BN254)
+	_, err = vk.ReadFrom(bytes.NewBuffer(vkAES128OPRFEmbedded))
+	if err != nil {
+		panic(err)
+	}
+
+	verifiers["aes-128-ctr-toprf"] = &AESOPRFVerifier{vk: vk}
+
+	vk = groth16.NewVerifyingKey(ecc.BN254)
+	_, err = vk.ReadFrom(bytes.NewBuffer(vkAES256OPRFEmbedded))
+	if err != nil {
+		panic(err)
+	}
+
+	verifiers["aes-256-ctr-toprf"] = &AESOPRFVerifier{vk: vk}
 }
 
 func Verify(params []byte) (res bool) {

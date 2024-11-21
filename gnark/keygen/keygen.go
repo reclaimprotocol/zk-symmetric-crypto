@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
+	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
 	"gnark-symmetric-crypto/circuits/chachaV3"
 	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
 	"regexp"
@@ -27,14 +28,12 @@ type algCircuit struct {
 }
 
 var algMappings = map[string]*algCircuit{
-	"chacha20": {"chacha20", &chachaV3.ChaChaCircuit{}},
-	"aes128": {"aes-128-ctr", &aes_v2.AES128Wrapper{
-		AESWrapper: aes_v2.AESWrapper{
-			Key: make([]frontend.Variable, 16)}}},
-	"aes256": {"aes-256-ctr", &aes_v2.AES256Wrapper{
-		AESWrapper: aes_v2.AESWrapper{
-			Key: make([]frontend.Variable, 32)}}},
+	"chacha20":      {"chacha20", &chachaV3.ChaChaCircuit{}},
+	"aes128":        {"aes-128-ctr", &aes_v2.AESWrapper{Key: make([]frontend.Variable, 16)}},
+	"aes256":        {"aes-256-ctr", &aes_v2.AESWrapper{Key: make([]frontend.Variable, 32)}},
 	"chacha20_oprf": {"chacha20-toprf", &chachaV3_oprf.ChachaTOPRFCircuit{TOPRF: chachaV3_oprf.TOPRFData{}}},
+	"aes128_oprf":   {"aes-128-ctr-toprf", &aes_v2_oprf.AESWrapper{Key: make([]frontend.Variable, 16), TOPRF: aes_v2_oprf.TOPRFData{}}},
+	"aes256_oprf":   {"aes-256-ctr-toprf", &aes_v2_oprf.AESWrapper{Key: make([]frontend.Variable, 32), TOPRF: aes_v2_oprf.TOPRFData{}}},
 }
 
 func main() {

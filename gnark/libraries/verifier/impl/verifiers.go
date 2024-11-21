@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
 	"gnark-symmetric-crypto/circuits/chachaV3"
 	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
 	"gnark-symmetric-crypto/circuits/toprf"
@@ -136,7 +137,7 @@ type ChachaOPRFVerifier struct {
 }
 
 func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
-	var iParams *InputChachaTOPRFParams
+	var iParams *InputTOPRFParams
 	err := json.Unmarshal(publicSignals, &iParams)
 	if err != nil {
 		fmt.Println(err)
@@ -193,6 +194,94 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 	copy(witness.In[:], utils.BytesToUint32BEBits(iParams.Input))
 	copy(witness.Nonce[:], nonce)
 	witness.Counter = counter
+
+	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	witness.Len = oprf.Len
+
+	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	gProof := groth16.NewProof(ecc.BN254)
+	_, err = gProof.ReadFrom(bytes.NewBuffer(proof))
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	err = groth16.Verify(gProof, cv.vk, wtns)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return err == nil
+}
+
+type AESOPRFVerifier struct {
+	vk groth16.VerifyingKey
+}
+
+func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
+	var iParams *InputTOPRFParams
+	err := json.Unmarshal(publicSignals, &iParams)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	oprf := iParams.TOPRF
+	if oprf == nil || oprf.Responses == nil {
+		fmt.Println("TOPRF params are empty")
+		return false
+	}
+
+	resps := oprf.Responses
+	if len(resps) != toprf.Threshold {
+		fmt.Println("TOPRF params are invalid")
+		return false
+	}
+
+	var nodePublicKeys [toprf.Threshold]twistededwards.Point
+	var evals [toprf.Threshold]twistededwards.Point
+	var cs [toprf.Threshold]frontend.Variable
+	var rs [toprf.Threshold]frontend.Variable
+	var coeffs [toprf.Threshold]frontend.Variable
+
+	idxs := make([]int, toprf.Threshold)
+	for i := 0; i < toprf.Threshold; i++ {
+		idxs[i] = int(resps[i].Index)
+	}
+
+	for i := 0; i < toprf.Threshold; i++ {
+		resp := resps[i]
+		nodePublicKeys[i] = utils.UnmarshalPoint(resp.PublicKeyShare)
+		evals[i] = utils.UnmarshalPoint(resp.Evaluated)
+		cs[i] = new(big.Int).SetBytes(resp.C)
+		rs[i] = new(big.Int).SetBytes(resp.R)
+		coeffs[i] = utils.Coeff(idxs[i], idxs)
+	}
+
+	witness := &aes_v2_oprf.AESWrapper{
+		Key: make([]frontend.Variable, 1), // to avoid warnings
+		TOPRF: aes_v2_oprf.TOPRFData{
+			DomainSeparator:   new(big.Int).SetBytes(oprf.DomainSeparator),
+			EvaluatedElements: evals,
+			Coefficients:      coeffs,
+			PublicKeys:        nodePublicKeys,
+			C:                 cs,
+			R:                 rs,
+			Output:            new(big.Int).SetBytes(oprf.Output),
+		},
+	}
+
+	for i := 0; i < len(iParams.Nonce); i++ {
+		witness.Nonce[i] = iParams.Nonce[i]
+	}
+	for i := 0; i < len(iParams.Input); i++ {
+		witness.In[i] = iParams.Input[i]
+	}
+
+	witness.Counter = iParams.Counter
 
 	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
 	witness.Len = oprf.Len

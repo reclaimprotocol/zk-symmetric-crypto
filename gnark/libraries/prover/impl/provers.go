@@ -6,6 +6,8 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
+	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
 	"gnark-symmetric-crypto/circuits/chachaV3"
 	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
 	"gnark-symmetric-crypto/circuits/toprf"
@@ -51,18 +53,6 @@ type InputParams struct {
 	Counter uint32       `json:"counter"`
 	Input   []uint8      `json:"input"` // usually it's redacted ciphertext
 	TOPRF   *TOPRFParams `json:"toprf,omitempty"`
-}
-
-type AESWrapper struct {
-	Key     []frontend.Variable
-	Nonce   [12]frontend.Variable              `gnark:",public"`
-	Counter frontend.Variable                  `gnark:",public"`
-	In      [AES_BLOCKS * 16]frontend.Variable `gnark:",public"`
-	Out     [AES_BLOCKS * 16]frontend.Variable `gnark:",public"`
-}
-
-func (circuit *AESWrapper) Define(_ frontend.API) error {
-	return nil
 }
 
 type Prover interface {
@@ -176,7 +166,7 @@ func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 	ctr := cipher.NewCTR(block, append(nonce, binary.BigEndian.AppendUint32(nil, counter)...))
 	ctr.XORKeyStream(output, input)
 
-	circuit := &AESWrapper{
+	circuit := &aes_v2.AESWrapper{
 		Key: make([]frontend.Variable, len(key)),
 	}
 
@@ -313,4 +303,104 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 		panic(err)
 	}
 	return buf.Bytes(), nil
+}
+
+type AESOPRFProver struct {
+	baseProver
+}
+
+func (ap *AESOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.ProvingKey) {
+	ap.r1cs = r1cs
+	ap.pk = pk
+}
+func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
+
+	key, nonce, counter, input, oprf := params.Key, params.Nonce, params.Counter, params.Input, params.TOPRF
+
+	if len(key) != 32 && len(key) != 16 {
+		log.Panicf("key length must be 16 or 32: %d", len(key))
+	}
+	if len(nonce) != 12 {
+		log.Panicf("nonce length must be 12: %d", len(nonce))
+	}
+	if len(input) != aes_v2_oprf.BLOCKS*16 {
+		log.Panicf("input length must be %d: %d", aes_v2_oprf.BLOCKS*16, len(input))
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	output = make([]byte, len(input))
+
+	ctr := cipher.NewCTR(block, append(nonce, binary.BigEndian.AppendUint32(nil, counter)...))
+	ctr.XORKeyStream(output, input)
+
+	var resps [toprf.Threshold]twistededwards.Point
+	var coeffs [toprf.Threshold]frontend.Variable
+	var pubKeys [toprf.Threshold]twistededwards.Point
+	var cs [toprf.Threshold]frontend.Variable
+	var rs [toprf.Threshold]frontend.Variable
+	idxs := make([]int, toprf.Threshold)
+	for i := 0; i < toprf.Threshold; i++ {
+		r := oprf.Responses[i]
+		idxs[i] = int(r.Index)
+		resps[i] = utils.UnmarshalTBNPoint(r.Evaluated)
+		pubKeys[i] = utils.UnmarshalTBNPoint(r.PublicKeyShare)
+		cs[i] = new(big.Int).SetBytes(r.C)
+		rs[i] = new(big.Int).SetBytes(r.R)
+	}
+
+	for i := 0; i < toprf.Threshold; i++ {
+		coeffs[i] = utils.Coeff(idxs[i], idxs)
+	}
+
+	circuit := &aes_v2_oprf.AESWrapper{
+		Key: make([]frontend.Variable, len(key)),
+		TOPRF: aes_v2_oprf.TOPRFData{
+			DomainSeparator:   new(big.Int).SetBytes(oprf.DomainSeparator),
+			Mask:              new(big.Int).SetBytes(oprf.Mask),
+			Output:            new(big.Int).SetBytes(oprf.Output),
+			EvaluatedElements: resps,
+			Coefficients:      coeffs,
+			PublicKeys:        pubKeys,
+			C:                 cs,
+			R:                 rs,
+		},
+	}
+
+	utils.SetBitmask(circuit.Bitmask[:], oprf.Pos, oprf.Len)
+	circuit.Len = oprf.Len
+
+	circuit.Counter = counter
+
+	for i := 0; i < len(key); i++ {
+		circuit.Key[i] = key[i]
+	}
+	for i := 0; i < len(nonce); i++ {
+		circuit.Nonce[i] = nonce[i]
+	}
+	for i := 0; i < len(input); i++ {
+		circuit.In[i] = input[i]
+	}
+	for i := 0; i < len(output); i++ {
+		circuit.Out[i] = output[i]
+	}
+
+	wtns, err := frontend.NewWitness(circuit, ecc.BN254.ScalarField())
+	if err != nil {
+		panic(err)
+	}
+	gProof, err := groth16.Prove(ap.r1cs, ap.pk, wtns)
+	if err != nil {
+		panic(err)
+	}
+	buf := &bytes.Buffer{}
+	_, err = gProof.WriteTo(buf)
+	if err != nil {
+		panic(err)
+	}
+
+	return buf.Bytes(), output
 }

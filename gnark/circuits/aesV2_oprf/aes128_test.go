@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
 	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
 	"testing"
@@ -19,7 +20,7 @@ import (
 func TestAES128(t *testing.T) {
 	assert := test.NewAssert(t)
 
-	key := "7E24067817FAE0D743D6CE1F32539163"
+	key := mustHex("7E24067817FAE0D743D6CE1F32539163")
 	Nonce := "006CB6DBC0543B59DA48D90B"
 
 	secretStr := "00000000001111111111000000000011000000000011111111110000000000" // max 62 bytes
@@ -29,11 +30,11 @@ func TestAES128(t *testing.T) {
 
 	pos := 18
 	Counter := 12345
-	plaintext := make([]byte, BLOCKS*16)
+	plaintext := make([]byte, aes_v2.BLOCKS*16)
 	copy(plaintext[pos:], secretBytes)
 
 	// calculate ciphertext ourselves
-	block, err := aes.NewCipher(mustHex(key))
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		panic(err)
 	}
@@ -41,18 +42,15 @@ func TestAES128(t *testing.T) {
 	ciphertext := make([]byte, len(plaintext))
 	ctr.XORKeyStream(ciphertext, plaintext)
 
-	keyAssign := mustHex(key)
 	nonceAssign := mustHex(Nonce)
 
-	witness := createWitness(d, keyAssign, nonceAssign, Counter, ciphertext, plaintext, pos, len(secretBytes))
+	witness := createWitness(d, key, nonceAssign, Counter, ciphertext, plaintext, pos, len(secretBytes))
 
-	assert.CheckCircuit(&AESWrapper{
-		Key:     make([]frontend.Variable, 16),
-		Counter: Counter,
-		Nonce:   [12]frontend.Variable{},
-		In:      [BLOCKS * 16]frontend.Variable{},
-		Out:     [BLOCKS * 16]frontend.Variable{},
-	}, test.WithValidAssignment(&witness), test.WithCurves(ecc.BN254))
+	vKey := make([]frontend.Variable, len(key))
+	for i := 0; i < len(vKey); i++ {
+		vKey[i] = key[i]
+	}
+	assert.CheckCircuit(&witness, test.WithValidAssignment(&witness), test.WithCurves(ecc.BN254))
 
 	r1css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &witness)
 	if err != nil {
@@ -70,23 +68,26 @@ func mustHex(s string) []byte {
 	return b
 }
 
-func createWitness(d *toprf.TOPRFParams, bKey []uint8, bNonce []uint8, counter int, ciphertext []byte, plaintext []byte, pos, l int) AESWrapper {
-	witness := AESWrapper{
-		Key:     make([]frontend.Variable, 16),
-		Nonce:   [12]frontend.Variable{},
-		Counter: counter,
-		In:      [BLOCKS * 16]frontend.Variable{},
-		Out:     [BLOCKS * 16]frontend.Variable{},
-		Len:     l,
-		TOPRF: TOPRFData{
-			Mask:              d.Mask,
-			DomainSeparator:   d.DomainSeparator,
-			EvaluatedElements: d.Responses,
-			Coefficients:      d.Coefficients,
-			Output:            d.Output,
-			PublicKeys:        d.SharePublicKeys,
-			C:                 d.C,
-			R:                 d.R,
+func createWitness(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int, ciphertext []byte, plaintext []byte, pos, l int) AESTOPRFCircuit {
+	witness := AESTOPRFCircuit{
+		AESBaseCircuit: aes_v2.AESBaseCircuit{
+			Key:     make([]frontend.Variable, 16),
+			Counter: counter,
+			Nonce:   [12]frontend.Variable{},
+			In:      [aes_v2.BLOCKS * 16]frontend.Variable{},
+		},
+		Out: [aes_v2.BLOCKS * 16]frontend.Variable{},
+		Len: l,
+		TOPRF: toprf.Params{
+			SecretData:      [2]frontend.Variable{0, 0}, // will be rewritten inside
+			Mask:            d.Mask,
+			DomainSeparator: d.DomainSeparator,
+			Responses:       d.Responses,
+			Coefficients:    d.Coefficients,
+			Output:          d.Output,
+			SharePublicKeys: d.SharePublicKeys,
+			C:               d.C,
+			R:               d.R,
 		},
 	}
 

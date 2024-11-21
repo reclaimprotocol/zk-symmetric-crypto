@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
+	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
 	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
 	"testing"
@@ -29,7 +30,7 @@ func TestAES256(t *testing.T) {
 
 	pos := 30
 	Counter := 12345
-	plaintext := make([]byte, BLOCKS*16)
+	plaintext := make([]byte, aes_v2.BLOCKS*16)
 	copy(plaintext[pos:], secretBytes)
 
 	// calculate ciphertext ourselves
@@ -46,13 +47,7 @@ func TestAES256(t *testing.T) {
 
 	witness := createWitness256(d, keyAssign, nonceAssign, Counter, ciphertext, plaintext, pos, len(secretBytes))
 
-	assert.CheckCircuit(&AESWrapper{
-		Key:     make([]frontend.Variable, 32),
-		Counter: Counter,
-		Nonce:   [12]frontend.Variable{},
-		In:      [BLOCKS * 16]frontend.Variable{},
-		Out:     [BLOCKS * 16]frontend.Variable{},
-	}, test.WithValidAssignment(&witness), test.WithCurves(ecc.BN254))
+	assert.CheckCircuit(&witness, test.WithValidAssignment(&witness), test.WithCurves(ecc.BN254))
 
 	r1css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &witness)
 	if err != nil {
@@ -62,23 +57,26 @@ func TestAES256(t *testing.T) {
 	fmt.Printf("constraints: %d\n", r1css.GetNbConstraints())
 }
 
-func createWitness256(d *toprf.TOPRFParams, bKey []uint8, bNonce []uint8, counter int, ciphertext []byte, plaintext []byte, pos, l int) AESWrapper {
-	witness := AESWrapper{
-		Key:     make([]frontend.Variable, 32),
-		Nonce:   [12]frontend.Variable{},
-		Counter: counter,
-		In:      [BLOCKS * 16]frontend.Variable{},
-		Out:     [BLOCKS * 16]frontend.Variable{},
-		Len:     l,
-		TOPRF: TOPRFData{
-			Mask:              d.Mask,
-			DomainSeparator:   d.DomainSeparator,
-			EvaluatedElements: d.Responses,
-			Coefficients:      d.Coefficients,
-			Output:            d.Output,
-			PublicKeys:        d.SharePublicKeys,
-			C:                 d.C,
-			R:                 d.R,
+func createWitness256(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int, ciphertext []byte, plaintext []byte, pos, l int) AESTOPRFCircuit {
+	witness := AESTOPRFCircuit{
+		AESBaseCircuit: aes_v2.AESBaseCircuit{
+			Key:     make([]frontend.Variable, 32),
+			Counter: counter,
+			Nonce:   [12]frontend.Variable{},
+			In:      [aes_v2.BLOCKS * 16]frontend.Variable{},
+		},
+		Out: [aes_v2.BLOCKS * 16]frontend.Variable{},
+		Len: l,
+		TOPRF: toprf.Params{
+			SecretData:      [2]frontend.Variable{0, 0}, // will be rewritten inside
+			Mask:            d.Mask,
+			DomainSeparator: d.DomainSeparator,
+			Responses:       d.Responses,
+			Coefficients:    d.Coefficients,
+			Output:          d.Output,
+			SharePublicKeys: d.SharePublicKeys,
+			C:               d.C,
+			R:               d.R,
 		},
 	}
 

@@ -27,8 +27,6 @@ func init() {
 	// std.RegisterHints()
 }
 
-const AES_BLOCKS = 4
-
 type TOPRFResponse struct {
 	Index          uint8   `json:"index"`
 	PublicKeyShare []byte  `json:"publicKeyShare"`
@@ -166,8 +164,10 @@ func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 	ctr := cipher.NewCTR(block, append(nonce, binary.BigEndian.AppendUint32(nil, counter)...))
 	ctr.XORKeyStream(output, input)
 
-	circuit := &aes_v2.AESWrapper{
-		Key: make([]frontend.Variable, len(key)),
+	circuit := &aes_v2.AESCircuit{
+		AESBaseCircuit: aes_v2.AESBaseCircuit{
+			Key: make([]frontend.Variable, len(key)),
+		},
 	}
 
 	circuit.Counter = counter
@@ -220,8 +220,8 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	if len(nonce) != 12 {
 		log.Panicf("nonce length must be 12: %d", len(nonce))
 	}
-	if len(input) != chachaV3_oprf.Blocks*64 {
-		log.Panicf("input length must be %d: %d", chachaV3_oprf.Blocks*64, len(input))
+	if len(input) != chachaV3.Blocks*64 {
+		log.Panicf("input length must be %d: %d", chachaV3.Blocks*64, len(input))
 	}
 
 	// calculate ciphertext ourselves
@@ -267,15 +267,16 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	}
 
 	witness := &chachaV3_oprf.ChachaTOPRFCircuit{
-		TOPRF: chachaV3_oprf.TOPRFData{
-			DomainSeparator:   new(big.Int).SetBytes(oprf.DomainSeparator),
-			Mask:              new(big.Int).SetBytes(oprf.Mask),
-			Output:            new(big.Int).SetBytes(oprf.Output),
-			EvaluatedElements: resps,
-			Coefficients:      coeffs,
-			PublicKeys:        pubKeys,
-			C:                 cs,
-			R:                 rs,
+		TOPRF: toprf.Params{
+			SecretData:      [2]frontend.Variable{0, 0}, // will be rewritten
+			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
+			Mask:            new(big.Int).SetBytes(oprf.Mask),
+			Output:          new(big.Int).SetBytes(oprf.Output),
+			Responses:       resps,
+			Coefficients:    coeffs,
+			SharePublicKeys: pubKeys,
+			C:               cs,
+			R:               rs,
 		},
 	}
 
@@ -323,8 +324,8 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	if len(nonce) != 12 {
 		log.Panicf("nonce length must be 12: %d", len(nonce))
 	}
-	if len(input) != aes_v2_oprf.BLOCKS*16 {
-		log.Panicf("input length must be %d: %d", aes_v2_oprf.BLOCKS*16, len(input))
+	if len(input) != aes_v2.BLOCKS*16 {
+		log.Panicf("input length must be %d: %d", aes_v2.BLOCKS*16, len(input))
 	}
 
 	block, err := aes.NewCipher(key)
@@ -356,17 +357,18 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 		coeffs[i] = utils.Coeff(idxs[i], idxs)
 	}
 
-	circuit := &aes_v2_oprf.AESWrapper{
-		Key: make([]frontend.Variable, len(key)),
-		TOPRF: aes_v2_oprf.TOPRFData{
-			DomainSeparator:   new(big.Int).SetBytes(oprf.DomainSeparator),
-			Mask:              new(big.Int).SetBytes(oprf.Mask),
-			Output:            new(big.Int).SetBytes(oprf.Output),
-			EvaluatedElements: resps,
-			Coefficients:      coeffs,
-			PublicKeys:        pubKeys,
-			C:                 cs,
-			R:                 rs,
+	circuit := &aes_v2_oprf.AESTOPRFCircuit{
+		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, len(key))},
+		TOPRF: toprf.Params{
+			SecretData:      [2]frontend.Variable{0, 0}, // will be rewritten
+			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
+			Mask:            new(big.Int).SetBytes(oprf.Mask),
+			Output:          new(big.Int).SetBytes(oprf.Output),
+			Responses:       resps,
+			Coefficients:    coeffs,
+			SharePublicKeys: pubKeys,
+			C:               cs,
+			R:               rs,
 		},
 	}
 

@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
-	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
 	"gnark-symmetric-crypto/circuits/toprf"
 	prover "gnark-symmetric-crypto/libraries/prover/impl"
 	verifier "gnark-symmetric-crypto/libraries/verifier/impl"
@@ -342,8 +341,8 @@ func TestFullAES128OPRF(t *testing.T) {
 	assert.True(prover.InitAlgorithm(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs))
 	bKey := make([]byte, 16)
 	bNonce := make([]byte, 12)
-	bOutput := make([]byte, aes_v2_oprf.BLOCKS*16) // circuit output is plaintext
-	bInput := make([]byte, aes_v2_oprf.BLOCKS*16)
+	bOutput := make([]byte, aes_v2.BLOCKS*16) // circuit output is plaintext
+	bInput := make([]byte, aes_v2.BLOCKS*16)
 	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
 	counter := uint32(tmp.Uint64())
 
@@ -482,8 +481,8 @@ func TestFullAES256OPRF(t *testing.T) {
 	assert.True(prover.InitAlgorithm(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs))
 	bKey := make([]byte, 32)
 	bNonce := make([]byte, 12)
-	bOutput := make([]byte, aes_v2_oprf.BLOCKS*16) // circuit output is plaintext
-	bInput := make([]byte, aes_v2_oprf.BLOCKS*16)
+	bOutput := make([]byte, aes_v2.BLOCKS*16) // circuit output is plaintext
+	bInput := make([]byte, aes_v2.BLOCKS*16)
 	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
 	counter := uint32(tmp.Uint64())
 

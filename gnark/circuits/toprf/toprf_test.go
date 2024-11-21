@@ -18,7 +18,7 @@ func TestTOPRF(t *testing.T) {
 	assert.NoError(err)
 
 	wtns := TOPRF{
-		TOPRFParams: testData,
+		Params: testData,
 	}
 
 	assert.CheckCircuit(&wtns, test.WithCurves(ecc.BN254), test.WithValidAssignment(&wtns))

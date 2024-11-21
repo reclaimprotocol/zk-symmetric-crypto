@@ -25,7 +25,7 @@ type TestData struct {
 	Proof      *Proof
 }
 
-func PrepareTestData(secretData string, domainSeparator string) (*TOPRFParams, error) {
+func PrepareTestData(secretData string, domainSeparator string) (*Params, error) {
 	req, err := utils.OPRFGenerateRequest([]byte(secretData), domainSeparator)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func PrepareTestData(secretData string, domainSeparator string) (*TOPRFParams, e
 		return nil, err
 	}
 
-	data := &TOPRFParams{
+	data := &Params{
 		SecretData:      [2]frontend.Variable{req.SecretElements[0], req.SecretElements[1]},
 		DomainSeparator: new(big.Int).SetBytes([]byte(domainSeparator)),
 		Output:          out,

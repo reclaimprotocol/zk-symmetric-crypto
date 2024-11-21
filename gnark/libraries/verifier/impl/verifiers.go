@@ -88,8 +88,8 @@ func (av *AESVerifier) Verify(bProof []byte, publicSignals []uint8) bool {
 	nonce := publicSignals[bytesPerInput : bytesPerInput+12]
 	bCounter := publicSignals[bytesPerInput+12 : bytesPerInput+12+4]
 
-	witness := &aes_v2.AESWrapper{
-		Key: make([]frontend.Variable, 1), // avoid warnings
+	witness := &aes_v2.AESCircuit{
+		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, 1)}, // avoid warnings
 	}
 
 	for i := 0; i < len(plaintext); i++ {
@@ -169,14 +169,14 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 	}
 
 	witness := &chachaV3_oprf.ChachaTOPRFCircuit{
-		TOPRF: chachaV3_oprf.TOPRFData{
-			DomainSeparator:   new(big.Int).SetBytes(oprf.DomainSeparator),
-			EvaluatedElements: evals,
-			Coefficients:      coeffs,
-			PublicKeys:        nodePublicKeys,
-			C:                 cs,
-			R:                 rs,
-			Output:            new(big.Int).SetBytes(oprf.Output),
+		TOPRF: toprf.Params{
+			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
+			Responses:       evals,
+			Coefficients:    coeffs,
+			SharePublicKeys: nodePublicKeys,
+			C:               cs,
+			R:               rs,
+			Output:          new(big.Int).SetBytes(oprf.Output),
 		},
 	}
 
@@ -253,16 +253,16 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		coeffs[i] = utils.Coeff(idxs[i], idxs)
 	}
 
-	witness := &aes_v2_oprf.AESWrapper{
-		Key: make([]frontend.Variable, 1), // to avoid warnings
-		TOPRF: aes_v2_oprf.TOPRFData{
-			DomainSeparator:   new(big.Int).SetBytes(oprf.DomainSeparator),
-			EvaluatedElements: evals,
-			Coefficients:      coeffs,
-			PublicKeys:        nodePublicKeys,
-			C:                 cs,
-			R:                 rs,
-			Output:            new(big.Int).SetBytes(oprf.Output),
+	witness := &aes_v2_oprf.AESTOPRFCircuit{
+		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, 1)}, // avoid warnings
+		TOPRF: toprf.Params{
+			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
+			Responses:       evals,
+			Coefficients:    coeffs,
+			SharePublicKeys: nodePublicKeys,
+			C:               cs,
+			R:               rs,
+			Output:          new(big.Int).SetBytes(oprf.Output),
 		},
 	}
 

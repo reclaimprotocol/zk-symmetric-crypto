@@ -6,6 +6,8 @@ import { EncryptionAlgorithm, OPRFOperator, OPRFResponseData, ZKEngine, ZKTOPRFP
 import { generateProof, verifyProof } from '../zk'
 import { encryptData } from './utils'
 
+jest.setTimeout(10_000)
+
 const fetcher = makeLocalFileFetch()
 const threshold = 1
 

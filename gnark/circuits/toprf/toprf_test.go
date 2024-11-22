@@ -14,11 +14,11 @@ import (
 
 func TestTOPRF(t *testing.T) {
 	assert := test.NewAssert(t)
-	testData, err := PrepareTestData("randomiiiiiiiiiiiiiizerrandomiiiiiiiiiiiiiizerrandomiiiiiiiiir", "")
-	assert.NoError(err)
+	testData, secretData := PrepareTestData("randomiiiiiiiiiiiiiizerrandomiiiiiiiiiiiiiizerrandomiiiiiiiiir", "")
 
 	wtns := TOPRF{
-		Params: testData,
+		Params:     testData,
+		SecretData: secretData,
 	}
 
 	assert.CheckCircuit(&wtns, test.WithCurves(ecc.BN254), test.WithValidAssignment(&wtns))

@@ -33,7 +33,5 @@ func (c *AESTOPRFCircuit) Define(api frontend.API) error {
 		}
 	}
 
-	c.TOPRF.SecretData = toprf.ExtractSecretElements(api, outBits, c.Bitmask[:], c.Len)
-
-	return toprf.VerifyTOPRF(api, &c.TOPRF)
+	return toprf.VerifyTOPRF(api, &c.TOPRF, toprf.ExtractSecretElements(api, outBits, c.Bitmask[:], c.Len))
 }

@@ -268,7 +268,6 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 
 	witness := &chachaV3_oprf.ChachaTOPRFCircuit{
 		TOPRF: toprf.Params{
-			SecretData:      [2]frontend.Variable{0, 0}, // will be rewritten
 			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
 			Mask:            new(big.Int).SetBytes(oprf.Mask),
 			Output:          new(big.Int).SetBytes(oprf.Output),
@@ -360,7 +359,6 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	circuit := &aes_v2_oprf.AESTOPRFCircuit{
 		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, len(key))},
 		TOPRF: toprf.Params{
-			SecretData:      [2]frontend.Variable{0, 0}, // will be rewritten
 			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
 			Mask:            new(big.Int).SetBytes(oprf.Mask),
 			Output:          new(big.Int).SetBytes(oprf.Output),

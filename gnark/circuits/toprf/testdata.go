@@ -25,10 +25,10 @@ type TestData struct {
 	Proof      *Proof
 }
 
-func PrepareTestData(secretData string, domainSeparator string) (*Params, error) {
+func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]frontend.Variable) {
 	req, err := utils.OPRFGenerateRequest([]byte(secretData), domainSeparator)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	// server secret
@@ -42,7 +42,7 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, error)
 
 	shares, err := utils.TOPRFCreateShares(nodes, threshold, sk)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	idxs := utils.PickRandomIndexes(nodes, threshold)
@@ -60,7 +60,7 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, error)
 		var resp *utils.OPRFResponse
 		resp, err = utils.OPRFEvaluate(shares[idx].PrivateKey, req.MaskedData)
 		if err != nil {
-			return nil, err
+			panic(err)
 		}
 
 		resps[i] = utils.OutPointToInPoint(resp.EvaluatedPoint)
@@ -74,16 +74,15 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, error)
 	// without TOPRF
 	resp, err := utils.OPRFEvaluate(sk, req.MaskedData)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	out, err := utils.OPRFFinalize(serverPublic, req, resp)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	data := &Params{
-		SecretData:      [2]frontend.Variable{req.SecretElements[0], req.SecretElements[1]},
 		DomainSeparator: new(big.Int).SetBytes([]byte(domainSeparator)),
 		Output:          out,
 		Mask:            req.Mask,
@@ -95,5 +94,5 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, error)
 	copy(data.C[:], cs)
 	copy(data.R[:], rs)
 
-	return data, nil
+	return data, [2]frontend.Variable{req.SecretElements[0], req.SecretElements[1]}
 }

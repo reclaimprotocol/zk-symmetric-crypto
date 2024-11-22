@@ -25,8 +25,7 @@ func TestAES128(t *testing.T) {
 
 	secretStr := "00000000001111111111000000000011000000000011111111110000000000" // max 62 bytes
 	secretBytes := []byte(secretStr)
-	d, err := toprf.PrepareTestData(secretStr, "reclaim")
-	assert.NoError(err)
+	d, _ := toprf.PrepareTestData(secretStr, "reclaim")
 
 	pos := 18
 	Counter := 12345
@@ -79,7 +78,6 @@ func createWitness(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int, c
 		Out: [aes_v2.BLOCKS * 16]frontend.Variable{},
 		Len: l,
 		TOPRF: toprf.Params{
-			SecretData:      [2]frontend.Variable{0, 0}, // will be rewritten inside
 			Mask:            d.Mask,
 			DomainSeparator: d.DomainSeparator,
 			Responses:       d.Responses,

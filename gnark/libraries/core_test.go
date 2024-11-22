@@ -620,7 +620,7 @@ func TestFullAES256OPRF(t *testing.T) {
 func Benchmark_ProveAES128(b *testing.B) {
 	prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs)
 	b.ResetTimer()
-	params := `{"cipher":"aes-128-ctr","key":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"nonce":[3,3,3,3,3,3,3,3,3,3,3,3],"counter":2,"input":[183,4,206,60,254,21,117,9,150,227,246,245,71,101,56,67,79,93,44,163,22,89,128,55,214,254,228,214,89,253,176,112,138,115,93,140,194,222,104,252,49,144,91,252,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}`
+	params := `{"cipher":"aes-128-ctr","key":"Ilqk8vMs/lrdrt9bEpM3qQ==","nonce":"/T8j2un1mcMh0Lt4","counter":298071680,"input":"mBiZrxJnp1ALlddPWenBt12YsVzSMFudhjbMC9rZtx//D0LMi5R8+/bzkKZgTaoxy3N0Gdgf5//U7kObAKBNE3votSHtiNhZUUZsoUvD5fw="}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -630,7 +630,7 @@ func Benchmark_ProveAES128(b *testing.B) {
 func Benchmark_ProveAES256(b *testing.B) {
 	prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs)
 	b.ResetTimer()
-	params := `{"cipher":"aes-256-ctr","key":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"nonce":[3,3,3,3,3,3,3,3,3,3,3,3],"counter":10,"input":[189,250,225,242,6,46,173,203,7,166,62,139,67,150,1,155,64,122,211,198,184,203,124,194,99,34,127,29,236,17,232,214,154,146,78,217,254,224,208,196,55,200,23,93,90,175,240,31,31,225,26,15,219,156,123,21,103,98,205,87,197,22,245,158]}`
+	params := `{"cipher":"aes-256-ctr","key":"D90Byc5KBESfgf52T5T+VbKIR56UCldsfD/k3QRq1FU=","nonce":"xaPdohzb+eNGkzhl","counter":2841725616,"input":"l4nng90p9WsrHCVYqIB0UoBPEOnZxigJ7qSGTRMU5nEgrXO7CpqmQov0p4eZ4bKJI3SvpgQ2jxqu+FJDjzINA9aI72YcXf4AYGtI8+sl/Ig="}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -640,7 +640,37 @@ func Benchmark_ProveAES256(b *testing.B) {
 func Benchmark_ProveChacha(b *testing.B) {
 	prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS)
 	b.ResetTimer()
-	params := `{"cipher":"chacha20","key":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"nonce":[3,3,3,3,3,3,3,3,3,3,3,3],"counter":3,"input":[163,247,229,146,174,218,21,7,167,245,27,53,129,45,252,80,162,99,213,166,210,223,98,94,86,59,2,228,156,8,191,48,208,231,72,63,91,19,255,7,149,50,34,78,232,251,195,26,177,137,155,24,228,83,211,109,151,147,168,53,94,176,222,233]}`
+	params := `{"cipher":"chacha20","key":"DAKfm7e+mFt0cCGacGmnDm5fVZ7UWyv7O53J27yePbs=","nonce":"I3zQZE9P8e7lXG6a","counter":1757507854,"input":"ShLAJduinXP+uOyxYoFNcUzR4c59QbcFed8YlIBPD3yRJhrVwB06tAIfP0TC2AUMztD7q60vAsK/at+WI9U0+fsgNDLhqI912HvyE1oUFm5XHpTC5VtVg1p0N4/ZjXaa7Wd9sWc2ty5eP8lEjGVzyRX6Goi+vygtkwh/1qJRc/I="}`
+	for i := 0; i < b.N; i++ {
+		prover.Prove([]byte(params))
+	}
+	b.ReportAllocs()
+}
+
+func Benchmark_ProveAES128OPRF(b *testing.B) {
+	prover.InitAlgorithm(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs)
+	b.ResetTimer()
+	params := `{"cipher":"aes-128-ctr-toprf","key":"ZAWxNb2AdgO39yzI14XsZA==","nonce":"LBsTWdRfQ2J7unF2","counter":2260824246,"input":"UTnKUAkCBrEYiC2tPMnGliYTdcbVFXrFhFRH3m3N5zl5XUhfljrNTdquVVeL2PleSc3w5m2ZI6kVePRaC/OWC8tQjwk4n7WpB8D4IpqQHSU=","toprf":{"pos":12,"len":14,"mask":"A1BXFdPv8/KMIWHKi5ayD+Ngj2x8CEqPIXaS94kBNxg=","domainSeparator":"cmVjbGFpbQ==","output":"IShCRuW+UON6xy/va104/4qxauCxbF/boK4SjbExTMM=","responses":[{"index":0,"publicKeyShare":"n/wRU9Jw6bMF/f+IwhF3SJmBQ9IevOCcNu6HOGV7NQg=","evaluated":"KhzfVQOJZfu7tacCPV82IzgmZsl9m4g931kTPvmg16Q=","c":"LeUBWWxMeLTK201i0QcyFEguuBwHOIkgWyebJHb4KuY=","r":"ATMhm3RUePybiYqj+dGM8OssXZPpkGXVeiNdoxKHhLY="}]}}`
+	for i := 0; i < b.N; i++ {
+		prover.Prove([]byte(params))
+	}
+	b.ReportAllocs()
+}
+
+func Benchmark_ProveAES256OPRF(b *testing.B) {
+	prover.InitAlgorithm(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs)
+	b.ResetTimer()
+	params := `{"cipher":"aes-256-ctr-toprf","key":"4IpME0BPXBIlVL7TdbRPktZVqqxQ+cUZaZN1ZQH+HXI=","nonce":"mMrCGydl9N4uwKxN","counter":4148389242,"input":"6DOHCarJBb8OdKf3cWakFKgn9BV/eVPQPaBlNwSRHA7GoGs6ijTygZwuBsYGbIw35q3U+OHyhD5M181U7Mx25uaFlZzbMr6xPp0LYk4YWuM=","toprf":{"pos":12,"len":14,"mask":"jiWalfzXdcn7geSk8UmfvaIzHiBo9AlhIm4mJT6qhg==","domainSeparator":"cmVjbGFpbQ==","output":"L0io3LqaeEdNSnZBJzAM46zlxZH30wxNf38cEvYWhhw=","responses":[{"index":1,"publicKeyShare":"y1wKCxI/i+OF8Nfjc9DyXmz67DtfWxk9fWnlFqTnlxs=","evaluated":"UApaFttzi54ShGcrXcpMKapa4emphZbdI3MNsKBjMpw=","c":"GWQKZ7Q54L2TjDvLtywRuD6AXt+8uvrQ+jGHuKIIpY4=","r":"A4RxrU5gOa0LMgLKhHVp4SfknOvYIIOLcWVPBwJ7zj4="}]}}`
+	for i := 0; i < b.N; i++ {
+		prover.Prove([]byte(params))
+	}
+	b.ReportAllocs()
+}
+
+func Benchmark_ProveChachaOPRF(b *testing.B) {
+	prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs)
+	b.ResetTimer()
+	params := `{"cipher":"chacha20-toprf","key":"Ka3Qs7LgwGaRQwIXYSQKYF1bpKX7BntH1+gbgiMHyYM=","nonce":"yLApW3mIK0mM3uE9","counter":4168221410,"input":"zDdyXezLpcexVGYoZoyuFIDjpXZCV+YSVbDd5SfRHge7HEril7C0gnqR7dPbMwj/2t9g5mU4x/2bvl+grkeyUT33HCyRvebvAEfDkGENP5aO2MC71P7ynYGIAV7/4QbkflQRA9pdKOHfqCSEzd4GqNaaIKzF1/A6AHXuaeOOg5U=","toprf":{"pos":59,"len":14,"mask":"BIvVtZdOIiZSDWb1/sLKqoEXhx4mc4Kmv580KPbll3Q=","domainSeparator":"cmVjbGFpbQ==","output":"CUcueErhemKezndgP7vjGImvG8ua9104RJe8QhNcuOc=","responses":[{"index":0,"publicKeyShare":"0W07hZxwL42VhLULWKIkYDAuukzGBuCafqZVPTWPrq8=","evaluated":"JxObYdh6IlUR4+GV6Z1oBcWr5wEnWzuWUHX07gGQ+So=","c":"FUBwJawrBPQe3OJs6zLj4vpz2SEG4AU1Q6ucXIZrCyM=","r":"A8NG/ewWaCAef6Mowvq4XTgVtRRcRvaD6edkrsirUOw="}]}}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}

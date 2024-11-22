@@ -16,7 +16,6 @@ const Threshold = 1
 const BytesPerElement = 31
 
 type Params struct {
-	SecretData      [2]frontend.Variable
 	DomainSeparator frontend.Variable `gnark:",public"`
 	Mask            frontend.Variable
 	Responses       [Threshold]twistededwards.Point `gnark:",public"` // responses per each node
@@ -29,10 +28,11 @@ type Params struct {
 
 type TOPRF struct {
 	*Params
+	SecretData [2]frontend.Variable
 }
 
 func (n *TOPRF) Define(api frontend.API) error {
-	return VerifyTOPRF(api, n.Params)
+	return VerifyTOPRF(api, n.Params, n.SecretData)
 }
 
 func ExtractSecretElements(api frontend.API, bits, bitmask []frontend.Variable, l frontend.Variable) [2]frontend.Variable {
@@ -71,7 +71,7 @@ func ExtractSecretElements(api frontend.API, bits, bitmask []frontend.Variable, 
 	return [2]frontend.Variable{res1, res2}
 }
 
-func VerifyTOPRF(api frontend.API, p *Params) error {
+func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) error {
 	curve, err := twistededwards.NewEdCurve(api, tbn.BN254)
 	if err != nil {
 		return err
@@ -85,7 +85,7 @@ func VerifyTOPRF(api frontend.API, p *Params) error {
 	maskBits := bits.ToBinary(api, p.Mask, bits.WithNbDigits(api.Compiler().Field().BitLen()))
 	mask := field.FromBits(maskBits...)
 
-	dataPoint, err := hashToPoint(api, curve, p.SecretData, p.DomainSeparator)
+	dataPoint, err := hashToPoint(api, curve, secretData, p.DomainSeparator)
 	if err != nil {
 		return err
 	}
@@ -115,8 +115,8 @@ func VerifyTOPRF(api frontend.API, p *Params) error {
 
 	hash.Write(unMasked.X)
 	hash.Write(unMasked.Y)
-	hash.Write(p.SecretData[0])
-	hash.Write(p.SecretData[1])
+	hash.Write(secretData[0])
+	hash.Write(secretData[1])
 	out := hash.Sum()
 
 	api.AssertIsEqual(p.Output, out)

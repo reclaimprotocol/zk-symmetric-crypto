@@ -35,33 +35,33 @@ var algorithmNames = map[uint8]string{
 
 var provers = map[string]*ProverParams{
 	"chacha20": {
-		KeyHash:     "6c84adfffae0183ad7d333e324079a7787e56caa79b1d3c8894dd9cdbc942838",
+		KeyHash:     "4bfc68e4cf1fc95a8bcd83b07ca980c227c3a333c1c70d1ef5ab7982ea2cc30b",
 		CircuitHash: "4382aa593cfe8f3b3dcd35cff62a27d8ca2b415dae64bdeca2a561a707fabab0",
 		Prover:      &ChaChaProver{},
 	},
 	"aes-128-ctr": {
-		KeyHash:     "9cb4e54cc2a4b090ac58010b6b5c11647ecb805900f2ab5acea73b33adc68354",
+		KeyHash:     "618fe3b1781170993eb8645925335ece4bd22277c26b372bf9713dcbeecf84f1",
 		CircuitHash: "b1ee478f009fe81946e6e2768ef0b6d62ab266525f186baaa4e8dec61b6e3ea6",
 		Prover:      &AESProver{},
 	},
 	"aes-256-ctr": {
-		KeyHash:     "2fe18d977c42fc1696e4c4b39a26a5513918c3970db6d5bc23cf90e54348fed6",
+		KeyHash:     "522e51d29d81605e0211485ee5630a52b85cb0f88e476e85b74ab4db7b482c27",
 		CircuitHash: "e62f8e74b17cad4012513cf23971ddf58faa63a4a87676047bccd255021dee13",
 		Prover:      &AESProver{},
 	},
 	"chacha20-toprf": {
-		KeyHash:     "385b2bfe8c4eb2837d71a26e1610b48e1eb09ea25f1b77c42176f6d5ed981076",
-		CircuitHash: "a89a1dd02fa019efe7c0964e2a4e594d7843f69293a67b2bfd111da5bf998c92",
+		KeyHash:     "153dd306e5f90d1c239cc63efa1a98e19e5d6fac6fb22dc1b18c4bffd23be5c2",
+		CircuitHash: "9107e9b1fbb174cff7a662e02c8f3f04dd6c8ba305303a94f5d0513dda5b0fd9",
 		Prover:      &ChaChaOPRFProver{},
 	},
 	"aes-128-ctr-toprf": {
-		KeyHash:     "fe380af3f8a4026d214c023c3d31a14ca2e560d0361721a7b1edb97d6b9db3d4",
-		CircuitHash: "3d6fd6cc53bb465300785201abbb0987d1ef9ebe0400ec6107fdfa81d48c3773",
+		KeyHash:     "aae5e5e48cb75802aef73f8b0e0384d665c4f26e04227352f10a3401767b1986",
+		CircuitHash: "33b0c9bbc6c2a3e322027f48ecc8d20590e44ed772db1a896990c043325ef3e0",
 		Prover:      &AESOPRFProver{},
 	},
 	"aes-256-ctr-toprf": {
-		KeyHash:     "35f6625ce05e41417dbca2fa3aa18a4f43b8973454c0a12847ade67f976fb43b",
-		CircuitHash: "d1e128fcfd2de96d1e296e848998d09988a52bb3bb80a9a9064175cba8e3fe69",
+		KeyHash:     "a3c5c6ef394ac3edb158de12b235bce836bd9c3a0286787c92648bbce8830adb",
+		CircuitHash: "58ba58ff0124a662f6643f5ba081fb88a4f7f5bdadaeddc003fc2cc3e26d8ec2",
 		Prover:      &AESOPRFProver{},
 	},
 }

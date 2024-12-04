@@ -412,7 +412,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (typeof module_or_path === 'undefined') {
-        module_or_path = new URL('expander_symmetric_crypto_bg.wasm', import.meta.url);
+        module_or_path = new URL('expander_symmetric_crypto_bg.wasm', ''); // NOTE: have manually changed
     }
     const imports = __wbg_get_imports();
 

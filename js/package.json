@@ -3,7 +3,6 @@
   "version": "3.0.1",
   "description": "JS Wrappers for Various ZK Snark Circuits",
   "main": "lib/index.js",
-  "type": "commonjs",
   "scripts": {
     "run:tsc": "SWC_NODE_IGNORE_DYNAMIC=true node -r @swc-node/register",
     "test": "SWC_NODE_IGNORE_DYNAMIC=true NODE_ENV=test node --experimental-strip-types node_modules/.bin/jest --forceExit --detectOpenHandles",

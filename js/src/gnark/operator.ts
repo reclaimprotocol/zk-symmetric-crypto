@@ -23,11 +23,11 @@ export function makeGnarkZkOperator({
 		async groth16Prove(witness, logger) {
 			const lib = await initGnark(logger)
 			const {
-				proof: { proofJson },
+				proof,
 				publicSignals
 			} = await executeGnarkFnAndGetJson(lib.prove, witness)
 			return {
-				proof: Base64.toUint8Array(proofJson),
+				proof: Base64.toUint8Array(proof),
 				publicSignals: Array.from(Base64.toUint8Array(publicSignals))
 			}
 		},

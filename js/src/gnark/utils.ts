@@ -209,9 +209,9 @@ export async function executeGnarkFnAndGetJson(
 ) {
 	const { free, koffi } = await globalGnarkLib!
 	const res = executeGnarkFn(fn, jsonInput)
-	const proofJson = Buffer.from(
+	const proof = Buffer.from(
 		koffi.decode(res.r0, 'unsigned char', res.r1)
 	).toString()
 	free(res.r0) // Avoid memory leak!
-	return JSON.parse(proofJson)
+	return JSON.parse(proof)
 }

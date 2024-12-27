@@ -25,9 +25,9 @@ export function makeGnarkOPRFOperator({
 		async groth16Prove(witness, logger) {
 			const lib = await initGnark(logger)
 			const {
-				proof: { proofJson }
+				proof
 			} = await executeGnarkFnAndGetJson(lib.prove, witness)
-			return { proof: Base64.toUint8Array(proofJson) }
+			return { proof: Base64.toUint8Array(proof) }
 		},
 		async groth16Verify(publicSignals, proof, logger) {
 			const lib = await initGnark(logger)

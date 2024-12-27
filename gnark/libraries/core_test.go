@@ -100,7 +100,7 @@ func TestFullChaCha20(t *testing.T) {
 
 	inParams := &verifier.InputVerifyParams{
 		Cipher:        inputParams.Cipher,
-		Proof:         outParams.Proof.ProofJson,
+		Proof:         outParams.Proof,
 		PublicSignals: signals,
 	}
 	inBuf, err := json.Marshal(inParams)
@@ -145,7 +145,7 @@ func TestFullAES256(t *testing.T) {
 
 	inParams := &verifier.InputVerifyParams{
 		Cipher:        inputParams.Cipher,
-		Proof:         outParams.Proof.ProofJson,
+		Proof:         outParams.Proof,
 		PublicSignals: signals,
 	}
 	inBuf, _ := json.Marshal(inParams)
@@ -189,7 +189,7 @@ func TestFullAES128(t *testing.T) {
 
 	inParams := &verifier.InputVerifyParams{
 		Cipher:        inputParams.Cipher,
-		Proof:         outParams.Proof.ProofJson,
+		Proof:         outParams.Proof,
 		PublicSignals: signals,
 	}
 	inBuf, _ := json.Marshal(inParams)
@@ -329,7 +329,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 
 	inParams := &verifier.InputVerifyParams{
 		Cipher:        inputParams.Cipher,
-		Proof:         outParams.Proof.ProofJson,
+		Proof:         outParams.Proof,
 		PublicSignals: publicSignals,
 	}
 	inBuf, _ := json.Marshal(inParams)
@@ -470,7 +470,7 @@ func TestFullAES128OPRF(t *testing.T) {
 
 	inParams := &verifier.InputVerifyParams{
 		Cipher:        inputParams.Cipher,
-		Proof:         outParams.Proof.ProofJson,
+		Proof:         outParams.Proof,
 		PublicSignals: publicSignals,
 	}
 	inBuf, _ := json.Marshal(inParams)
@@ -610,7 +610,7 @@ func TestFullAES256OPRF(t *testing.T) {
 
 	inParams := &verifier.InputVerifyParams{
 		Cipher:        inputParams.Cipher,
-		Proof:         outParams.Proof.ProofJson,
+		Proof:         outParams.Proof,
 		PublicSignals: publicSignals,
 	}
 	inBuf, _ := json.Marshal(inParams)

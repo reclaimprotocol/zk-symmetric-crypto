@@ -1,7 +1,9 @@
 import { ChaCha20Poly1305 } from '@stablelib/chacha20poly1305'
-import { subtle } from 'crypto'
 import { AlgorithmConfig, EncryptionAlgorithm } from './types'
 import { bitsToUint8Array, bitsToUintArray, toUint8Array, toUintArray, uint8ArrayToBits, uintArrayToBits } from './utils'
+import { webcrypto } from './webcrypto'
+
+const { subtle } = webcrypto
 
 // commit hash for this repo
 export const GIT_COMMIT_HASH = 'c9df4f9eef53566536a0afec5444b9544630fa0c'

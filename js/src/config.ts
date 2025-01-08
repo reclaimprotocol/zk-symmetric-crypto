@@ -6,7 +6,7 @@ import { webcrypto } from './webcrypto'
 const { subtle } = webcrypto
 
 // commit hash for this repo
-export const GIT_COMMIT_HASH = 'c9df4f9eef53566536a0afec5444b9544630fa0c'
+export const GIT_COMMIT_HASH = 'bde72e19b30aa1d2366094340929da7a9a83112a'
 
 export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 	'chacha20': {

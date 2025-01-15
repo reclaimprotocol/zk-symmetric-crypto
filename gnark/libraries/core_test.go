@@ -9,6 +9,7 @@ import (
 	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
 	"gnark-symmetric-crypto/circuits/toprf"
 	prover "gnark-symmetric-crypto/libraries/prover/impl"
+	oprf2 "gnark-symmetric-crypto/libraries/prover/oprf"
 	verifier "gnark-symmetric-crypto/libraries/verifier/impl"
 	"gnark-symmetric-crypto/libraries/verifier/oprf"
 	"gnark-symmetric-crypto/utils"
@@ -308,7 +309,28 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		assert.NoError(err)
 	}
 
-	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
+	finReq := &oprf2.InputTOPRFFinalizeParams{
+		ServerPublicKey: shares.PublicKey,
+		Request: &oprf2.OPRFRequest{
+			Mask:           req.Mask.Bytes(),
+			MaskedData:     req.MaskedData.Marshal(),
+			SecretElements: [][]byte{req.SecretElements[0].Bytes(), req.SecretElements[1].Bytes()},
+		},
+		Responses: []*oprf2.OPRFResponse{
+			{
+				Index:          responses[0].Index,
+				PublicKeyShare: responses[0].PublicKeyShare,
+				Evaluated:      responses[0].Evaluated,
+				C:              responses[0].C,
+				R:              responses[0].R,
+			},
+		},
+	}
+
+	finReqJSON, _ := json.Marshal(finReq)
+	finResp := oprf2.TOPRFFinalize(finReqJSON)
+	var out *oprf2.OutputOPRFResponseParams
+	err = json.Unmarshal(finResp, &out)
 	assert.NoError(err)
 
 	inputParams := &prover.InputParams{
@@ -322,7 +344,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 			Len:             uint32(len([]byte(email))),
 			Mask:            req.Mask.Bytes(),
 			DomainSeparator: []byte(domainSeparator),
-			Output:          out.Bytes(),
+			Output:          out.Output,
 			Responses:       responses,
 		},
 	}
@@ -355,7 +377,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
 			DomainSeparator: []byte(domainSeparator),
-			Output:          out.Bytes(),
+			Output:          out.Output,
 			Responses:       verifyResponses,
 		},
 	}
@@ -711,6 +733,15 @@ func Benchmark_ProveChachaOPRF(b *testing.B) {
 		prover.Prove([]byte(params))
 	}
 	b.ReportAllocs()
+}
+
+func BenchmarkTOPRFFinalize(b *testing.B) {
+	b.ResetTimer()
+	b.ReportAllocs()
+	params := []byte(`{"serverPublicKey":"1AsWETKEjyyP/KKc8VXeASqo67rPp4ghI+ckN4P+hpY=","request":{"mask":"ExSgc7SIf8Sdp79pAWLapP4Dy4f2/pBra1EUflkxxA==","maskedData":"Lhz/ZIkMjs/LjDmPKZ3+HcO7PEW3+9g7oEuPNVs0o60=","secretElements":["bW9jLmxpYW1lQHRzZXQ=",""]},"responses":[{"index":1,"publicKeyShare":"1AsWETKEjyyP/KKc8VXeASqo67rPp4ghI+ckN4P+hpY=","evaluated":"+6zvgjZXtSYawia63IQoLM9pHa2Mru5W0iz7nfG1+ho=","c":"DeuKN5pxLeBZmshi2qgyb71gGBwY0o/UzGVYuHxvFI0=","r":"D3d9qGrXgMCannDhD99V7EkIpy/hhpCm/kzvhvp+3A=="}]}`)
+	for i := 0; i < b.N; i++ {
+		oprf2.TOPRFFinalize(params)
+	}
 }
 
 func fetchFile(keyName string) ([]byte, error) {

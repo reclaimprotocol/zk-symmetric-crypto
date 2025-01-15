@@ -97,7 +97,6 @@ func InitAlgorithm(algorithmID uint8, provingKey []byte, r1csData []byte) (res b
 		proverParams.initLock.Lock()
 		defer proverParams.initLock.Unlock()
 		if proverParams.initDone {
-			fmt.Println("Algorithm already initialized", alg)
 			return true
 		}
 

@@ -15,6 +15,7 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
@@ -45,12 +46,47 @@ func init() {
 
 func TestInit(t *testing.T) {
 	assert := test.NewAssert(t)
-	assert.True(prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS))
-	assert.True(prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs))
-	assert.True(prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs))
-	assert.True(prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs))
-	assert.True(prover.InitAlgorithm(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs))
-	assert.True(prover.InitAlgorithm(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs))
+
+	wg1 := &sync.WaitGroup{}
+	wg1.Add(1)
+
+	wg2 := &sync.WaitGroup{}
+	wg2.Add(24)
+
+	f := func(algorithmID uint8, provingKey []byte, r1csData []byte) {
+		go func() {
+			wg1.Wait()
+			assert.True(prover.InitAlgorithm(algorithmID, provingKey, r1csData))
+			wg2.Done()
+		}()
+	}
+
+	f(prover.CHACHA20, chachaKey, chachaR1CS)
+	f(prover.AES_128, aes128Key, aes128r1cs)
+	f(prover.AES_256, aes256Key, aes256r1cs)
+	f(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs)
+	f(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs)
+	f(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs)
+	f(prover.CHACHA20, chachaKey, chachaR1CS)
+	f(prover.AES_128, aes128Key, aes128r1cs)
+	f(prover.AES_256, aes256Key, aes256r1cs)
+	f(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs)
+	f(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs)
+	f(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs)
+	f(prover.CHACHA20, chachaKey, chachaR1CS)
+	f(prover.AES_128, aes128Key, aes128r1cs)
+	f(prover.AES_256, aes256Key, aes256r1cs)
+	f(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs)
+	f(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs)
+	f(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs)
+	f(prover.CHACHA20, chachaKey, chachaR1CS)
+	f(prover.AES_128, aes128Key, aes128r1cs)
+	f(prover.AES_256, aes256Key, aes256r1cs)
+	f(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs)
+	f(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs)
+	f(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs)
+	wg1.Done()
+	wg2.Wait()
 }
 
 func TestPanic(t *testing.T) {

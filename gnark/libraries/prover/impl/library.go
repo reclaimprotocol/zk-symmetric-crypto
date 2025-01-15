@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"
@@ -76,6 +77,7 @@ type ProverParams struct {
 	KeyHash     string
 	CircuitHash string
 	initDone    bool
+	initLock    sync.Mutex
 }
 
 func init() {
@@ -92,7 +94,10 @@ func InitAlgorithm(algorithmID uint8, provingKey []byte, r1csData []byte) (res b
 	}()
 	if alg, ok := algorithmNames[algorithmID]; ok {
 		proverParams := provers[alg]
+		proverParams.initLock.Lock()
+		defer proverParams.initLock.Unlock()
 		if proverParams.initDone {
+			fmt.Println("Algorithm already initialized", alg)
 			return true
 		}
 
@@ -129,6 +134,7 @@ func InitAlgorithm(algorithmID uint8, provingKey []byte, r1csData []byte) (res b
 
 		proverParams.SetParams(r1cs, pkey)
 		proverParams.initDone = true
+		fmt.Println("Initialized", alg)
 		return true
 	}
 	return false

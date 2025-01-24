@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
+	_ "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 	"github.com/consensys/gnark-crypto/hash"
 	"github.com/consensys/gnark/frontend"

@@ -88,11 +88,7 @@ describe.each(OPRF_ENGINES)('%s TOPRF circuits Tests', engine => {
 				privateInput: {
 					key,
 				},
-				publicInput: {
-					iv,
-					ciphertext,
-					offset: 0
-				},
+				publicInput: { iv, ciphertext },
 				operator,
 				mask: req.mask,
 				toprf,
@@ -101,9 +97,7 @@ describe.each(OPRF_ENGINES)('%s TOPRF circuits Tests', engine => {
 			await expect(
 				verifyProof({
 					proof,
-					publicInput: { iv, ciphertext,
-						offset: 0
-					},
+					publicInput: { iv, ciphertext },
 					toprf,
 					operator
 				})

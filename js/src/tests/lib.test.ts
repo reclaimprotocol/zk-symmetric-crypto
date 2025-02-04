@@ -3,7 +3,9 @@ import {
 	CONFIG,
 	EncryptionAlgorithm,
 	generateProof,
+	getBlockSizeBytes,
 	PrivateInput,
+	PublicInput,
 	verifyProof,
 	ZKEngine,
 	ZKOperator,
@@ -74,7 +76,7 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 				privateInput.key,
 				iv
 			)
-			const publicInput = { ciphertext, iv: iv, offset: 0 }
+			const publicInput: PublicInput = { ciphertext, iv: iv }
 
 			const proof = await generateProof({
 				algorithm,
@@ -89,8 +91,8 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 
 		it('should verify encrypted data with another counter', async() => {
 			const totalPlaintext = new Uint8Array(randomBytes(chunkSizeBytes * 5))
-			// use a chunk in the middle
-			const offset = 2
+			// use two blocks as offset (not chunks)
+			const offsetBytes = 2 * getBlockSizeBytes(algorithm)
 
 			const iv = Buffer.alloc(12, 3)
 			const privateInput: PrivateInput = {
@@ -104,9 +106,9 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 				iv,
 			)
 			const ciphertext = totalCiphertext
-				.subarray(chunkSizeBytes * offset, chunkSizeBytes * (offset + 1))
+				.subarray(offsetBytes, chunkSizeBytes + offsetBytes)
 
-			const publicInput = { ciphertext, iv, offset }
+			const publicInput = { ciphertext, iv, offsetBytes }
 			const proof = await generateProof({
 				algorithm,
 				privateInput,
@@ -131,7 +133,7 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 				privateInput.key,
 				iv
 			)
-			const publicInput = { ciphertext, iv, offset: 0 }
+			const publicInput: PublicInput = { ciphertext, iv }
 
 			const proof = await generateProof({
 				algorithm,

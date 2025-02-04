@@ -89,7 +89,7 @@ async function prepareDataForAlgo(
 		const publicInput: PublicInput = {
 			ciphertext: ciphertext.subarray(i, i + chunkSizeBytes),
 			iv: iv,
-			offset: i
+			offsetBytes: i
 		}
 		const { witness } = await generateZkWitness({
 			algorithm: algo,

@@ -203,10 +203,27 @@ export function getFullCounterIv(nonce: Uint8Array, counter: number) {
  * @param offsetInChunks
  * @returns
  */
-export function getCounterForChunk(
+export function getCounterForByteOffset(
 	algorithm: EncryptionAlgorithm,
-	offsetInChunks: number
+	offsetInBytes: number
 ) {
-	const { startCounter, blocksPerChunk } = CONFIG[algorithm]
-	return startCounter + offsetInChunks * blocksPerChunk
+	const { startCounter } = CONFIG[algorithm]
+	const blockSizeBytes = getBlockSizeBytes(algorithm)
+	if(offsetInBytes % blockSizeBytes !== 0) {
+		throw new Error(
+			`offset(${offsetInBytes}) must be a multiple of `
+			+ `block size(${blockSizeBytes})`
+		)
+	}
+
+	return startCounter + (offsetInBytes / blockSizeBytes)
+}
+
+/**
+ * get the block size of the cipher block in bytes
+ * eg. chacha20 is 64 bytes, aes is 16 bytes
+ */
+export function getBlockSizeBytes(alg: EncryptionAlgorithm) {
+	const { chunkSize, bitsPerWord, blocksPerChunk } = CONFIG[alg]
+	return chunkSize * bitsPerWord / (8 * blocksPerChunk)
 }

@@ -1,6 +1,6 @@
 import { CONFIG } from './config'
 import { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types'
-import { getCounterForChunk } from './utils'
+import { getCounterForByteOffset } from './utils'
 
 /**
  * Generate ZK proof for CHACHA20-CTR encryption.
@@ -69,7 +69,7 @@ export async function verifyProof(opts: VerifyProofOpts): Promise<void> {
 export async function generateZkWitness({
 	algorithm,
 	privateInput: { key },
-	publicInput: { ciphertext, iv, offset },
+	publicInput: { ciphertext, iv, offsetBytes = 0 },
 }: GenerateWitnessOpts,
 ) {
 	const {
@@ -84,7 +84,7 @@ export async function generateZkWitness({
 		throw new Error(`iv must be ${ivSizeBytes} bytes`)
 	}
 
-	const startCounter = getCounterForChunk(algorithm, offset)
+	const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
 	const ciphertextArray = padCiphertextToChunkSize(
 		algorithm,
 		ciphertext,
@@ -93,7 +93,7 @@ export async function generateZkWitness({
 		algorithm,
 		key,
 		iv,
-		offset,
+		startOffset: offsetBytes,
 		ciphertext: ciphertextArray,
 	})
 
@@ -111,10 +111,10 @@ export async function generateZkWitness({
 export function getPublicSignals(
 	{
 		proof: { algorithm, plaintext },
-		publicInput: { ciphertext, iv, offset },
+		publicInput: { ciphertext, iv, offsetBytes = 0 },
 	}: GetPublicSignalsOpts
 ): ZKProofPublicSignals {
-	const startCounter = getCounterForChunk(algorithm, offset)
+	const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
 	const ciphertextArray = padCiphertextToChunkSize(
 		algorithm,
 		ciphertext
@@ -157,7 +157,7 @@ type DecryptCiphertextOpts = {
 	algorithm: EncryptionAlgorithm
 	key: Uint8Array
 	iv: Uint8Array
-	offset: number
+	startOffset: number
 	ciphertext: Uint8Array
 }
 
@@ -165,12 +165,11 @@ async function decryptCiphertext({
 	algorithm,
 	key,
 	iv,
-	offset,
+	startOffset,
 	ciphertext,
 }: DecryptCiphertextOpts) {
-	const { chunkSize, bitsPerWord, encrypt } = CONFIG[algorithm]
-	const chunkSizeBytes = chunkSize * bitsPerWord / 8
-	const startOffset = offset * chunkSizeBytes
+	const { encrypt } = CONFIG[algorithm]
+	// fake the start of the ciphertext (it's irrelevant)
 	const inp = new Uint8Array(startOffset + ciphertext.length)
 	inp.set(ciphertext, startOffset)
 

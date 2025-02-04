@@ -103,6 +103,10 @@ export type VerifyProofOpts = GetPublicSignalsOpts & (
 
 export type AlgorithmConfig = {
 	index: number
+	/**
+	 * Chunk size in words (of the algorithm)
+	 * eg. chacha20 has 32-bit words, aes-256-ctr has 8-bit words
+	 */
 	chunkSize: number
 	bitsPerWord: number
 	keySizeBytes: number
@@ -277,11 +281,10 @@ export type PublicInput = {
 	/** 192 bit IV for the ciphertext decryption */
 	iv: Uint8Array
 	/**
-	 * decryption offset in chunks
-	 * Specify 0 for the first chunk
-	 * @default 0
+	 * If the passed ciphertext is a slice of the original ciphertext,
+	 * what offset (in bytes) does this slice start from?
 	 * */
-	offset: number
+	offsetBytes?: number
 }
 
 export type Logger = Pick<typeof console, 'info' | 'trace' | 'debug' | 'error' | 'warn'>

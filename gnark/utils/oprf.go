@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+
 	"math/big"
 
 	_ "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
@@ -14,6 +15,8 @@ import (
 )
 
 var TNBCurveOrder = func() *big.Int { order := twistededwards.GetEdwardsCurve().Order; return &order }()
+
+const BytesPerElement = 31
 
 type OPRFRequest struct {
 	Mask           *big.Int `json:"mask"`
@@ -28,19 +31,19 @@ type OPRFResponse struct {
 }
 
 func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFRequest, error) {
-	if len(secretBytes) > 31*2 {
-		return nil, errors.New("secret data too big")
+	if len(secretBytes) > BytesPerElement*2 {
+		return nil, fmt.Errorf("secret data too big: %d, max %d bytes is allowed", len(secretBytes), BytesPerElement*2)
 	}
 	domainBytes := []byte(domainSeparator)
-	if len(domainBytes) > 31 {
-		return nil, errors.New("domain separator too big")
+	if len(domainBytes) > BytesPerElement {
+		return nil, fmt.Errorf("domain separator is %d bytes, max %d bytes is allowed", len(domainBytes), BytesPerElement)
 	}
 
 	var secretElements [2]*big.Int
 
-	if len(secretBytes) > 31 {
-		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes[:31]))
-		secretElements[1] = new(big.Int).SetBytes(BEtoLE(secretBytes[31:]))
+	if len(secretBytes) > BytesPerElement {
+		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes[:BytesPerElement]))
+		secretElements[1] = new(big.Int).SetBytes(BEtoLE(secretBytes[BytesPerElement:]))
 	} else {
 		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes))
 		secretElements[1] = big.NewInt(0)
@@ -48,7 +51,7 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 
 	H := HashToCurve(secretElements[0].Bytes(), secretElements[1].Bytes(), domainBytes) // H
 	if !H.IsOnCurve() {
-		return nil, fmt.Errorf("point is not on curve")
+		return nil, errors.New("point is not on curve")
 	}
 
 	// random mask
@@ -162,7 +165,7 @@ func SetBitmask(bits []frontend.Variable, pos, length uint32) {
 	l := length * 8
 
 	if (p + l) > uint32(len(bits)) {
-		panic("invalid pos & len, out of bounds")
+		panic(fmt.Sprintf("invalid pos and length, out of bounds. pos %d, length %d", p, l))
 	}
 
 	for i := uint32(0); i < uint32(len(bits)); i++ {

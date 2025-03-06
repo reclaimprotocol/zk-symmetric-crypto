@@ -118,7 +118,10 @@ type SharedKey struct {
 func TOPRFGenerateSharedKey(nodes, threshold int) *SharedKey {
 
 	curve := twistededwards.GetEdwardsCurve()
-	sk, _ := rand.Int(rand.Reader, TNBCurveOrder)
+	sk, err := rand.Int(rand.Reader, TNBCurveOrder)
+	if err != nil {
+		panic(err)
+	}
 	serverPublic := &twistededwards.PointAffine{}
 	serverPublic.ScalarMultiplication(&curve.Base, sk) // G*sk
 

@@ -52,6 +52,13 @@ func TOPRFCreateShares(n, threshold int, secret *big.Int) ([]*Share, error) {
 	return shares, nil
 }
 
+func TOPRFCreateSharesDKG(n, threshold int) ([]*Share, error) {
+
+	shares := DKG(n, threshold)
+
+	return shares, nil
+}
+
 // Coeff calculates Lagrange coefficient for node with index idx
 func Coeff(idx int, peers []int) *big.Int {
 

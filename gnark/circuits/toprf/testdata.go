@@ -1,7 +1,7 @@
 package toprf
 
 import (
-	"crypto/rand"
+	"fmt"
 	"gnark-symmetric-crypto/utils"
 	"math/big"
 
@@ -31,16 +31,10 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 		panic(err)
 	}
 
-	// server secret
-	curve := tbn254.GetEdwardsCurve()
-	sk, _ := rand.Int(rand.Reader, utils.TNBCurveOrder)
-	serverPublic := &tbn254.PointAffine{}
-	serverPublic.ScalarMultiplication(&curve.Base, sk) // G*sk
-
 	threshold := Threshold
 	nodes := threshold + 2
 
-	shares, err := utils.TOPRFCreateShares(nodes, threshold, sk)
+	shares, err := utils.TOPRFCreateSharesDKG(nodes, threshold)
 	if err != nil {
 		panic(err)
 	}
@@ -48,7 +42,10 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 	idxs := utils.PickRandomIndexes(nodes, threshold)
 
 	resps := make([]twistededwards.Point, threshold)
+	respsIn := make([]*tbn254.PointAffine, threshold)
 	sharePublicKeys := make([]twistededwards.Point, threshold)
+	sharePublicKeysIn := make([]*tbn254.PointAffine, threshold)
+
 	coefficients := make([]frontend.Variable, threshold)
 	cs := make([]frontend.Variable, threshold)
 	rs := make([]frontend.Variable, threshold)
@@ -63,7 +60,9 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 			panic(err)
 		}
 
+		respsIn[i] = resp.EvaluatedPoint
 		resps[i] = utils.OutPointToInPoint(resp.EvaluatedPoint)
+		sharePublicKeysIn[i] = shares[idx].PublicKey
 		sharePublicKeys[i] = utils.OutPointToInPoint(shares[idx].PublicKey)
 		coefficients[i] = utils.Coeff(idxs[i], idxs)
 		cs[i] = resp.C
@@ -71,13 +70,10 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 
 	}
 
-	// without TOPRF
-	resp, err := utils.OPRFEvaluate(sk, req.MaskedData)
-	if err != nil {
-		panic(err)
-	}
+	pk := utils.TOPRFThresholdMul(idxs, sharePublicKeysIn)
+	fmt.Println("master public key X:", pk.X.String())
 
-	out, err := utils.OPRFFinalize(serverPublic, req, resp)
+	out, err := utils.TOPRFFinalize(idxs, respsIn, req.SecretElements, req.Mask)
 	if err != nil {
 		panic(err)
 	}

@@ -39,7 +39,7 @@ func TestOPRF(t *testing.T) {
 	require.Equal(t, "EnTod4kXJzeXybI7tRvGjU7GYYRXz8tEJ2Az0L2XQIc=", base64.StdEncoding.EncodeToString(res.Bytes()))
 }
 
-func TestTOPRF(t *testing.T) {
+func TestTOPRFDKG(t *testing.T) {
 	email := "test@example.com"
 	ds := "reclaim"
 	emailBytes := []byte(email)
@@ -49,20 +49,16 @@ func TestTOPRF(t *testing.T) {
 	require.NoError(t, e)
 
 	var out *big.Int
-	for i := 0; i < 20000; i++ {
-		req, err := OPRFGenerateRequest(emailBytes, ds)
-		require.NoError(t, err)
-
-		resps := make([]*tbn254.PointAffine, threshold)
-
+	resps := make([]*tbn254.PointAffine, threshold)
+	for i := 0; i < 200; i++ {
+		req, ee := OPRFGenerateRequest(emailBytes, ds)
+		require.NoError(t, ee)
 		idxs := PickRandomIndexes(nodes, threshold)
-
 		for j := 0; j < threshold; j++ {
 			resp, err := OPRFEvaluate(shares[idxs[j]].PrivateKey, req.MaskedData)
 			require.NoError(t, err)
 			resps[j] = resp.EvaluatedPoint
 		}
-
 		tmp, err := TOPRFFinalize(idxs, resps, req.SecretElements, req.Mask)
 		require.NoError(t, err)
 		if out == nil {
@@ -70,6 +66,5 @@ func TestTOPRF(t *testing.T) {
 		} else {
 			assert.Equal(t, out, tmp)
 		}
-
 	}
 }

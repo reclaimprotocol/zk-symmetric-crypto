@@ -67,20 +67,20 @@ func Coeff(idx int, peers []int) *big.Int {
 	gf := &GF{P: TNBCurveOrder}
 	peerLen := len(peers)
 	iScalar := big.NewInt(int64(idx + 1))
-	divident := big.NewInt(1)
-	divisor := big.NewInt(1)
+	num := big.NewInt(1)
+	den := big.NewInt(1)
 
 	for i := 0; i < peerLen; i++ {
 		if peers[i] == idx {
 			continue
 		}
 		tmp := big.NewInt(int64(peers[i] + 1))
-		divident = gf.Mul(divident, tmp)
+		num = gf.Mul(num, tmp)
 		tmp = gf.Sub(tmp, iScalar)
-		divisor = gf.Mul(divisor, tmp)
+		den = gf.Mul(den, tmp)
 	}
-	divisor = gf.Inv(divisor)
-	return gf.Mul(divisor, divident)
+	den = gf.Inv(den)
+	return gf.Mul(den, num)
 }
 
 func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twistededwards.PointAffine {

@@ -178,10 +178,11 @@ func SetBitmask(bits []frontend.Variable, pos, length uint32) {
 }
 
 func BEtoLE(b []byte) []byte {
+	res := make([]byte, len(b))
 	for i := 0; i < len(b)/2; i++ {
-		b[i], b[len(b)-1-i] = b[len(b)-1-i], b[i]
+		res[i], res[len(b)-1-i] = b[len(b)-1-i], b[i]
 	}
-	return b
+	return res
 }
 
 func OutPointToInPoint(point *twistededwards.PointAffine) tbn.Point {

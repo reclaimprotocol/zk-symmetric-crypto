@@ -3,7 +3,6 @@ package toprf
 import (
 	"math/big"
 
-	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	tbn "github.com/consensys/gnark-crypto/ecc/twistededwards"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/std/algebra/native/twistededwards"
@@ -187,10 +186,7 @@ func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, 
 }
 
 func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator, counter, x, yC frontend.Variable) (*twistededwards.Point, error) {
-	var a, one fr.Element
-	a.SetInt64(-1)
 	d := curve.Params().D
-	one.SetOne()
 	hField, err := mimc.NewMiMC(api)
 	if err != nil {
 		return nil, err
@@ -203,9 +199,9 @@ func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.
 	hField.Reset()
 
 	y2 := api.Mul(y, y)
-	num := api.Sub(one.String(), y2)
+	num := api.Sub(1, y2)
 	denom := api.Mul(d.String(), y2)
-	denom = api.Add(denom, one.String())
+	denom = api.Add(denom, 1)
 	denom = api.Neg(denom)
 	x2 := api.Div(num, denom)
 	api.AssertIsEqual(x2, api.Mul(x, x)) // does X match

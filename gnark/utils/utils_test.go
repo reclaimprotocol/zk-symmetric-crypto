@@ -36,7 +36,7 @@ func TestOPRF(t *testing.T) {
 	res, err := OPRFFinalize(serverPublic, req, resp)
 	require.NoError(t, err)
 
-	require.Equal(t, "EnTod4kXJzeXybI7tRvGjU7GYYRXz8tEJ2Az0L2XQIc=", base64.StdEncoding.EncodeToString(res.Bytes()))
+	require.Equal(t, "AaYom3iSNY0vhCDPIXt96j+oQAQdRFzdGfQTIcZQlsg=", base64.StdEncoding.EncodeToString(res.Bytes()))
 }
 
 func TestTOPRFDKG(t *testing.T) {

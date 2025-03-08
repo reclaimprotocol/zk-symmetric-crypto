@@ -7,6 +7,7 @@ import (
 
 	"math/big"
 
+	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	_ "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 	"github.com/consensys/gnark-crypto/hash"
@@ -22,6 +23,9 @@ type OPRFRequest struct {
 	Mask           *big.Int `json:"mask"`
 	MaskedData     *twistededwards.PointAffine
 	SecretElements [2]*big.Int
+	Counter        int
+	X              fr.Element // original X
+	Y              fr.Element // cleared Y
 }
 
 type OPRFResponse struct {
@@ -49,7 +53,10 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 		secretElements[1] = big.NewInt(0)
 	}
 
-	H := HashToCurve(secretElements[0].Bytes(), secretElements[1].Bytes(), domainBytes) // H
+	H, origX, counter, err := HashToPointPrecompute(secretElements[0].Bytes(), secretElements[1].Bytes(), domainBytes) // H
+	if err != nil {
+		return nil, err
+	}
 	if !H.IsOnCurve() {
 		return nil, errors.New("point is not on curve")
 	}
@@ -59,20 +66,22 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 	if err != nil {
 		return nil, err
 	}
-
 	masked := &twistededwards.PointAffine{}
 	masked.ScalarMultiplication(H, mask) // H*mask
 
+	x := new(big.Int)
+	H.X.BigInt(x)
 	return &OPRFRequest{
 		Mask:           mask,
 		MaskedData:     masked,
 		SecretElements: secretElements,
+		Counter:        counter,
+		X:              *origX,
+		Y:              H.Y,
 	}, nil
 }
 
 func OPRFEvaluate(serverPrivate *big.Int, request *twistededwards.PointAffine) (*OPRFResponse, error) {
-	curve := twistededwards.GetEdwardsCurve()
-
 	t := new(twistededwards.PointAffine)
 	t.Set(request)
 	t.ScalarMultiplication(t, big.NewInt(8)) // cofactor check
@@ -150,13 +159,49 @@ func HashPointsToScalar(data ...*twistededwards.PointAffine) []byte {
 	return hasher.Sum(nil)
 }
 
-func HashToCurve(data ...[]byte) *twistededwards.PointAffine {
-	hashedData := hashToScalar(data...)
-	scalar := new(big.Int).SetBytes(hashedData)
-	params := twistededwards.GetEdwardsCurve()
-	multiplicationResult := &twistededwards.PointAffine{}
-	multiplicationResult.ScalarMultiplication(&params.Base, scalar)
-	return multiplicationResult
+func HashToPointPrecompute(data ...[]byte) (*twistededwards.PointAffine, *fr.Element, int, error) {
+	var a, d, one fr.Element
+	a.SetInt64(-1)
+	d = curve.D
+	one.SetOne()
+
+	for counter := 0; counter <= 255; counter++ {
+		var counterFr fr.Element
+		counterFr.SetInt64(int64(counter))
+		yBytes := hashToScalar(append(data, counterFr.Marshal())...)
+		var y fr.Element
+		y.SetBytes(yBytes)
+
+		var y2, num, denom, x2 fr.Element
+		y2.Square(&y)
+		num.Sub(&one, &y2)
+		denom.Mul(&d, &y2).Add(&denom, &one).Neg(&denom)
+		if denom.IsZero() {
+			// fmt.Printf("Counter %d: x² denominator is zero\n", counter)
+			continue
+		}
+		x2.Div(&num, &denom)
+
+		// fmt.Printf("Counter %d: y² = %s, x² = %s, Legendre(x²) = %d\n", counter, y2.String(), x2.String(), x2.Legendre())
+		var x fr.Element
+		if x.Sqrt(&x2) != nil {
+			point := twistededwards.PointAffine{X: x, Y: y}
+			if point.IsOnCurve() {
+				clearedPoint := point.ScalarMultiplication(&point, big.NewInt(8))
+				if !clearedPoint.IsOnCurve() {
+					return nil, nil, 0, fmt.Errorf("cofactor-cleared point not on curve")
+				}
+				return clearedPoint, &x, counter, nil
+			}
+			var lhs, rhs fr.Element
+			lhs.Mul(&a, &x2).Add(&lhs, &y2)
+			rhs.Mul(&d, &x2).Mul(&rhs, &y2).Add(&rhs, &one)
+			// fmt.Printf("Counter %d: LHS = %s\nRHS = %s\n", counter, lhs.String(), rhs.String())
+			// fmt.Printf("Counter %d: Point not on curve: x=%s, y=%s\n", counter, x.String(), y.String())
+		}
+	}
+
+	return nil, nil, 0, fmt.Errorf("failed to find valid point after 256 attempts")
 }
 
 func SetBitmask(bits []frontend.Variable, pos, length uint32) {
@@ -179,8 +224,9 @@ func SetBitmask(bits []frontend.Variable, pos, length uint32) {
 
 func BEtoLE(b []byte) []byte {
 	res := make([]byte, len(b))
-	for i := 0; i < len(b)/2; i++ {
-		res[i], res[len(b)-1-i] = b[len(b)-1-i], b[i]
+	copy(res, b)
+	for i := 0; i < len(res)/2; i++ {
+		res[i], res[len(res)-1-i] = b[len(res)-1-i], res[i]
 	}
 	return res
 }

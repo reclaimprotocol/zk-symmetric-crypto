@@ -14,7 +14,7 @@ import (
 
 func TestTOPRF(t *testing.T) {
 	assert := test.NewAssert(t)
-	testData, secretData := PrepareTestData("randomiiiiiiiiiiiiiizerrandomiiiiiiiiiiiiiizerrandomiiiiiiiiir", "")
+	testData, secretData := PrepareTestData("23r23r", "reclaim")
 
 	wtns := TOPRF{
 		Params:     testData,

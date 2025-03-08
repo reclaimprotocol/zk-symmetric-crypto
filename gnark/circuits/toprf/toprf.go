@@ -3,6 +3,7 @@ package toprf
 import (
 	"math/big"
 
+	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	tbn "github.com/consensys/gnark-crypto/ecc/twistededwards"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/std/algebra/native/twistededwards"
@@ -24,6 +25,9 @@ type Params struct {
 	C               [Threshold]frontend.Variable    `gnark:",public"`
 	R               [Threshold]frontend.Variable    `gnark:",public"`
 	Output          frontend.Variable               `gnark:",public"` // hash of deblinded point + secret data
+	Counter         frontend.Variable               // counter used in hashToCurve
+	X               frontend.Variable               // orig X
+	Y               frontend.Variable               // cleared Y
 }
 
 type TOPRF struct {
@@ -85,7 +89,7 @@ func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) e
 	maskBits := bits.ToBinary(api, p.Mask, bits.WithNbDigits(api.Compiler().Field().BitLen()))
 	mask := field.FromBits(maskBits...)
 
-	dataPoint, err := hashToPoint(api, curve, secretData, p.DomainSeparator)
+	dataPoint, err := hashToPoint(api, curve, secretData, p.DomainSeparator, p.Counter, p.X, p.Y)
 	if err != nil {
 		return err
 	}
@@ -182,7 +186,11 @@ func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, 
 	return nil
 }
 
-func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator frontend.Variable) (*twistededwards.Point, error) {
+func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator, counter, x, yC frontend.Variable) (*twistededwards.Point, error) {
+	var a, one fr.Element
+	a.SetInt64(-1)
+	d := curve.Params().D
+	one.SetOne()
 	hField, err := mimc.NewMiMC(api)
 	if err != nil {
 		return nil, err
@@ -190,13 +198,25 @@ func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.
 	hField.Write(data[0])
 	hField.Write(data[1])
 	hField.Write(domainSeparator)
-	hashedSecretData := hField.Sum()
+	hField.Write(counter)
+	y := hField.Sum()
 	hField.Reset()
 
-	basePoint := twistededwards.Point{
-		X: curve.Params().Base[0],
-		Y: curve.Params().Base[1],
-	}
-	dataPoint := curve.ScalarMul(basePoint, hashedSecretData)
-	return &dataPoint, nil
+	y2 := api.Mul(y, y)
+	num := api.Sub(one.String(), y2)
+	denom := api.Mul(d.String(), y2)
+	denom = api.Add(denom, one.String())
+	denom = api.Neg(denom)
+	x2 := api.Div(num, denom)
+	api.AssertIsEqual(x2, api.Mul(x, x)) // does X match
+
+	point := twistededwards.Point{X: x, Y: y}
+	point = curve.Double(point)
+	point = curve.Double(point)
+	point = curve.Double(point)
+
+	api.AssertIsEqual(point.Y, yC)
+
+	curve.AssertIsOnCurve(point)
+	return &point, nil
 }

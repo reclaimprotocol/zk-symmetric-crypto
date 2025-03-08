@@ -25,7 +25,7 @@ func TestAES256(t *testing.T) {
 
 	secretStr := "00000000001111111111000000000011" // max 62 bytes
 	secretBytes := []byte(secretStr)
-	d, _ := toprf.PrepareTestData(secretStr, "reclaim")
+	testData, _ := toprf.PrepareTestData(secretStr, "reclaim")
 
 	pos := 30
 	Counter := 12345
@@ -44,7 +44,7 @@ func TestAES256(t *testing.T) {
 	keyAssign := mustHex(key)
 	nonceAssign := mustHex(Nonce)
 
-	witness := createWitness256(d, keyAssign, nonceAssign, Counter, ciphertext, plaintext, pos, len(secretBytes))
+	witness := createWitness256(testData, keyAssign, nonceAssign, Counter, ciphertext, plaintext, pos, len(secretBytes))
 
 	assert.CheckCircuit(&witness, test.WithValidAssignment(&witness), test.WithCurves(ecc.BN254))
 
@@ -75,6 +75,9 @@ func createWitness256(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int
 			SharePublicKeys: d.SharePublicKeys,
 			C:               d.C,
 			R:               d.R,
+			X:               d.X,
+			Y:               d.Y,
+			Counter:         d.Counter,
 		},
 	}
 

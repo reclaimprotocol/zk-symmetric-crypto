@@ -1,7 +1,6 @@
 package toprf
 
 import (
-	"fmt"
 	"gnark-symmetric-crypto/utils"
 	"math/big"
 
@@ -70,8 +69,8 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 
 	}
 
-	pk := utils.TOPRFThresholdMul(idxs, sharePublicKeysIn)
-	fmt.Println("master public key X:", pk.X.String())
+	// pk := utils.TOPRFThresholdMul(idxs, sharePublicKeysIn)
+	// fmt.Println("master public key X:", pk.X.String())
 
 	out, err := utils.TOPRFFinalize(idxs, respsIn, req.SecretElements, req.Mask)
 	if err != nil {
@@ -82,6 +81,9 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 		DomainSeparator: new(big.Int).SetBytes([]byte(domainSeparator)),
 		Output:          out,
 		Mask:            req.Mask,
+		Counter:         req.Counter,
+		X:               req.X,
+		Y:               req.Y,
 	}
 
 	copy(data.Responses[:], resps)

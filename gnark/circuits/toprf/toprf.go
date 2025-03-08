@@ -161,22 +161,11 @@ func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, 
 	vG := curve.DoubleBaseScalarMul(basePoint, serverPublicKey, r, c)
 	vH := curve.DoubleBaseScalarMul(masked, response, r, c)
 
-	hField.Write(basePoint.X)
 	hField.Write(basePoint.Y)
-
-	hField.Write(serverPublicKey.X)
 	hField.Write(serverPublicKey.Y)
-
-	hField.Write(vG.X)
 	hField.Write(vG.Y)
-
-	hField.Write(vH.X)
 	hField.Write(vH.Y)
-
-	hField.Write(masked.X)
 	hField.Write(masked.Y)
-
-	hField.Write(response.X)
 	hField.Write(response.Y)
 
 	expectedChallenge := hField.Sum()
@@ -185,7 +174,7 @@ func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, 
 	return nil
 }
 
-func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator, counter, x, yC frontend.Variable) (*twistededwards.Point, error) {
+func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator, counter, xOrig, yCleared frontend.Variable) (*twistededwards.Point, error) {
 	d := curve.Params().D
 	hField, err := mimc.NewMiMC(api)
 	if err != nil {
@@ -195,7 +184,7 @@ func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.
 	hField.Write(data[1])
 	hField.Write(domainSeparator)
 	hField.Write(counter)
-	y := hField.Sum()
+	y := hField.Sum() // original Y is data hash
 	hField.Reset()
 
 	y2 := api.Mul(y, y)
@@ -204,15 +193,17 @@ func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.
 	denom = api.Add(denom, 1)
 	denom = api.Neg(denom)
 	x2 := api.Div(num, denom)
-	api.AssertIsEqual(x2, api.Mul(x, x)) // does X match
+	api.AssertIsEqual(x2, api.Mul(xOrig, xOrig)) // check calculated X^2 against passed original X
 
-	point := twistededwards.Point{X: x, Y: y}
-	point = curve.Double(point)
-	point = curve.Double(point)
-	point = curve.Double(point)
+	// clear cofactor by p*8
+	point := twistededwards.Point{X: xOrig, Y: y} // original point
+	point = curve.Double(point)                   // p2
+	point = curve.Double(point)                   // p4
+	point = curve.Double(point)                   // p8
 
-	api.AssertIsEqual(point.Y, yC)
+	api.AssertIsEqual(point.Y, yCleared) // check Y after cofactor clearing
 
 	curve.AssertIsOnCurve(point)
+
 	return &point, nil
 }

@@ -145,13 +145,8 @@ func hashToScalar(data ...[]byte) []byte {
 func HashPointsToScalar(data ...*twistededwards.PointAffine) []byte {
 	hasher := hash.MIMC_BN254.New()
 	for _, p := range data {
-		x := p.X.BigInt(new(big.Int))
 		y := p.Y.BigInt(new(big.Int))
-		_, err := hasher.Write(x.Bytes())
-		if err != nil {
-			panic(err)
-		}
-		_, err = hasher.Write(y.Bytes())
+		_, err := hasher.Write(y.Bytes())
 		if err != nil {
 			panic(err)
 		}

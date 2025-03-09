@@ -83,7 +83,6 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 		Mask:            req.Mask,
 		Counter:         req.Counter,
 		X:               req.X,
-		Y:               req.Y,
 	}
 
 	copy(data.Responses[:], resps)

@@ -25,7 +25,6 @@ type OPRFRequest struct {
 	SecretElements [2]*big.Int
 	Counter        int
 	X              fr.Element // original X
-	Y              fr.Element // cleared Y
 }
 
 type OPRFResponse struct {
@@ -77,7 +76,6 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 		SecretElements: secretElements,
 		Counter:        counter,
 		X:              *origX,
-		Y:              H.Y,
 	}, nil
 }
 

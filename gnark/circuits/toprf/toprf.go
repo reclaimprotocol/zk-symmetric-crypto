@@ -26,7 +26,6 @@ type Params struct {
 	Output          frontend.Variable               `gnark:",public"` // hash of deblinded point + secret data
 	Counter         frontend.Variable               // counter used in hashToCurve
 	X               frontend.Variable               // orig X
-	Y               frontend.Variable               // cleared Y
 }
 
 type TOPRF struct {
@@ -88,7 +87,7 @@ func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) e
 	maskBits := bits.ToBinary(api, p.Mask, bits.WithNbDigits(api.Compiler().Field().BitLen()))
 	mask := field.FromBits(maskBits...)
 
-	dataPoint, err := hashToPoint(api, curve, secretData, p.DomainSeparator, p.Counter, p.X, p.Y)
+	dataPoint, err := hashToPoint(api, curve, secretData, p.DomainSeparator, p.Counter, p.X)
 	if err != nil {
 		return err
 	}
@@ -174,7 +173,7 @@ func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, 
 	return nil
 }
 
-func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator, counter, xOrig, yCleared frontend.Variable) (*twistededwards.Point, error) {
+func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator, counter, xOrig frontend.Variable) (*twistededwards.Point, error) {
 	d := curve.Params().D
 	hField, err := mimc.NewMiMC(api)
 	if err != nil {
@@ -200,8 +199,6 @@ func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.
 	point = curve.Double(point)                   // p2
 	point = curve.Double(point)                   // p4
 	point = curve.Double(point)                   // p8
-
-	api.AssertIsEqual(point.Y, yCleared) // check Y after cofactor clearing
 
 	curve.AssertIsOnCurve(point)
 

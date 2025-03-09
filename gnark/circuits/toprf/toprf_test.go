@@ -31,7 +31,7 @@ func (h *HasherCircuit) Define(api frontend.API) error {
 		return err
 	}
 
-	_, err = hashToPoint(api, curve, h.Data, h.DomainSeparator, h.Counter, h.X, h.Y)
+	_, err = hashToPoint(api, curve, h.Data, h.DomainSeparator, h.Counter, h.X)
 	return err
 }
 
@@ -44,7 +44,6 @@ func TestHashToPoint(t *testing.T) {
 		DomainSeparator: testData.DomainSeparator,
 		Counter:         testData.Counter,
 		X:               testData.X,
-		Y:               testData.Y,
 	}
 
 	rcs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &wtns)

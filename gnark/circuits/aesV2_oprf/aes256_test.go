@@ -76,7 +76,6 @@ func createWitness256(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int
 			C:               d.C,
 			R:               d.R,
 			X:               d.X,
-			Y:               d.Y,
 			Counter:         d.Counter,
 		},
 	}

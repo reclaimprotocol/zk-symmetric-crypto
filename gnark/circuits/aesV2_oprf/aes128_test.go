@@ -88,7 +88,6 @@ func createWitness(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int, c
 			Output:          d.Output,
 			Counter:         d.Counter,
 			X:               d.X,
-			Y:               d.Y,
 		},
 	}
 

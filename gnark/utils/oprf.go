@@ -20,11 +20,11 @@ var TNBCurveOrder = func() *big.Int { order := twistededwards.GetEdwardsCurve().
 const BytesPerElement = 31
 
 type OPRFRequest struct {
+	SecretElements [2]*big.Int
 	Mask           *big.Int `json:"mask"`
 	MaskedData     *twistededwards.PointAffine
-	SecretElements [2]*big.Int
 	Counter        int
-	X              fr.Element // original X
+	X              *big.Int // original X
 }
 
 type OPRFResponse struct {
@@ -34,25 +34,12 @@ type OPRFResponse struct {
 }
 
 func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFRequest, error) {
-	if len(secretBytes) > BytesPerElement*2 {
-		return nil, fmt.Errorf("secret data too big: %d, max %d bytes is allowed", len(secretBytes), BytesPerElement*2)
-	}
-	domainBytes := []byte(domainSeparator)
-	if len(domainBytes) > BytesPerElement {
-		return nil, fmt.Errorf("domain separator is %d bytes, max %d bytes is allowed", len(domainBytes), BytesPerElement)
+	secretElements, err := CreateSecretElements(secretBytes, []byte(domainSeparator))
+	if err != nil {
+		return nil, err
 	}
 
-	var secretElements [2]*big.Int
-
-	if len(secretBytes) > BytesPerElement {
-		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes[:BytesPerElement]))
-		secretElements[1] = new(big.Int).SetBytes(BEtoLE(secretBytes[BytesPerElement:]))
-	} else {
-		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes))
-		secretElements[1] = big.NewInt(0)
-	}
-
-	H, origX, counter, err := HashToPointPrecompute(secretElements[0].Bytes(), secretElements[1].Bytes(), domainBytes) // H
+	H, origX, counter, err := HashToPointPrecompute(secretElements[0].Bytes(), secretElements[1].Bytes(), []byte(domainSeparator)) // H
 	if err != nil {
 		return nil, err
 	}
@@ -68,14 +55,12 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 	masked := &twistededwards.PointAffine{}
 	masked.ScalarMultiplication(H, mask) // H*mask
 
-	x := new(big.Int)
-	H.X.BigInt(x)
 	return &OPRFRequest{
 		Mask:           mask,
 		MaskedData:     masked,
 		SecretElements: secretElements,
 		Counter:        counter,
-		X:              *origX,
+		X:              origX,
 	}, nil
 }
 
@@ -152,14 +137,33 @@ func HashPointsToScalar(data ...*twistededwards.PointAffine) []byte {
 	return hasher.Sum(nil)
 }
 
-func HashToPointPrecompute(data ...[]byte) (*twistededwards.PointAffine, *fr.Element, int, error) {
+func CreateSecretElements(secretBytes []byte, domainBytes []byte) ([2]*big.Int, error) {
+	if len(secretBytes) > BytesPerElement*2 {
+		return [2]*big.Int{}, fmt.Errorf("secret data too big: %d, max %d bytes is allowed", len(secretBytes), BytesPerElement*2)
+	}
+	if len(domainBytes) > BytesPerElement {
+		return [2]*big.Int{}, fmt.Errorf("domain separator is %d bytes, max %d bytes is allowed", len(domainBytes), BytesPerElement)
+	}
+
+	var secretElements [2]*big.Int
+
+	if len(secretBytes) > BytesPerElement {
+		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes[:BytesPerElement]))
+		secretElements[1] = new(big.Int).SetBytes(BEtoLE(secretBytes[BytesPerElement:]))
+	} else {
+		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes))
+		secretElements[1] = big.NewInt(0)
+	}
+	return secretElements, nil
+}
+
+func HashToPointPrecompute(data ...[]byte) (*twistededwards.PointAffine, *big.Int, int, error) {
 	var a, d, one fr.Element
 	a.SetInt64(-1)
 	d = curve.D
 	one.SetOne()
-
+	var counterFr fr.Element
 	for counter := 0; counter <= 255; counter++ {
-		var counterFr fr.Element
 		counterFr.SetInt64(int64(counter))
 		yBytes := hashToScalar(append(data, counterFr.Marshal())...)
 		var y fr.Element
@@ -184,11 +188,14 @@ func HashToPointPrecompute(data ...[]byte) (*twistededwards.PointAffine, *fr.Ele
 				if !clearedPoint.IsOnCurve() {
 					return nil, nil, 0, fmt.Errorf("cofactor-cleared point not on curve")
 				}
-				return clearedPoint, &x, counter, nil
+
+				xOrig := new(big.Int)
+				x.BigInt(xOrig)
+				return clearedPoint, xOrig, counter, nil
 			}
-			var lhs, rhs fr.Element
-			lhs.Mul(&a, &x2).Add(&lhs, &y2)
-			rhs.Mul(&d, &x2).Mul(&rhs, &y2).Add(&rhs, &one)
+			// var lhs, rhs fr.Element
+			// lhs.Mul(&a, &x2).Add(&lhs, &y2)
+			// rhs.Mul(&d, &x2).Mul(&rhs, &y2).Add(&rhs, &one)
 			// fmt.Printf("Counter %d: LHS = %s\nRHS = %s\n", counter, lhs.String(), rhs.String())
 			// fmt.Printf("Counter %d: Point not on curve: x=%s, y=%s\n", counter, x.String(), y.String())
 		}

@@ -266,7 +266,11 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 		coeffs[i] = utils.Coeff(idxs[i], idxs)
 	}
 
-	req, err := utils.OPRFGenerateRequest(output[oprf.Pos:oprf.Pos+oprf.Len], string(oprf.DomainSeparator))
+	secretElements, err := utils.CreateSecretElements(output[oprf.Pos:oprf.Pos+oprf.Len], oprf.DomainSeparator)
+	if err != nil {
+		panic(err)
+	}
+	_, origX, hashCounter, err := utils.HashToPointPrecompute(secretElements[0].Bytes(), secretElements[1].Bytes(), oprf.DomainSeparator) // H
 	if err != nil {
 		panic(err)
 	}
@@ -281,8 +285,8 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 			SharePublicKeys: pubKeys,
 			C:               cs,
 			R:               rs,
-			Counter:         req.Counter,
-			X:               req.X,
+			Counter:         hashCounter,
+			X:               origX,
 		},
 	}
 
@@ -363,7 +367,11 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 		coeffs[i] = utils.Coeff(idxs[i], idxs)
 	}
 
-	req, err := utils.OPRFGenerateRequest(output[oprf.Pos:oprf.Pos+oprf.Len], string(oprf.DomainSeparator))
+	secretElements, err := utils.CreateSecretElements(output[oprf.Pos:oprf.Pos+oprf.Len], oprf.DomainSeparator)
+	if err != nil {
+		panic(err)
+	}
+	_, origX, hashCounter, err := utils.HashToPointPrecompute(secretElements[0].Bytes(), secretElements[1].Bytes(), oprf.DomainSeparator) // H
 	if err != nil {
 		panic(err)
 	}
@@ -379,8 +387,8 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 			SharePublicKeys: pubKeys,
 			C:               cs,
 			R:               rs,
-			Counter:         req.Counter,
-			X:               req.X,
+			Counter:         hashCounter,
+			X:               origX,
 		},
 	}
 

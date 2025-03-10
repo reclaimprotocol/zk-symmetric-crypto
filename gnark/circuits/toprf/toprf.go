@@ -179,6 +179,7 @@ func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.
 	if err != nil {
 		return nil, err
 	}
+	api.AssertIsLessOrEqual(counter, 255) // hash counter is 0..255
 	hField.Write(data[0])
 	hField.Write(data[1])
 	hField.Write(domainSeparator)

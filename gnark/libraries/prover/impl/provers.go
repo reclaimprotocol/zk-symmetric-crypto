@@ -266,6 +266,11 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 		coeffs[i] = utils.Coeff(idxs[i], idxs)
 	}
 
+	req, err := utils.OPRFGenerateRequest(output[oprf.Pos:oprf.Pos+oprf.Len], string(oprf.DomainSeparator))
+	if err != nil {
+		panic(err)
+	}
+
 	witness := &chachaV3_oprf.ChachaTOPRFCircuit{
 		TOPRF: toprf.Params{
 			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
@@ -276,6 +281,8 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 			SharePublicKeys: pubKeys,
 			C:               cs,
 			R:               rs,
+			Counter:         req.Counter,
+			X:               req.X,
 		},
 	}
 
@@ -356,6 +363,11 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 		coeffs[i] = utils.Coeff(idxs[i], idxs)
 	}
 
+	req, err := utils.OPRFGenerateRequest(output[oprf.Pos:oprf.Pos+oprf.Len], string(oprf.DomainSeparator))
+	if err != nil {
+		panic(err)
+	}
+
 	circuit := &aes_v2_oprf.AESTOPRFCircuit{
 		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, len(key))},
 		TOPRF: toprf.Params{
@@ -367,6 +379,8 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 			SharePublicKeys: pubKeys,
 			C:               cs,
 			R:               rs,
+			Counter:         req.Counter,
+			X:               req.X,
 		},
 	}
 

@@ -5,10 +5,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
-	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
-	"gnark-symmetric-crypto/circuits/chachaV3"
-	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
+	"gnark-symmetric-crypto/circuits/aes"
+	"gnark-symmetric-crypto/circuits/aes_oprf"
+	"gnark-symmetric-crypto/circuits/chacha"
+	"gnark-symmetric-crypto/circuits/chacha_oprf"
 	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
 	"math/big"
@@ -28,14 +28,14 @@ type ChachaVerifier struct {
 }
 
 func (cv *ChachaVerifier) Verify(proof []byte, publicSignals []uint8) bool {
-	chunkLen := 64 * chachaV3.Blocks
+	chunkLen := 64 * chacha.Blocks
 	pubLen := chunkLen*2 + 12 + 4     // in & out, nonce, counter
 	if len(publicSignals) != pubLen { // in, nonce, counter, out
 		fmt.Printf("public signals must be %d bytes, not %d\n", pubLen, len(publicSignals))
 		return false
 	}
 
-	witness := &chachaV3.ChaChaCircuit{}
+	witness := &chacha.ChaChaCircuit{}
 
 	bOut := publicSignals[:chunkLen]
 	bIn := publicSignals[chunkLen+12+4:]
@@ -77,7 +77,7 @@ type AESVerifier struct {
 
 func (av *AESVerifier) Verify(bProof []byte, publicSignals []uint8) bool {
 
-	bytesPerInput := aes_v2.BLOCKS * 16
+	bytesPerInput := aes.BLOCKS * 16
 
 	if len(publicSignals) != bytesPerInput*2+12+4 { // plaintext, nonce, counter, ciphertext
 		return false
@@ -88,8 +88,8 @@ func (av *AESVerifier) Verify(bProof []byte, publicSignals []uint8) bool {
 	nonce := publicSignals[bytesPerInput : bytesPerInput+12]
 	bCounter := publicSignals[bytesPerInput+12 : bytesPerInput+12+4]
 
-	witness := &aes_v2.AESCircuit{
-		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, 1)}, // avoid warnings
+	witness := &aes.AESCircuit{
+		AESBaseCircuit: aes.AESBaseCircuit{Key: make([]frontend.Variable, 1)}, // avoid warnings
 	}
 
 	for i := 0; i < len(plaintext); i++ {
@@ -168,7 +168,7 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		coeffs[i] = utils.Coeff(idxs[i], idxs)
 	}
 
-	witness := &chachaV3_oprf.ChachaTOPRFCircuit{
+	witness := &chacha_oprf.ChachaTOPRFCircuit{
 		TOPRF: toprf.Params{
 			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
 			Responses:       evals,
@@ -253,8 +253,8 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		coeffs[i] = utils.Coeff(idxs[i], idxs)
 	}
 
-	witness := &aes_v2_oprf.AESTOPRFCircuit{
-		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, 1)}, // avoid warnings
+	witness := &aes_oprf.AESTOPRFCircuit{
+		AESBaseCircuit: aes.AESBaseCircuit{Key: make([]frontend.Variable, 1)}, // avoid warnings
 		TOPRF: toprf.Params{
 			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
 			Responses:       evals,

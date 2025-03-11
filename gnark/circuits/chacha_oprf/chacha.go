@@ -1,20 +1,20 @@
-package chachaV3_oprf
+package chacha_oprf
 
 import (
-	"gnark-symmetric-crypto/circuits/chachaV3"
+	"gnark-symmetric-crypto/circuits/chacha"
 	"gnark-symmetric-crypto/circuits/toprf"
 
 	"github.com/consensys/gnark/frontend"
 )
 
 const BITS_PER_WORD = 32
-const TOTAL_BITS = 16 * chachaV3.Blocks * BITS_PER_WORD
+const TOTAL_BITS = 16 * chacha.Blocks * BITS_PER_WORD
 
 type ChachaTOPRFCircuit struct {
-	chachaV3.ChaChaBaseCircuit
-	Out     [16 * chachaV3.Blocks][BITS_PER_WORD]frontend.Variable // plaintext
-	Bitmask [TOTAL_BITS]frontend.Variable                          `gnark:",public"` // bit mask for bits being hashed
-	Len     frontend.Variable                                      `gnark:",public"` // Length of "secret data" elements to be hashed. In bytes
+	chacha.ChaChaBaseCircuit
+	Out     [16 * chacha.Blocks][BITS_PER_WORD]frontend.Variable // plaintext
+	Bitmask [TOTAL_BITS]frontend.Variable                        `gnark:",public"` // bit mask for bits being hashed
+	Len     frontend.Variable                                    `gnark:",public"` // Length of "secret data" elements to be hashed. In bytes
 
 	TOPRF toprf.Params
 }

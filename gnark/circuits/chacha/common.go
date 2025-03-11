@@ -1,4 +1,4 @@
-package chachaV3
+package chacha
 
 import (
 	"github.com/consensys/gnark/frontend"

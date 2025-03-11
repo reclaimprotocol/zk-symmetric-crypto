@@ -1,4 +1,4 @@
-package aes_v2_oprf
+package aes_oprf
 
 import (
 	"crypto/aes"
@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
+	aes_v2 "gnark-symmetric-crypto/circuits/aes"
 	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
 	"testing"

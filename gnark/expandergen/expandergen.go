@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"gnark-symmetric-crypto/circuits/chachaV3"
+	"gnark-symmetric-crypto/circuits/chacha"
 	"os"
 
 	"github.com/PolyhedraZK/ExpanderCompilerCollection/ecgo"
@@ -10,8 +10,6 @@ import (
 )
 
 const GEN_FILES_DIR = "../resources/expander/"
-
-var CURVE = ecc.BN254.ScalarField()
 
 func main() {
 	err := generateChaChaV3()
@@ -21,7 +19,7 @@ func main() {
 }
 
 func generateChaChaV3() error {
-	circuit, err := ecgo.Compile(ecc.BN254.ScalarField(), &chachaV3.ChaChaCircuit{})
+	circuit, err := ecgo.Compile(ecc.BN254.ScalarField(), &chacha.ChaChaCircuit{})
 	if err != nil {
 		return err
 	}

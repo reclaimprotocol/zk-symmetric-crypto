@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
-	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
+	aes_v2 "gnark-symmetric-crypto/circuits/aes"
 	"gnark-symmetric-crypto/circuits/toprf"
 	prover "gnark-symmetric-crypto/libraries/prover/impl"
 	oprf2 "gnark-symmetric-crypto/libraries/prover/oprf"
@@ -255,11 +255,11 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	pos := uint32(59)
 	copy(bOutput[pos:], email)
 
-	cipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
+	chachaCipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
 	assert.NoError(err)
 
-	cipher.SetCounter(counter)
-	cipher.XORKeyStream(bInput, bOutput)
+	chachaCipher.SetCounter(counter)
+	chachaCipher.XORKeyStream(bInput, bOutput)
 
 	// TOPRF setup
 
@@ -309,6 +309,17 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		assert.NoError(err)
 	}
 
+	resps := make([]*oprf2.OPRFResponse, threshold)
+	for i := 0; i < threshold; i++ {
+		resps[i] = &oprf2.OPRFResponse{
+			Index:          responses[i].Index,
+			PublicKeyShare: responses[i].PublicKeyShare,
+			Evaluated:      responses[i].Evaluated,
+			C:              responses[i].C,
+			R:              responses[i].R,
+		}
+	}
+
 	finReq := &oprf2.InputTOPRFFinalizeParams{
 		ServerPublicKey: shares.PublicKey,
 		Request: &oprf2.OPRFRequest{
@@ -316,15 +327,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 			MaskedData:     req.MaskedData.Marshal(),
 			SecretElements: [][]byte{req.SecretElements[0].Bytes(), req.SecretElements[1].Bytes()},
 		},
-		Responses: []*oprf2.OPRFResponse{
-			{
-				Index:          responses[0].Index,
-				PublicKeyShare: responses[0].PublicKeyShare,
-				Evaluated:      responses[0].Evaluated,
-				C:              responses[0].C,
-				R:              responses[0].R,
-			},
-		},
+		Responses: resps,
 	}
 
 	finReqJSON, _ := json.Marshal(finReq)

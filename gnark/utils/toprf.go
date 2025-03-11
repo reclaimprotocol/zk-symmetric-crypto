@@ -123,8 +123,6 @@ type SharedKey struct {
 }
 
 func TOPRFGenerateSharedKey(nodes, threshold int) *SharedKey {
-
-	curve := twistededwards.GetEdwardsCurve()
 	sk, err := rand.Int(rand.Reader, TNBCurveOrder)
 	if err != nil {
 		panic(err)

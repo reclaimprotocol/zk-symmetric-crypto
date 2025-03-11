@@ -22,7 +22,6 @@ type HasherCircuit struct {
 	DomainSeparator frontend.Variable
 	Counter         frontend.Variable
 	X               frontend.Variable
-	Y               frontend.Variable
 }
 
 func (h *HasherCircuit) Define(api frontend.API) error {
@@ -46,6 +45,7 @@ func TestHashToPoint(t *testing.T) {
 		X:               testData.X,
 	}
 
+	assert.CheckCircuit(&wtns, test.WithCurves(ecc.BN254), test.WithValidAssignment(&wtns))
 	rcs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &wtns)
 	assert.NoError(err)
 	fmt.Println(rcs.GetNbConstraints())

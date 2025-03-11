@@ -174,12 +174,14 @@ func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, 
 }
 
 func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator, counter, xOrig frontend.Variable) (*twistededwards.Point, error) {
+	api.AssertIsLessOrEqual(counter, 255) // hash counter is 0..255
+
 	d := curve.Params().D
+
 	hField, err := mimc.NewMiMC(api)
 	if err != nil {
 		return nil, err
 	}
-	api.AssertIsLessOrEqual(counter, 255) // hash counter is 0..255
 	hField.Write(data[0])
 	hField.Write(data[1])
 	hField.Write(domainSeparator)
@@ -187,6 +189,7 @@ func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.
 	y := hField.Sum() // original Y is data hash
 	hField.Reset()
 
+	// calculate X
 	y2 := api.Mul(y, y)
 	num := api.Sub(1, y2)
 	denom := api.Mul(d.String(), y2)

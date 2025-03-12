@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	types "gnark-symmetric-crypto/dkg"
 	"gnark-symmetric-crypto/utils"
 	"math/big"
 	"net/http"
@@ -14,54 +15,25 @@ import (
 	"filippo.io/age"
 )
 
+// Import shared types
+type (
+	RegisterRequest      = types.RegisterRequest
+	RegisterResponse     = types.RegisterResponse
+	NodesResponse        = types.NodesResponse
+	CommitmentData       = types.CommitmentData
+	CommitmentsResponse  = types.CommitmentsResponse
+	ShareData            = types.ShareData
+	ShareBatchRequest    = types.ShareBatchRequest
+	SharesResponse       = types.SharesResponse
+	PublicShareData      = types.PublicShareData
+	PublicSharesResponse = types.PublicSharesResponse
+)
+
 // DKGResponse is a generic response type with a typed Data field
 type DKGResponse[T any] struct {
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
 	Data    T      `json:"data,omitempty"`
-}
-
-type RegisterRequest struct {
-	PublicKey string `json:"public_key"`
-}
-
-type RegisterResponse struct {
-	NodeID    string `json:"node_id"`
-	PublicKey string `json:"public_key"`
-}
-
-type NodesResponse struct {
-	Nodes       []string          `json:"nodes"`
-	NodeIndices map[string]int    `json:"node_indices"`
-	PublicKeys  map[string]string `json:"public_keys"`
-}
-
-type CommitmentData struct {
-	Commitment []byte `json:"commitment"`
-}
-
-type CommitmentsResponse struct {
-	Commitments map[string][]byte `json:"commitments"`
-}
-
-type ShareData struct {
-	EncryptedShare []byte `json:"encrypted_share"`
-}
-
-type ShareBatchRequest struct {
-	Shares map[string]*ShareData `json:"shares"` // Pointer to ShareData
-}
-
-type SharesResponse struct {
-	Shares map[string]map[string]*ShareData `json:"shares"` // Pointer to ShareData
-}
-
-type PublicShareData struct {
-	PublicShare []byte `json:"public_share"`
-}
-
-type PublicSharesResponse struct {
-	PublicShares map[string][]byte `json:"public_shares"`
 }
 
 type Client struct {
@@ -187,7 +159,8 @@ func (c *Client) Register() error {
 		for i, uuid := range resp.Data.Nodes {
 			nodes[i] = strconv.Itoa(resp.Data.NodeIndices[uuid])
 		}
-		c.DKG = utils.NewDKG(len(resp.Data.Nodes)-1, len(resp.Data.Nodes), nodes, strconv.Itoa(c.NodeIndex))
+		// Use server-provided Threshold
+		c.DKG = utils.NewDKG(resp.Data.Threshold, len(resp.Data.Nodes), nodes, strconv.Itoa(c.NodeIndex))
 		for nodeID, pubKeyStr := range resp.Data.PublicKeys {
 			recipient, err := age.ParseX25519Recipient(pubKeyStr)
 			if err != nil {
@@ -201,7 +174,7 @@ func (c *Client) Register() error {
 	if err != nil {
 		return fmt.Errorf("%s: failed to sync nodes: %v", c.NodeID, err)
 	}
-	fmt.Printf("%s: Synced with %d nodes, index %d\n", c.NodeID, c.DKG.NumNodes, c.NodeIndex)
+	fmt.Printf("%s: Synced with %d nodes, index %d, threshold %d\n", c.NodeID, c.DKG.NumNodes, c.NodeIndex, c.DKG.Threshold)
 	return nil
 }
 
@@ -284,7 +257,7 @@ func (c *Client) SubmitShares() error {
 			return fmt.Errorf("%s: failed to encrypt share for index %s (UUID %s): %v", c.NodeID, toNodeIndexStr, uuidNodeID, err)
 		}
 		if _, err = w.Write([]byte(share.String())); err != nil {
-			w.Close()
+			_ = w.Close()
 			return fmt.Errorf("%s: failed to write encrypted share for index %s (UUID %s): %v", c.NodeID, toNodeIndexStr, uuidNodeID, err)
 		}
 		if err = w.Close(); err != nil {

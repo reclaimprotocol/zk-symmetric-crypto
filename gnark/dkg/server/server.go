@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	types "gnark-symmetric-crypto/dkg"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
+)
+
+// Import shared types
+type (
+	RegisterRequest        = types.RegisterRequest
+	RegisterResponse       = types.RegisterResponse
+	NodesResponse          = types.NodesResponse
+	CommitmentData         = types.CommitmentData
+	CommitmentsResponse    = types.CommitmentsResponse
+	ShareData              = types.ShareData
+	ShareBatchRequest      = types.ShareBatchRequest
+	SharesResponse         = types.SharesResponse
+	SharesValidationErrors = types.SharesValidationErrors
+	ValidationError        = types.ValidationError
+	PublicShareData        = types.PublicShareData
+	PublicSharesResponse   = types.PublicSharesResponse
 )
 
 // BaseResponse holds common fields for all responses
@@ -52,9 +69,7 @@ type SharesResponseFull struct {
 // SharesValidationErrorResponse is the error response for /dkg/shares validation failures
 type SharesValidationErrorResponse struct {
 	BaseResponse
-	Data *struct {
-		Errors []validationError `json:"errors"`
-	} `json:"data"`
+	Data *SharesValidationErrors `json:"data"`
 }
 
 // PublicSharesResponseFull is the full response for /dkg/public_shares (POST and GET)
@@ -68,59 +83,6 @@ type HealthResponse struct {
 	BaseResponse
 }
 
-// RegisterResponse is the data payload for registration
-type RegisterResponse struct {
-	NodeID    string `json:"node_id"` // UUID
-	PublicKey string `json:"public_key"`
-}
-
-// NodesResponse is the data payload for nodes
-type NodesResponse struct {
-	Nodes       []string          `json:"nodes"`
-	NodeIndices map[string]int    `json:"node_indices"`
-	PublicKeys  map[string]string `json:"public_keys"`
-}
-
-// CommitmentsResponse is the data payload for commitments
-type CommitmentsResponse struct {
-	Commitments map[string][]byte `json:"commitments"`
-}
-
-// SharesResponse is the data payload for shares
-type SharesResponse struct {
-	Shares map[string]map[string]*ShareData `json:"shares"`
-}
-
-type validationError struct {
-	ToNodeID string `json:"to_node_id"`
-	Message  string `json:"message"`
-}
-
-// PublicSharesResponse is the data payload for public shares
-type PublicSharesResponse struct {
-	PublicShares map[string][]byte `json:"public_shares"`
-}
-
-// CommitmentData is the request payload for commitments
-type CommitmentData struct {
-	Commitment []byte `json:"commitment"`
-}
-
-// ShareData is the request/response payload for shares
-type ShareData struct {
-	EncryptedShare []byte `json:"encrypted_share"`
-}
-
-// ShareBatchRequest is the request payload for shares
-type ShareBatchRequest struct {
-	Shares map[string]*ShareData `json:"shares"`
-}
-
-// PublicShareData is the request payload for public shares
-type PublicShareData struct {
-	PublicShare []byte `json:"public_share"`
-}
-
 type Server struct {
 	Threshold       int
 	NumNodes        int
@@ -128,7 +90,7 @@ type Server struct {
 	NodeIndices     map[string]int
 	PublicKeys      map[string]string
 	Commitments     map[string][][]byte
-	Shares          map[string]map[string]*ShareData // Pointer to ShareData
+	Shares          map[string]map[string]*ShareData
 	PublicShares    map[string][]byte
 	RegisteredNodes map[string]bool
 	Ctx             context.Context
@@ -175,9 +137,7 @@ func (s *Server) health(c echo.Context) error {
 }
 
 func (s *Server) register(c echo.Context) error {
-	req := &struct {
-		PublicKey string `json:"public_key"`
-	}{}
+	req := &RegisterRequest{} // Use named struct from types
 	if err := c.Bind(req); err != nil {
 		log.Errorf("Failed to bind request: %v", err)
 		return c.JSON(http.StatusBadRequest, &BaseResponse{Status: "error", Message: "Invalid request format"})
@@ -228,6 +188,7 @@ func (s *Server) getNodes(c echo.Context) error {
 			Nodes:       s.Nodes,
 			NodeIndices: s.NodeIndices,
 			PublicKeys:  s.PublicKeys,
+			Threshold:   s.Threshold,
 		},
 	})
 }
@@ -310,31 +271,29 @@ func (s *Server) submitShare(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, &BaseResponse{Status: "error", Message: "Shares map is required"})
 	}
 
-	var errores []validationError
+	var errores []ValidationError
 	for toNodeID, share := range req.Shares {
 		if share == nil {
-			errores = append(errores, validationError{ToNodeID: toNodeID, Message: "Nil share"})
+			errores = append(errores, ValidationError{ToNodeID: toNodeID, Message: "Nil share"})
 			continue
 		}
 		if toNodeID == FromNodeID {
-			errores = append(errores, validationError{ToNodeID: toNodeID, Message: "Cannot include self in share batch"})
+			errores = append(errores, ValidationError{ToNodeID: toNodeID, Message: "Cannot include self in share batch"})
 			continue
 		}
 		if _, ok := s.RegisteredNodes[toNodeID]; !ok {
-			errores = append(errores, validationError{ToNodeID: toNodeID, Message: "Invalid to_node_id"})
+			errores = append(errores, ValidationError{ToNodeID: toNodeID, Message: "Invalid to_node_id"})
 			continue
 		}
 		if len(share.EncryptedShare) == 0 {
-			errores = append(errores, validationError{ToNodeID: toNodeID, Message: "Empty share"})
+			errores = append(errores, ValidationError{ToNodeID: toNodeID, Message: "Empty share"})
 		}
 	}
 
 	if len(errores) > 0 {
 		return c.JSON(http.StatusBadRequest, &SharesValidationErrorResponse{
 			BaseResponse: BaseResponse{Status: "error", Message: "Share validation failed"},
-			Data: (*struct {
-				Errors []validationError `json:"errors"`
-			})(&struct{ Errors []validationError }{Errors: errores}),
+			Data:         &SharesValidationErrors{Errors: errores}, // Use named struct
 		})
 	}
 

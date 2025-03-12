@@ -51,8 +51,7 @@ type ShareData struct {
 }
 
 type ShareBatchRequest struct {
-	FromNodeID string               `json:"from_node_id"`
-	Shares     map[string]ShareData `json:"shares"`
+	Shares map[string]ShareData `json:"shares"`
 }
 
 type PublicShareData struct {
@@ -210,7 +209,16 @@ func (s *Server) submitShare(c echo.Context) error {
 		log.Errorf("Failed to bind share batch: %v", err)
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Invalid request format"})
 	}
-	if req.FromNodeID == "" || len(req.Shares) == 0 {
+
+	FromNodeID := c.Request().Header.Get("Node-ID")
+	if FromNodeID == "" {
+		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Node-ID header is required"})
+	}
+	if _, ok := s.RegisteredNodes[FromNodeID]; !ok {
+		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered node"})
+	}
+
+	if FromNodeID == "" || len(req.Shares) == 0 {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "FromNodeID and Shares map are required"})
 	}
 
@@ -222,12 +230,12 @@ func (s *Server) submitShare(c echo.Context) error {
 
 	s.DKG.Lock()
 	defer s.DKG.Unlock()
-	if _, ok := s.RegisteredNodes[req.FromNodeID]; !ok {
+	if _, ok := s.RegisteredNodes[FromNodeID]; !ok {
 		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered from_node_id"})
 	}
 
 	for toNodeID, share := range req.Shares {
-		if toNodeID == req.FromNodeID {
+		if toNodeID == FromNodeID {
 			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Cannot include self in share batch"})
 		}
 		if _, ok := s.RegisteredNodes[toNodeID]; !ok {
@@ -236,13 +244,13 @@ func (s *Server) submitShare(c echo.Context) error {
 		if len(share.EncryptedShare) == 0 {
 			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: fmt.Sprintf("Empty share for %s", toNodeID)})
 		}
-		if s.DKG.Shares[req.FromNodeID] == nil {
-			s.DKG.Shares[req.FromNodeID] = make(map[string]ShareData)
+		if s.DKG.Shares[FromNodeID] == nil {
+			s.DKG.Shares[FromNodeID] = make(map[string]ShareData)
 		}
-		s.DKG.Shares[req.FromNodeID][toNodeID] = share
-		log.Infof("Received share from %s to %s in batch", req.FromNodeID, toNodeID)
+		s.DKG.Shares[FromNodeID][toNodeID] = share
+		// log.Infof("Received share from %s to %s in batch", FromNodeID, toNodeID)
 	}
-	log.Infof("Processed batch of %d shares from %s", len(req.Shares), req.FromNodeID)
+	log.Infof("Processed batch of %d shares from %s", len(req.Shares), FromNodeID)
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success"})
 }
 

@@ -55,6 +55,14 @@ func TOPRFCreateShares(n, threshold int, secret *big.Int) ([]*Share, error) {
 }
 
 func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
+
+	if T <= 0 || T > N {
+		return nil, fmt.Errorf("invalid threshold: T=%d with N=%d", T, N)
+	}
+	if N <= 0 {
+		return nil, fmt.Errorf("invalid number of nodes: %d", N)
+	}
+
 	// Generate node IDs
 	nodes := make([]string, N)
 	for i := 0; i < N; i++ {

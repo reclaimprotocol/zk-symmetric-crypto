@@ -314,11 +314,20 @@ func (s *Server) getPublicShares(c echo.Context) error {
 
 func main() {
 	port := os.Getenv("PORT")
+	numNodesStr := os.Getenv("NUM_NODES")
+	thresholdStr := os.Getenv("THRESHOLD")
+
 	if port == "" {
 		port = "8080"
 	}
-	numNodesStr := os.Getenv("NUM_NODES")
-	thresholdStr := os.Getenv("THRESHOLD")
+
+	if numNodesStr == "" {
+		numNodesStr = "5"
+	}
+	if thresholdStr == "" {
+		thresholdStr = "3"
+	}
+
 	numNodes, err := strconv.Atoi(numNodesStr)
 	if err != nil {
 		log.Fatalf("Invalid NUM_NODES: %v", err)

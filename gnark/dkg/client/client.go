@@ -14,10 +14,15 @@ import (
 	"filippo.io/age"
 )
 
-type DKGResponse struct {
-	Status  string      `json:"status"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
+// DKGResponse is a generic response type with a typed Data field
+type DKGResponse[T any] struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+	Data    T      `json:"data,omitempty"`
+}
+
+type RegisterRequest struct {
+	PublicKey string `json:"public_key"`
 }
 
 type RegisterResponse struct {
@@ -25,20 +30,18 @@ type RegisterResponse struct {
 	PublicKey string `json:"public_key"`
 }
 
-type CommitmentsResponse struct {
-	Commitments map[string][]byte `json:"commitments"`
-}
-
-type SharesResponse struct {
-	Shares map[string]map[string]ShareData `json:"shares"`
-}
-
-type PublicSharesResponse struct {
-	PublicShares map[string][]byte `json:"public_shares"`
+type NodesResponse struct {
+	Nodes       []string          `json:"nodes"`
+	NodeIndices map[string]int    `json:"node_indices"`
+	PublicKeys  map[string]string `json:"public_keys"`
 }
 
 type CommitmentData struct {
 	Commitment []byte `json:"commitment"`
+}
+
+type CommitmentsResponse struct {
+	Commitments map[string][]byte `json:"commitments"`
 }
 
 type ShareData struct {
@@ -46,11 +49,19 @@ type ShareData struct {
 }
 
 type ShareBatchRequest struct {
-	Shares map[string]ShareData `json:"shares"`
+	Shares map[string]*ShareData `json:"shares"` // Pointer to ShareData
+}
+
+type SharesResponse struct {
+	Shares map[string]map[string]*ShareData `json:"shares"` // Pointer to ShareData
 }
 
 type PublicShareData struct {
 	PublicShare []byte `json:"public_share"`
+}
+
+type PublicSharesResponse struct {
+	PublicShares map[string][]byte `json:"public_shares"`
 }
 
 type Client struct {
@@ -58,11 +69,11 @@ type Client struct {
 	NodeIndex        int
 	PublicKeys       map[string]age.Recipient // UUID -> PublicKey
 	NodeIndices      map[string]int           // UUID -> NodeIndex
-	IndexToUUID      map[int]string           // NodeIndex -> UUID (reverse map)
-	Identity         *age.X25519Identity
-	DKG              *utils.DKG
-	httpClient       *http.Client
-	LocalCommitments [][]byte // Store our own commitments for verification
+	IndexToUUID      map[int]string           // NodeIndex -> UUID
+	Identity         *age.X25519Identity      // Pointer
+	DKG              *utils.DKG               // Pointer
+	httpClient       *http.Client             // Pointer
+	LocalCommitments [][]byte                 // Value (immutable after set)
 }
 
 func NewClient() *Client {
@@ -81,15 +92,16 @@ func NewClient() *Client {
 	}
 }
 
-func (c *Client) post(endpoint string, data interface{}) (DKGResponse, error) {
-	var respData DKGResponse
+// post returns a pointer to DKGResponse
+func post[TReq any, TResp any](c *Client, endpoint string, data *TReq) (*DKGResponse[TResp], error) {
+	respData := &DKGResponse[TResp]{}
 	body, err := json.Marshal(data)
 	if err != nil {
-		return respData, fmt.Errorf("%s: failed to marshal data for %s: %v", c.NodeID, endpoint, err)
+		return nil, fmt.Errorf("%s: failed to marshal data for %s: %v", c.NodeID, endpoint, err)
 	}
 	req, err := http.NewRequest("POST", "http://localhost:8080"+endpoint, bytes.NewBuffer(body))
 	if err != nil {
-		return respData, fmt.Errorf("%s: failed to create request for %s: %v", c.NodeID, endpoint, err)
+		return nil, fmt.Errorf("%s: failed to create request for %s: %v", c.NodeID, endpoint, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.NodeID != "" {
@@ -97,53 +109,51 @@ func (c *Client) post(endpoint string, data interface{}) (DKGResponse, error) {
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return respData, fmt.Errorf("%s: failed to send request to %s: %v", c.NodeID, endpoint, err)
+		return nil, fmt.Errorf("%s: failed to send request to %s: %v", c.NodeID, endpoint, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return respData, fmt.Errorf("%s: unexpected status %d from %s", c.NodeID, resp.StatusCode, endpoint)
+		return nil, fmt.Errorf("%s: unexpected status %d from %s", c.NodeID, resp.StatusCode, endpoint)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
-		return respData, fmt.Errorf("%s: failed to decode response from %s: %v", c.NodeID, endpoint, err)
+	if err := json.NewDecoder(resp.Body).Decode(respData); err != nil {
+		return nil, fmt.Errorf("%s: failed to decode response from %s: %v", c.NodeID, endpoint, err)
 	}
 	return respData, nil
 }
 
-func (c *Client) get(endpoint string, target interface{}) (bool, error) {
+// get returns a pointer to DKGResponse
+func get[TResp any](c *Client, endpoint string) (*DKGResponse[TResp], error) {
+	respData := &DKGResponse[TResp]{}
 	req, err := http.NewRequest("GET", "http://localhost:8080"+endpoint, nil)
 	if err != nil {
-		return false, fmt.Errorf("%s: failed to create request for %s: %v", c.NodeID, endpoint, err)
+		return nil, fmt.Errorf("%s: failed to create request for %s: %v", c.NodeID, endpoint, err)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("%s: failed to send request to %s: %v", c.NodeID, endpoint, err)
+		return nil, fmt.Errorf("%s: failed to send request to %s: %v", c.NodeID, endpoint, err)
 	}
 	defer resp.Body.Close()
-	var respData DKGResponse
-	if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
-		return false, fmt.Errorf("%s: failed to decode response from %s: %v", c.NodeID, endpoint, err)
+	if err := json.NewDecoder(resp.Body).Decode(respData); err != nil {
+		return nil, fmt.Errorf("%s: failed to decode response from %s: %v", c.NodeID, endpoint, err)
 	}
-	if respData.Status != "success" {
-		return false, nil
-	}
-	dataBytes, err := json.Marshal(respData.Data)
-	if err != nil {
-		return false, fmt.Errorf("%s: failed to marshal response data from %s: %v", c.NodeID, endpoint, err)
-	}
-	if err = json.Unmarshal(dataBytes, target); err != nil {
-		return false, fmt.Errorf("%s: failed to unmarshal response data from %s: %v", c.NodeID, endpoint, err)
-	}
-	return true, nil
+	return respData, nil
 }
 
-func (c *Client) poll(endpoint string, condition func() bool) error {
+// poll uses pointer to DKGResponse
+func poll[T any](c *Client, endpoint string, condition func(*DKGResponse[T]) bool) error {
 	timeout := time.After(30 * time.Second)
 	for {
 		select {
 		case <-timeout:
 			return fmt.Errorf("%s: polling timeout for %s", c.NodeID, endpoint)
 		default:
-			if condition() {
+			resp, err := get[T](c, endpoint)
+			if err != nil {
+				fmt.Printf("%s: failed to poll %s: %v\n", c.NodeID, endpoint, err)
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+			if condition(resp) {
 				return nil
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -153,61 +163,40 @@ func (c *Client) poll(endpoint string, condition func() bool) error {
 
 func (c *Client) Register() error {
 	fmt.Printf("Client registering\n")
-	resp, err := c.post("/dkg/register", struct {
-		PublicKey string `json:"public_key"`
-	}{c.Identity.Recipient().String()})
+	req := &RegisterRequest{PublicKey: c.Identity.Recipient().String()}
+	resp, err := post[RegisterRequest, RegisterResponse](c, "/dkg/register", req)
 	if err != nil {
 		return fmt.Errorf("failed to register: %v", err)
 	}
 	if resp.Status != "success" {
 		return fmt.Errorf("failed to register: %s", resp.Message)
 	}
-	var regData RegisterResponse
-	dataBytes, err := json.Marshal(resp.Data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal register response: %v", err)
-	}
-	if err = json.Unmarshal(dataBytes, &regData); err != nil {
-		return fmt.Errorf("failed to unmarshal registration data: %v", err)
-	}
-	c.NodeID = regData.NodeID
+	c.NodeID = resp.Data.NodeID
 	fmt.Printf("%s: Registered with public key %s\n", c.NodeID, c.Identity.Recipient().String())
 
-	err = c.poll("/dkg/nodes", func() bool {
-		type NodesResponse struct {
-			Nodes       []string          `json:"nodes"`
-			NodeIndices map[string]int    `json:"node_indices"`
-			PublicKeys  map[string]string `json:"public_keys"`
-		}
-		var nodesResp NodesResponse
-		ok, err := c.get("/dkg/nodes", &nodesResp)
-		if err != nil {
-			fmt.Printf("%s: failed to get nodes: %v\n", c.NodeID, err)
+	err = poll(c, "/dkg/nodes", func(resp *DKGResponse[NodesResponse]) bool {
+		if resp.Status != "success" {
 			return false
 		}
-		if ok {
-			c.NodeIndex = nodesResp.NodeIndices[c.NodeID]
-			c.NodeIndices = nodesResp.NodeIndices
-			// Populate reverse map
-			for uuid, index := range nodesResp.NodeIndices {
-				c.IndexToUUID[index] = uuid
-			}
-			nodes := make([]string, len(nodesResp.Nodes))
-			for i, uuid := range nodesResp.Nodes {
-				nodes[i] = strconv.Itoa(nodesResp.NodeIndices[uuid])
-			}
-			c.DKG = utils.NewDKG(len(nodesResp.Nodes)-1, len(nodesResp.Nodes), nodes, strconv.Itoa(c.NodeIndex))
-			for nodeID, pubKeyStr := range nodesResp.PublicKeys {
-				recipient, err := age.ParseX25519Recipient(pubKeyStr)
-				if err != nil {
-					fmt.Printf("%s: Failed to parse public key for %s: %v\n", c.NodeID, nodeID, err)
-					continue
-				}
-				c.PublicKeys[nodeID] = recipient
-			}
-			return len(nodesResp.Nodes) == c.DKG.NumNodes && len(c.PublicKeys) == c.DKG.NumNodes && c.NodeIndex > 0
+		c.NodeIndex = resp.Data.NodeIndices[c.NodeID]
+		c.NodeIndices = resp.Data.NodeIndices
+		for uuid, index := range resp.Data.NodeIndices {
+			c.IndexToUUID[index] = uuid
 		}
-		return false
+		nodes := make([]string, len(resp.Data.Nodes))
+		for i, uuid := range resp.Data.Nodes {
+			nodes[i] = strconv.Itoa(resp.Data.NodeIndices[uuid])
+		}
+		c.DKG = utils.NewDKG(len(resp.Data.Nodes)-1, len(resp.Data.Nodes), nodes, strconv.Itoa(c.NodeIndex))
+		for nodeID, pubKeyStr := range resp.Data.PublicKeys {
+			recipient, err := age.ParseX25519Recipient(pubKeyStr)
+			if err != nil {
+				fmt.Printf("%s: Failed to parse public key for %s: %v\n", c.NodeID, nodeID, err)
+				continue
+			}
+			c.PublicKeys[nodeID] = recipient
+		}
+		return len(resp.Data.Nodes) == c.DKG.NumNodes && len(c.PublicKeys) == c.DKG.NumNodes && c.NodeIndex > 0
 	})
 	if err != nil {
 		return fmt.Errorf("%s: failed to sync nodes: %v", c.NodeID, err)
@@ -227,7 +216,8 @@ func (c *Client) SubmitCommitments() error {
 		return fmt.Errorf("%s: failed to unmarshal local commitments: %v", c.NodeID, err)
 	}
 	c.LocalCommitments = localCommits
-	resp, err := c.post("/dkg/commitments", CommitmentData{Commitment: commitData})
+	req := &CommitmentData{Commitment: commitData}
+	resp, err := post[CommitmentData, struct{}](c, "/dkg/commitments", req)
 	if err != nil {
 		return err
 	}
@@ -239,20 +229,18 @@ func (c *Client) SubmitCommitments() error {
 }
 
 func (c *Client) FetchCommitments() (map[string][][]byte, error) {
-	var resp CommitmentsResponse
-	err := c.poll("/dkg/commitments", func() bool {
-		ok, err := c.get("/dkg/commitments", &resp)
-		if err != nil {
-			fmt.Printf("%s: failed to poll commitments: %v\n", c.NodeID, err)
-			return false
-		}
-		return ok && len(resp.Commitments) == c.DKG.NumNodes
+	err := poll(c, "/dkg/commitments", func(resp *DKGResponse[CommitmentsResponse]) bool {
+		return resp.Status == "success" && len(resp.Data.Commitments) == c.DKG.NumNodes
 	})
 	if err != nil {
 		return nil, err
 	}
+	resp, err := get[CommitmentsResponse](c, "/dkg/commitments")
+	if err != nil {
+		return nil, fmt.Errorf("%s: failed to fetch commitments: %v", c.NodeID, err)
+	}
 	commitMap := make(map[string][][]byte)
-	for nodeID, commBytes := range resp.Commitments {
+	for nodeID, commBytes := range resp.Data.Commitments {
 		var commits [][]byte
 		if err := json.Unmarshal(commBytes, &commits); err != nil {
 			return nil, fmt.Errorf("%s: failed to unmarshal commitments for node %s: %v", c.NodeID, nodeID, err)
@@ -279,8 +267,8 @@ func (c *Client) FetchCommitments() (map[string][][]byte, error) {
 
 func (c *Client) SubmitShares() error {
 	c.DKG.GenerateShares()
-	shareBatch := ShareBatchRequest{
-		Shares: make(map[string]ShareData),
+	shareBatch := &ShareBatchRequest{
+		Shares: make(map[string]*ShareData),
 	}
 	for toNodeIndexStr, share := range c.DKG.Shares {
 		if toNodeIndexStr == strconv.Itoa(c.NodeIndex) {
@@ -296,15 +284,17 @@ func (c *Client) SubmitShares() error {
 			return fmt.Errorf("%s: failed to encrypt share for index %s (UUID %s): %v", c.NodeID, toNodeIndexStr, uuidNodeID, err)
 		}
 		if _, err = w.Write([]byte(share.String())); err != nil {
-			w.Close() // Ensure close even on error
+			w.Close()
 			return fmt.Errorf("%s: failed to write encrypted share for index %s (UUID %s): %v", c.NodeID, toNodeIndexStr, uuidNodeID, err)
 		}
 		if err = w.Close(); err != nil {
 			return fmt.Errorf("%s: failed to close encrypt writer for index %s (UUID %s): %v", c.NodeID, toNodeIndexStr, uuidNodeID, err)
 		}
-		shareBatch.Shares[uuidNodeID] = ShareData{EncryptedShare: buf.Bytes()}
+		shareData := &ShareData{}              // Allocate pointer first
+		shareData.EncryptedShare = buf.Bytes() // Assign field
+		shareBatch.Shares[uuidNodeID] = shareData
 	}
-	resp, err := c.post("/dkg/shares", shareBatch)
+	resp, err := post[ShareBatchRequest, struct{}](c, "/dkg/shares", shareBatch)
 	if err != nil {
 		return err
 	}
@@ -330,40 +320,34 @@ func (c *Client) findUUIDByIndex(indexStr string) string {
 }
 
 func (c *Client) FetchShares() error {
-	var resp SharesResponse
-	err := c.poll("/dkg/shares", func() bool {
-		ok, err := c.get("/dkg/shares", &resp)
-		if err != nil {
-			fmt.Printf("%s: failed to poll shares: %v\n", c.NodeID, err)
+	err := poll(c, "/dkg/shares", func(resp *DKGResponse[SharesResponse]) bool {
+		if resp.Status != "success" {
 			return false
 		}
-		if ok {
-			c.DKG.ReceivedShares = make(map[string]*big.Int)
-			for fromNodeID, shares := range resp.Shares {
-				if share, ok := shares[c.NodeID]; ok {
-					r, err := age.Decrypt(bytes.NewReader(share.EncryptedShare), c.Identity)
-					if err != nil {
-						fmt.Printf("%s: failed to decrypt share from %s: %v\n", c.NodeID, fromNodeID, err)
-						continue
-					}
-					var decrypted bytes.Buffer
-					_, err = decrypted.ReadFrom(r)
-					if err != nil {
-						fmt.Printf("%s: failed to read decrypted share from %s: %v\n", c.NodeID, fromNodeID, err)
-						continue
-					}
-					secret, ok := new(big.Int).SetString(decrypted.String(), 10)
-					if !ok {
-						fmt.Printf("%s: failed to parse decrypted share from %s: %s\n", c.NodeID, fromNodeID, decrypted.String())
-						continue
-					}
-					fromIndex := strconv.Itoa(c.NodeIndices[fromNodeID])
-					c.DKG.ReceivedShares[fromIndex] = secret
+		c.DKG.ReceivedShares = make(map[string]*big.Int)
+		for fromNodeID, shares := range resp.Data.Shares {
+			if share, ok := shares[c.NodeID]; ok {
+				r, err := age.Decrypt(bytes.NewReader(share.EncryptedShare), c.Identity)
+				if err != nil {
+					fmt.Printf("%s: failed to decrypt share from %s: %v\n", c.NodeID, fromNodeID, err)
+					continue
 				}
+				var decrypted bytes.Buffer
+				_, err = decrypted.ReadFrom(r)
+				if err != nil {
+					fmt.Printf("%s: failed to read decrypted share from %s: %v\n", c.NodeID, fromNodeID, err)
+					continue
+				}
+				secret, ok := new(big.Int).SetString(decrypted.String(), 10)
+				if !ok {
+					fmt.Printf("%s: failed to parse decrypted share from %s: %s\n", c.NodeID, fromNodeID, decrypted.String())
+					continue
+				}
+				fromIndex := strconv.Itoa(c.NodeIndices[fromNodeID])
+				c.DKG.ReceivedShares[fromIndex] = secret
 			}
-			return len(c.DKG.ReceivedShares) == c.DKG.NumNodes-1
 		}
-		return false
+		return len(c.DKG.ReceivedShares) == c.DKG.NumNodes-1
 	})
 	if err != nil {
 		return err
@@ -373,7 +357,8 @@ func (c *Client) FetchShares() error {
 }
 
 func (c *Client) SubmitPublicShare() error {
-	resp, err := c.post("/dkg/public_shares", PublicShareData{PublicShare: c.DKG.PublicKey.Marshal()})
+	req := &PublicShareData{PublicShare: c.DKG.PublicKey.Marshal()}
+	resp, err := post[PublicShareData, struct{}](c, "/dkg/public_shares", req)
 	if err != nil {
 		return err
 	}
@@ -384,20 +369,18 @@ func (c *Client) SubmitPublicShare() error {
 }
 
 func (c *Client) FetchPublicShares() (map[int][]byte, error) {
-	var resp PublicSharesResponse
-	err := c.poll("/dkg/public_shares", func() bool {
-		ok, err := c.get("/dkg/public_shares", &resp)
-		if err != nil {
-			fmt.Printf("%s: failed to poll public shares: %v\n", c.NodeID, err)
-			return false
-		}
-		return ok && len(resp.PublicShares) == c.DKG.NumNodes
+	err := poll(c, "/dkg/public_shares", func(resp *DKGResponse[PublicSharesResponse]) bool {
+		return resp.Status == "success" && len(resp.Data.PublicShares) == c.DKG.NumNodes
 	})
 	if err != nil {
 		return nil, err
 	}
+	resp, err := get[PublicSharesResponse](c, "/dkg/public_shares")
+	if err != nil {
+		return nil, fmt.Errorf("%s: failed to fetch public shares: %v", c.NodeID, err)
+	}
 	publicShares := make(map[int][]byte)
-	for nodeID, pubBytes := range resp.PublicShares {
+	for nodeID, pubBytes := range resp.Data.PublicShares {
 		index, ok := c.NodeIndices[nodeID]
 		if !ok {
 			return nil, fmt.Errorf("%s: missing NodeIndex for node %s", c.NodeID, nodeID)

@@ -7,6 +7,7 @@ import (
 	"gnark-symmetric-crypto/utils"
 	"math/big"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -45,8 +46,7 @@ type ShareData struct {
 }
 
 type ShareBatchRequest struct {
-	FromNodeID string               `json:"from_node_id"`
-	Shares     map[string]ShareData `json:"shares"`
+	Shares map[string]ShareData `json:"shares"`
 }
 
 type PublicShareData struct {
@@ -54,11 +54,14 @@ type PublicShareData struct {
 }
 
 type Client struct {
-	NodeID     string
-	PublicKeys map[string]age.Recipient
-	Identity   *age.X25519Identity
-	DKG        *utils.DKG
-	httpClient *http.Client
+	NodeID           string
+	NodeIndex        int
+	PublicKeys       map[string]age.Recipient // UUID -> PublicKey
+	NodeIndices      map[string]int           // UUID -> NodeIndex
+	Identity         *age.X25519Identity
+	DKG              *utils.DKG
+	httpClient       *http.Client
+	LocalCommitments [][]byte // Store our own commitments for verification
 }
 
 func NewClient() *Client {
@@ -67,10 +70,12 @@ func NewClient() *Client {
 		panic(fmt.Sprintf("Failed to generate age key pair: %v", err))
 	}
 	return &Client{
-		Identity:   identity,
-		PublicKeys: make(map[string]age.Recipient),
-		DKG:        nil,
-		httpClient: &http.Client{},
+		Identity:         identity,
+		PublicKeys:       make(map[string]age.Recipient),
+		NodeIndices:      make(map[string]int),
+		DKG:              nil,
+		httpClient:       &http.Client{},
+		LocalCommitments: nil,
 	}
 }
 
@@ -130,7 +135,7 @@ func (c *Client) get(endpoint string, target interface{}) (bool, error) {
 }
 
 func (c *Client) poll(endpoint string, condition func() bool) error {
-	timeout := time.After(30 * time.Second) // Increased timeout for 5 nodes
+	timeout := time.After(30 * time.Second)
 	for {
 		select {
 		case <-timeout:
@@ -168,8 +173,9 @@ func (c *Client) Register() error {
 
 	err = c.poll("/dkg/nodes", func() bool {
 		type NodesResponse struct {
-			Nodes      []string          `json:"nodes"`
-			PublicKeys map[string]string `json:"public_keys"`
+			Nodes       []string          `json:"nodes"`
+			NodeIndices map[string]int    `json:"node_indices"`
+			PublicKeys  map[string]string `json:"public_keys"`
 		}
 		var nodesResp NodesResponse
 		ok, err := c.get("/dkg/nodes", &nodesResp)
@@ -178,7 +184,13 @@ func (c *Client) Register() error {
 			return false
 		}
 		if ok {
-			c.DKG = utils.NewDKG(len(nodesResp.Nodes)-1, len(nodesResp.Nodes), nodesResp.Nodes, c.NodeID)
+			c.NodeIndex = nodesResp.NodeIndices[c.NodeID]
+			c.NodeIndices = nodesResp.NodeIndices
+			nodes := make([]string, len(nodesResp.Nodes))
+			for i, uuid := range nodesResp.Nodes {
+				nodes[i] = strconv.Itoa(nodesResp.NodeIndices[uuid])
+			}
+			c.DKG = utils.NewDKG(len(nodesResp.Nodes)-1, len(nodesResp.Nodes), nodes, strconv.Itoa(c.NodeIndex))
 			for nodeID, pubKeyStr := range nodesResp.PublicKeys {
 				recipient, err := age.ParseX25519Recipient(pubKeyStr)
 				if err != nil {
@@ -187,14 +199,14 @@ func (c *Client) Register() error {
 				}
 				c.PublicKeys[nodeID] = recipient
 			}
-			return len(nodesResp.Nodes) == c.DKG.NumNodes && len(c.PublicKeys) == c.DKG.NumNodes
+			return len(nodesResp.Nodes) == c.DKG.NumNodes && len(c.PublicKeys) == c.DKG.NumNodes && c.NodeIndex > 0
 		}
 		return false
 	})
 	if err != nil {
 		return fmt.Errorf("%s: failed to sync nodes: %v", c.NodeID, err)
 	}
-	fmt.Printf("%s: Synced with %d nodes\n", c.NodeID, c.DKG.NumNodes)
+	fmt.Printf("%s: Synced with %d nodes, index %d\n", c.NodeID, c.DKG.NumNodes, c.NodeIndex)
 	return nil
 }
 
@@ -204,6 +216,12 @@ func (c *Client) SubmitCommitments() error {
 	if err != nil {
 		return err
 	}
+	// Unmarshal to store locally as [][]byte for comparison
+	var localCommits [][]byte
+	if err := json.Unmarshal(commitData, &localCommits); err != nil {
+		return fmt.Errorf("%s: failed to unmarshal local commitments: %v", c.NodeID, err)
+	}
+	c.LocalCommitments = localCommits
 	resp, err := c.post("/dkg/commitments", CommitmentData{Commitment: commitData})
 	if err != nil {
 		return err
@@ -231,33 +249,51 @@ func (c *Client) FetchCommitments() (map[string][][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		commitMap[nodeID] = commits
+		indexStr := strconv.Itoa(c.NodeIndices[nodeID])
+		commitMap[indexStr] = commits
 	}
-	fmt.Printf("%s: Fetched %d commitments\n", c.NodeID, len(commitMap))
+	// Verify our own commitment matches
+	ownIndexStr := strconv.Itoa(c.NodeIndex)
+	serverCommits, ok := commitMap[ownIndexStr]
+	if !ok {
+		return nil, fmt.Errorf("%s: server did not return our commitment for index %s", c.NodeID, ownIndexStr)
+	}
+	if len(serverCommits) != len(c.LocalCommitments) {
+		return nil, fmt.Errorf("%s: commitment length mismatch: local %d, server %d", c.NodeID, len(c.LocalCommitments), len(serverCommits))
+	}
+	for i, local := range c.LocalCommitments {
+		if !bytes.Equal(local, serverCommits[i]) {
+			return nil, fmt.Errorf("%s: commitment mismatch at position %d: local %x, server %x", c.NodeID, i, local, serverCommits[i])
+		}
+	}
+	fmt.Printf("%s: Fetched %d commitments (own commitment verified)\n", c.NodeID, len(commitMap))
 	return commitMap, nil
 }
 
 func (c *Client) SubmitShares() error {
 	c.DKG.GenerateShares()
 	shareBatch := ShareBatchRequest{
-		FromNodeID: c.NodeID,
-		Shares:     make(map[string]ShareData),
+		Shares: make(map[string]ShareData),
 	}
-	for toNodeID, share := range c.DKG.Shares {
-		if toNodeID == c.NodeID {
+	for toNodeIndexStr, share := range c.DKG.Shares {
+		if toNodeIndexStr == strconv.Itoa(c.NodeIndex) {
 			continue
 		}
+		uuidNodeID := c.findUUIDByIndex(toNodeIndexStr)
+		if uuidNodeID == "" {
+			return fmt.Errorf("%s: no UUID found for index %s", c.NodeID, toNodeIndexStr)
+		}
 		var buf bytes.Buffer
-		w, err := age.Encrypt(&buf, c.PublicKeys[toNodeID])
+		w, err := age.Encrypt(&buf, c.PublicKeys[uuidNodeID])
 		if err != nil {
-			return fmt.Errorf("%s: failed to encrypt share for %s: %v", c.NodeID, toNodeID, err)
+			return fmt.Errorf("%s: failed to encrypt share for index %s (UUID %s): %v", c.NodeID, toNodeIndexStr, uuidNodeID, err)
 		}
 		_, err = w.Write([]byte(share.String()))
 		if err != nil {
-			return fmt.Errorf("%s: failed to write encrypted share for %s: %v", c.NodeID, toNodeID, err)
+			return fmt.Errorf("%s: failed to write encrypted share for index %s (UUID %s): %v", c.NodeID, toNodeIndexStr, uuidNodeID, err)
 		}
 		_ = w.Close()
-		shareBatch.Shares[toNodeID] = ShareData{EncryptedShare: buf.Bytes()}
+		shareBatch.Shares[uuidNodeID] = ShareData{EncryptedShare: buf.Bytes()}
 	}
 	resp, err := c.post("/dkg/shares", shareBatch)
 	if err != nil {
@@ -268,6 +304,19 @@ func (c *Client) SubmitShares() error {
 	}
 	fmt.Printf("%s: Submitted batch of %d shares\n", c.NodeID, len(shareBatch.Shares))
 	return nil
+}
+
+func (c *Client) findUUIDByIndex(indexStr string) string {
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
+		return ""
+	}
+	for uuid, idx := range c.NodeIndices {
+		if idx == index {
+			return uuid
+		}
+	}
+	return ""
 }
 
 func (c *Client) FetchShares() error {
@@ -295,15 +344,11 @@ func (c *Client) FetchShares() error {
 					}
 					secret, ok := new(big.Int).SetString(decrypted.String(), 10)
 					if !ok {
-						fmt.Printf("%s: Failed to decrypt share from %s: %v\n", c.NodeID, fromNodeID, decrypted)
+						fmt.Printf("%s: Failed to parse decrypted share from %s: %v\n", c.NodeID, fromNodeID, decrypted)
 						continue
 					}
-					if err != nil {
-						fmt.Printf("%s: Failed to parse decrypted share from %s: %v\n", c.NodeID, fromNodeID, err)
-						continue
-					}
-					c.DKG.ReceivedShares[fromNodeID] = secret
-					// fmt.Printf("%s: Received share from %s: %s\n", c.NodeID, fromNodeID, secret.String())
+					fromIndex := strconv.Itoa(c.NodeIndices[fromNodeID])
+					c.DKG.ReceivedShares[fromIndex] = secret
 				}
 			}
 			return len(c.DKG.ReceivedShares) == c.DKG.NumNodes-1
@@ -325,11 +370,10 @@ func (c *Client) SubmitPublicShare() error {
 	if resp.Status != "success" {
 		return fmt.Errorf("%s: failed to submit public share: %s", c.NodeID, resp.Message)
 	}
-	// fmt.Printf("%s: Submitted public share: X=%s, Y=%s\n", c.NodeID, c.DKG.PublicKey.X.String(), c.DKG.PublicKey.Y.String())
 	return nil
 }
 
-func (c *Client) FetchPublicShares() (map[string][]byte, error) {
+func (c *Client) FetchPublicShares() (map[int][]byte, error) {
 	var resp PublicSharesResponse
 	err := c.poll("/dkg/public_shares", func() bool {
 		ok, _ := c.get("/dkg/public_shares", &resp)
@@ -338,10 +382,13 @@ func (c *Client) FetchPublicShares() (map[string][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	publicShares := make(map[string][]byte)
+	publicShares := make(map[int][]byte)
 	for nodeID, pubBytes := range resp.PublicShares {
-		publicShares[nodeID] = pubBytes
-		// fmt.Printf("%s: Fetched public share for %s: X=%s, Y=%s\n", c.NodeID, nodeID, pubKey.X.String(), pubKey.Y.String())
+		index, ok := c.NodeIndices[nodeID]
+		if !ok {
+			return nil, fmt.Errorf("%s: missing NodeIndex for node %s", c.NodeID, nodeID)
+		}
+		publicShares[index] = pubBytes
 	}
 	if len(publicShares) != c.DKG.NumNodes {
 		return nil, fmt.Errorf("%s: expected %d public shares, got %d", c.NodeID, c.DKG.NumNodes, len(publicShares))
@@ -372,12 +419,11 @@ func (c *Client) Run() {
 		fmt.Printf("%s: Failed to fetch shares: %v\n", c.NodeID, err)
 		return
 	}
-	if err := c.DKG.VerifyShares(commitments, c.NodeID); err != nil {
+	if err := c.DKG.VerifyShares(commitments, strconv.Itoa(c.NodeIndex)); err != nil {
 		fmt.Printf("%s: Failed to verify shares: %v\n", c.NodeID, err)
 		return
 	}
 	c.DKG.ComputeFinalKeys()
-	// fmt.Printf("%s: Computed final public key: X=%s, Y=%s\n", c.NodeID, c.DKG.PublicKey.X.String(), c.DKG.PublicKey.Y.String())
 	if err := c.SubmitPublicShare(); err != nil {
 		fmt.Printf("%s: Failed to submit public share: %v\n", c.NodeID, err)
 		return

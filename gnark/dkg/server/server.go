@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 )
 
@@ -26,7 +26,7 @@ type DKGResponse struct {
 }
 
 type RegisterResponse struct {
-	NodeID    string `json:"node_id"`
+	NodeID    string `json:"node_id"` // UUID
 	PublicKey string `json:"public_key"`
 }
 
@@ -62,6 +62,7 @@ type Server struct {
 	Threshold       int
 	NumNodes        int
 	Nodes           []string
+	NodeIndices     map[string]int
 	PublicKeys      map[string]string
 	Commitments     map[string][][]byte
 	Shares          map[string]map[string]ShareData
@@ -81,6 +82,7 @@ func NewServer(numNodes, threshold int) (*Server, error) {
 		Threshold:       threshold,
 		NumNodes:        numNodes,
 		Nodes:           make([]string, 0, numNodes),
+		NodeIndices:     make(map[string]int),
 		PublicKeys:      make(map[string]string),
 		Commitments:     make(map[string][][]byte),
 		Shares:          make(map[string]map[string]ShareData),
@@ -89,6 +91,20 @@ func NewServer(numNodes, threshold int) (*Server, error) {
 		Ctx:             ctx,
 		Cancel:          cancel,
 	}, nil
+}
+
+func ensureRegistrationComplete(s *Server) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			s.Lock()
+			if s.Ctx.Err() == nil {
+				s.Unlock()
+				return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Registration not complete"})
+			}
+			s.Unlock()
+			return next(c)
+		}
+	}
 }
 
 func (s *Server) health(c echo.Context) error {
@@ -116,19 +132,25 @@ func (s *Server) register(c echo.Context) error {
 	if len(s.RegisteredNodes) >= s.NumNodes {
 		return c.JSON(http.StatusForbidden, DKGResponse{Status: "error", Message: "Registration closed"})
 	}
-	nodeID := len(s.RegisteredNodes) + 1 // Numeric ID: 1, 2, 3, ...
-	s.RegisteredNodes[fmt.Sprintf("%d", nodeID)] = true
-	s.Nodes = append(s.Nodes, fmt.Sprintf("%d", nodeID))
-	s.PublicKeys[fmt.Sprintf("%d", nodeID)] = req.PublicKey
-	log.Infof("Registered node %d with public key %s", nodeID, req.PublicKey)
+
+	nodeID := uuid.New().String()
+	s.RegisteredNodes[nodeID] = true
+	s.Nodes = append(s.Nodes, nodeID)
+	s.PublicKeys[nodeID] = req.PublicKey
+	log.Infof("Registered node %s with public key %s", nodeID, req.PublicKey)
+
 	if len(s.RegisteredNodes) == s.NumNodes {
-		s.Cancel() // Signal that registration is complete
+		for i, nid := range s.Nodes {
+			s.NodeIndices[nid] = i + 1 // 1-based indexing
+		}
+		s.Cancel()
 		log.Infof("All %d nodes registered, starting DKG", s.NumNodes)
 	}
+
 	return c.JSON(http.StatusOK, DKGResponse{
 		Status: "success",
 		Data: RegisterResponse{
-			NodeID:    fmt.Sprintf("%d", nodeID),
+			NodeID:    nodeID,
 			PublicKey: req.PublicKey,
 		},
 	})
@@ -140,10 +162,19 @@ func (s *Server) getNodes(c echo.Context) error {
 	if len(s.RegisteredNodes) < s.NumNodes {
 		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Not all nodes registered"})
 	}
-	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: struct {
-		Nodes      []string          `json:"nodes"`
-		PublicKeys map[string]string `json:"public_keys"`
-	}{s.Nodes, s.PublicKeys}})
+	type NodesResponse struct {
+		Nodes       []string          `json:"nodes"`
+		NodeIndices map[string]int    `json:"node_indices"`
+		PublicKeys  map[string]string `json:"public_keys"`
+	}
+	return c.JSON(http.StatusOK, DKGResponse{
+		Status: "success",
+		Data: NodesResponse{
+			Nodes:       s.Nodes,
+			NodeIndices: s.NodeIndices,
+			PublicKeys:  s.PublicKeys,
+		},
+	})
 }
 
 func (s *Server) submitCommitment(c echo.Context) error {
@@ -158,10 +189,6 @@ func (s *Server) submitCommitment(c echo.Context) error {
 
 	s.Lock()
 	defer s.Unlock()
-	if s.Ctx.Err() == nil {
-		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Registration not complete"})
-	}
-
 	var commits [][]byte
 	if err := json.Unmarshal(req.Commitment, &commits); err != nil {
 		log.Errorf("Failed to unmarshal commitments: %v", err)
@@ -173,6 +200,11 @@ func (s *Server) submitCommitment(c echo.Context) error {
 	}
 	if _, ok := s.RegisteredNodes[nodeID]; !ok {
 		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered node"})
+	}
+	// Prevent overwriting existing commitment
+	if _, exists := s.Commitments[nodeID]; exists {
+		log.Warnf("Node %s attempted to resubmit commitments", nodeID)
+		return c.JSON(http.StatusForbidden, DKGResponse{Status: "error", Message: "Commitment already submitted"})
 	}
 	s.Commitments[nodeID] = commits
 	log.Infof("Received commitments from %s", nodeID)
@@ -206,6 +238,7 @@ func (s *Server) submitShare(c echo.Context) error {
 
 	s.Lock()
 	defer s.Unlock()
+
 	FromNodeID := c.Request().Header.Get("Node-ID")
 	if FromNodeID == "" {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Node-ID header is required"})
@@ -218,23 +251,38 @@ func (s *Server) submitShare(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Shares map is required"})
 	}
 
-	if s.Ctx.Err() == nil {
-		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Registration not complete"})
+	type validationError struct {
+		ToNodeID string `json:"to_node_id"`
+		Message  string `json:"message"`
 	}
+	var errores []validationError
 
 	for toNodeID, share := range req.Shares {
 		if toNodeID == FromNodeID {
-			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Cannot include self in share batch"})
+			errores = append(errores, validationError{ToNodeID: toNodeID, Message: "Cannot include self in share batch"})
+			continue
 		}
 		if _, ok := s.RegisteredNodes[toNodeID]; !ok {
-			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: fmt.Sprintf("Invalid to_node_id: %s", toNodeID)})
+			errores = append(errores, validationError{ToNodeID: toNodeID, Message: "Invalid to_node_id"})
+			continue
 		}
 		if len(share.EncryptedShare) == 0 {
-			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: fmt.Sprintf("Empty share for %s", toNodeID)})
+			errores = append(errores, validationError{ToNodeID: toNodeID, Message: "Empty share"})
 		}
-		if s.Shares[FromNodeID] == nil {
-			s.Shares[FromNodeID] = make(map[string]ShareData)
-		}
+	}
+
+	if len(errores) > 0 {
+		return c.JSON(http.StatusBadRequest, DKGResponse{
+			Status:  "error",
+			Message: "Share validation failed",
+			Data:    struct{ Errors []validationError }{Errors: errores},
+		})
+	}
+
+	if s.Shares[FromNodeID] == nil {
+		s.Shares[FromNodeID] = make(map[string]ShareData)
+	}
+	for toNodeID, share := range req.Shares {
 		s.Shares[FromNodeID][toNodeID] = share
 	}
 	log.Infof("Processed batch of %d shares from %s", len(req.Shares), FromNodeID)
@@ -267,10 +315,6 @@ func (s *Server) submitPublicShare(c echo.Context) error {
 
 	s.Lock()
 	defer s.Unlock()
-	if s.Ctx.Err() == nil {
-		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Registration not complete"})
-	}
-
 	nodeID := c.Request().Header.Get("Node-ID")
 	if nodeID == "" {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Node-ID header is required"})
@@ -328,19 +372,23 @@ func main() {
 	}
 
 	e := echo.New()
-	e.Use(middleware.Logger())
+	// e.Use(middleware.Logger())
 	e.HideBanner = true
 	e.HidePort = true
 	e.Logger.SetLevel(log.INFO)
+
 	e.GET("/health", s.health)
 	e.POST("/dkg/register", s.register)
 	e.GET("/dkg/nodes", s.getNodes)
-	e.POST("/dkg/commitments", s.submitCommitment)
-	e.GET("/dkg/commitments", s.getCommitments)
-	e.POST("/dkg/shares", s.submitShare)
-	e.GET("/dkg/shares", s.getShares)
-	e.POST("/dkg/public_shares", s.submitPublicShare)
-	e.GET("/dkg/public_shares", s.getPublicShares)
+
+	dkgGroup := e.Group("/dkg")
+	dkgGroup.Use(ensureRegistrationComplete(s))
+	dkgGroup.POST("/commitments", s.submitCommitment)
+	dkgGroup.GET("/commitments", s.getCommitments)
+	dkgGroup.POST("/shares", s.submitShare)
+	dkgGroup.GET("/shares", s.getShares)
+	dkgGroup.POST("/public_shares", s.submitPublicShare)
+	dkgGroup.GET("/public_shares", s.getPublicShares)
 
 	go func() {
 		if err := e.Start(":" + port); err != nil && !errors.Is(err, http.ErrServerClosed) {

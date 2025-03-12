@@ -5,23 +5,22 @@ go 1.23.0
 toolchain go1.23.2
 
 require (
+	filippo.io/age v1.2.1
 	github.com/consensys/gnark v0.12.0
 	github.com/consensys/gnark-crypto v0.16.0
+	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.13.3
-	github.com/sirupsen/logrus v1.9.3
+	github.com/labstack/gommon v0.4.2
 	golang.org/x/crypto v0.36.0
 )
 
 require (
-	filippo.io/age v1.2.1 // indirect
 	github.com/ingonyama-zk/icicle/v3 v3.5.0 // indirect
-	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
-	golang.org/x/time v0.8.0 // indirect
 )
 
 require (

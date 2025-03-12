@@ -115,7 +115,7 @@ func (d *DKG) ComputeFinalKeys() {
 	d.PublicKey.ScalarMultiplication(&curve.Base, d.Secret)
 }
 
-func (d *DKG) ReconstructMasterPublicKey(publicShares map[string][]byte) *twistededwards.PointAffine {
+func (d *DKG) ReconstructMasterPublicKey(publicShares map[int][]byte) *twistededwards.PointAffine {
 	result := new(twistededwards.PointAffine)
 	result.X.SetZero()
 	result.Y.SetOne()
@@ -124,20 +124,15 @@ func (d *DKG) ReconstructMasterPublicKey(publicShares map[string][]byte) *twiste
 	// Use first Threshold numeric IDs
 	var ids []int
 	for nodeID := range publicShares {
-		id, err := strconv.Atoi(nodeID)
-		if err != nil {
-			panic(err)
-		}
-		ids = append(ids, id)
+		ids = append(ids, nodeID)
 	}
 	sort.Ints(ids)
 	for _, id := range ids {
 		if used >= d.Threshold {
 			break
 		}
-		nodeID := fmt.Sprintf("%d", id)
 		pubShare := &twistededwards.PointAffine{}
-		err := pubShare.Unmarshal(publicShares[nodeID])
+		err := pubShare.Unmarshal(publicShares[id])
 		if err != nil {
 			return nil
 		}

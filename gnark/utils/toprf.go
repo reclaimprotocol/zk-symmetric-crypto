@@ -92,6 +92,7 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
 	// Verify shares and compute final keys
 	commitments := make(map[string][][]byte)
 	for i := 0; i < N; i++ {
+		commitments[dkgs[i].Nodes[i]] = make([][]byte, len(dkgs[i].PublicCommits))
 		for j := 0; j < len(dkgs[i].PublicCommits); j++ {
 			commitments[dkgs[i].Nodes[i]][j] = dkgs[i].PublicCommits[j].Marshal()
 		}
@@ -136,6 +137,10 @@ func Coeff(idx int, peers []int) *big.Int {
 		num = gf.Mul(num, tmp)
 		tmp = gf.Sub(tmp, iScalar)
 		den = gf.Mul(den, tmp)
+	}
+
+	if den.Cmp(big.NewInt(0)) == 0 {
+		panic("coefficient cannot be zero")
 	}
 	den = gf.Inv(den)
 	return gf.Mul(den, num)

@@ -58,21 +58,17 @@ type PublicShareData struct {
 	PublicShare []byte `json:"public_share"`
 }
 
-type DKGInstance struct {
-	Threshold    int
-	NumNodes     int
-	Nodes        []string
-	PublicKeys   map[string]string
-	Commitments  map[string][][]byte
-	Shares       map[string]map[string]ShareData
-	PublicShares map[string][]byte
-	sync.Mutex
-}
-
 type Server struct {
-	DKG              *DKGInstance
-	RegisteredNodes  map[string]bool
-	RegistrationDone chan struct{}
+	Threshold       int
+	NumNodes        int
+	Nodes           []string
+	PublicKeys      map[string]string
+	Commitments     map[string][][]byte
+	Shares          map[string]map[string]ShareData
+	PublicShares    map[string][]byte
+	RegisteredNodes map[string]bool
+	Ctx             context.Context
+	Cancel          context.CancelFunc
 	sync.Mutex
 }
 
@@ -80,18 +76,18 @@ func NewServer(numNodes, threshold int) (*Server, error) {
 	if numNodes <= 0 || threshold <= 0 || threshold > numNodes {
 		return nil, fmt.Errorf("invalid parameters: numNodes=%d, threshold=%d", numNodes, threshold)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
-		DKG: &DKGInstance{
-			Threshold:    threshold,
-			NumNodes:     numNodes,
-			Nodes:        make([]string, 0, numNodes),
-			PublicKeys:   make(map[string]string),
-			Commitments:  make(map[string][][]byte),
-			Shares:       make(map[string]map[string]ShareData),
-			PublicShares: make(map[string][]byte),
-		},
-		RegisteredNodes:  make(map[string]bool),
-		RegistrationDone: make(chan struct{}),
+		Threshold:       threshold,
+		NumNodes:        numNodes,
+		Nodes:           make([]string, 0, numNodes),
+		PublicKeys:      make(map[string]string),
+		Commitments:     make(map[string][][]byte),
+		Shares:          make(map[string]map[string]ShareData),
+		PublicShares:    make(map[string][]byte),
+		RegisteredNodes: make(map[string]bool),
+		Ctx:             ctx,
+		Cancel:          cancel,
 	}, nil
 }
 
@@ -117,17 +113,17 @@ func (s *Server) register(c echo.Context) error {
 
 	s.Lock()
 	defer s.Unlock()
-	if len(s.RegisteredNodes) >= s.DKG.NumNodes {
+	if len(s.RegisteredNodes) >= s.NumNodes {
 		return c.JSON(http.StatusForbidden, DKGResponse{Status: "error", Message: "Registration closed"})
 	}
 	nodeID := len(s.RegisteredNodes) + 1 // Numeric ID: 1, 2, 3, ...
 	s.RegisteredNodes[fmt.Sprintf("%d", nodeID)] = true
-	s.DKG.Nodes = append(s.DKG.Nodes, fmt.Sprintf("%d", nodeID))
-	s.DKG.PublicKeys[fmt.Sprintf("%d", nodeID)] = req.PublicKey
+	s.Nodes = append(s.Nodes, fmt.Sprintf("%d", nodeID))
+	s.PublicKeys[fmt.Sprintf("%d", nodeID)] = req.PublicKey
 	log.Infof("Registered node %d with public key %s", nodeID, req.PublicKey)
-	if len(s.RegisteredNodes) == s.DKG.NumNodes {
-		close(s.RegistrationDone)
-		log.Infof("All %d nodes registered, starting DKG", s.DKG.NumNodes)
+	if len(s.RegisteredNodes) == s.NumNodes {
+		s.Cancel() // Signal that registration is complete
+		log.Infof("All %d nodes registered, starting DKG", s.NumNodes)
 	}
 	return c.JSON(http.StatusOK, DKGResponse{
 		Status: "success",
@@ -141,13 +137,13 @@ func (s *Server) register(c echo.Context) error {
 func (s *Server) getNodes(c echo.Context) error {
 	s.Lock()
 	defer s.Unlock()
-	if len(s.RegisteredNodes) < s.DKG.NumNodes {
+	if len(s.RegisteredNodes) < s.NumNodes {
 		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Not all nodes registered"})
 	}
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: struct {
 		Nodes      []string          `json:"nodes"`
 		PublicKeys map[string]string `json:"public_keys"`
-	}{s.DKG.Nodes, s.DKG.PublicKeys}})
+	}{s.Nodes, s.PublicKeys}})
 }
 
 func (s *Server) submitCommitment(c echo.Context) error {
@@ -160,14 +156,12 @@ func (s *Server) submitCommitment(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Commitment data is required"})
 	}
 
-	select {
-	case <-s.RegistrationDone:
-	default:
+	s.Lock()
+	defer s.Unlock()
+	if s.Ctx.Err() == nil {
 		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Registration not complete"})
 	}
 
-	s.DKG.Lock()
-	defer s.DKG.Unlock()
 	var commits [][]byte
 	if err := json.Unmarshal(req.Commitment, &commits); err != nil {
 		log.Errorf("Failed to unmarshal commitments: %v", err)
@@ -180,19 +174,19 @@ func (s *Server) submitCommitment(c echo.Context) error {
 	if _, ok := s.RegisteredNodes[nodeID]; !ok {
 		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered node"})
 	}
-	s.DKG.Commitments[nodeID] = commits
+	s.Commitments[nodeID] = commits
 	log.Infof("Received commitments from %s", nodeID)
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success"})
 }
 
 func (s *Server) getCommitments(c echo.Context) error {
-	s.DKG.Lock()
-	defer s.DKG.Unlock()
-	if len(s.DKG.Commitments) < s.DKG.NumNodes {
+	s.Lock()
+	defer s.Unlock()
+	if len(s.Commitments) < s.NumNodes {
 		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Not all commitments received"})
 	}
 	serializedCommits := make(map[string][]byte)
-	for nodeID, commits := range s.DKG.Commitments {
+	for nodeID, commits := range s.Commitments {
 		data, err := json.Marshal(commits)
 		if err != nil {
 			log.Errorf("Failed to marshal commitments for %s: %v", nodeID, err)
@@ -210,6 +204,8 @@ func (s *Server) submitShare(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Invalid request format"})
 	}
 
+	s.Lock()
+	defer s.Unlock()
 	FromNodeID := c.Request().Header.Get("Node-ID")
 	if FromNodeID == "" {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Node-ID header is required"})
@@ -218,20 +214,12 @@ func (s *Server) submitShare(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered node"})
 	}
 
-	if FromNodeID == "" || len(req.Shares) == 0 {
-		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "FromNodeID and Shares map are required"})
+	if len(req.Shares) == 0 {
+		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Shares map is required"})
 	}
 
-	select {
-	case <-s.RegistrationDone:
-	default:
+	if s.Ctx.Err() == nil {
 		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Registration not complete"})
-	}
-
-	s.DKG.Lock()
-	defer s.DKG.Unlock()
-	if _, ok := s.RegisteredNodes[FromNodeID]; !ok {
-		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered from_node_id"})
 	}
 
 	for toNodeID, share := range req.Shares {
@@ -244,28 +232,27 @@ func (s *Server) submitShare(c echo.Context) error {
 		if len(share.EncryptedShare) == 0 {
 			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: fmt.Sprintf("Empty share for %s", toNodeID)})
 		}
-		if s.DKG.Shares[FromNodeID] == nil {
-			s.DKG.Shares[FromNodeID] = make(map[string]ShareData)
+		if s.Shares[FromNodeID] == nil {
+			s.Shares[FromNodeID] = make(map[string]ShareData)
 		}
-		s.DKG.Shares[FromNodeID][toNodeID] = share
-		// log.Infof("Received share from %s to %s in batch", FromNodeID, toNodeID)
+		s.Shares[FromNodeID][toNodeID] = share
 	}
 	log.Infof("Processed batch of %d shares from %s", len(req.Shares), FromNodeID)
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success"})
 }
 
 func (s *Server) getShares(c echo.Context) error {
-	s.DKG.Lock()
-	defer s.DKG.Unlock()
-	expectedShareCount := s.DKG.NumNodes * (s.DKG.NumNodes - 1)
+	s.Lock()
+	defer s.Unlock()
+	expectedShareCount := s.NumNodes * (s.NumNodes - 1)
 	actualShareCount := 0
-	for _, shares := range s.DKG.Shares {
+	for _, shares := range s.Shares {
 		actualShareCount += len(shares)
 	}
 	if actualShareCount < expectedShareCount {
 		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: fmt.Sprintf("Not all shares received: got %d, expected %d", actualShareCount, expectedShareCount)})
 	}
-	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: SharesResponse{Shares: s.DKG.Shares}})
+	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: SharesResponse{Shares: s.Shares}})
 }
 
 func (s *Server) submitPublicShare(c echo.Context) error {
@@ -278,14 +265,12 @@ func (s *Server) submitPublicShare(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Public share data is required"})
 	}
 
-	select {
-	case <-s.RegistrationDone:
-	default:
+	s.Lock()
+	defer s.Unlock()
+	if s.Ctx.Err() == nil {
 		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Registration not complete"})
 	}
 
-	s.DKG.Lock()
-	defer s.DKG.Unlock()
 	nodeID := c.Request().Header.Get("Node-ID")
 	if nodeID == "" {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Node-ID header is required"})
@@ -293,22 +278,22 @@ func (s *Server) submitPublicShare(c echo.Context) error {
 	if _, ok := s.RegisteredNodes[nodeID]; !ok {
 		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered node"})
 	}
-	s.DKG.PublicShares[nodeID] = req.PublicShare
+	s.PublicShares[nodeID] = req.PublicShare
 	log.Infof("Received public share from %s", nodeID)
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success"})
 }
 
 func (s *Server) getPublicShares(c echo.Context) error {
-	s.DKG.Lock()
-	defer s.DKG.Unlock()
-	if len(s.DKG.PublicShares) < s.DKG.NumNodes {
-		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: fmt.Sprintf("Not all public shares received: got %d, expected %d", len(s.DKG.PublicShares), s.DKG.NumNodes)})
+	s.Lock()
+	defer s.Unlock()
+	if len(s.PublicShares) < s.NumNodes {
+		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: fmt.Sprintf("Not all public shares received: got %d, expected %d", len(s.PublicShares), s.NumNodes)})
 	}
 	serializedShares := make(map[string][]byte)
-	for nodeID, pubKey := range s.DKG.PublicShares {
+	for nodeID, pubKey := range s.PublicShares {
 		serializedShares[nodeID] = pubKey
 	}
-	log.Infof("Returning all %d public shares to client", len(s.DKG.PublicShares))
+	log.Infof("Returning all %d public shares to client", len(s.PublicShares))
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: PublicSharesResponse{PublicShares: serializedShares}})
 }
 

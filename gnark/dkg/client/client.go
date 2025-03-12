@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"gnark-symmetric-crypto/utils"
-	"io"
 	"math/big"
 	"net/http"
 	"sync"
@@ -46,6 +45,11 @@ type ShareData struct {
 	EncryptedShare []byte `json:"encrypted_share"`
 }
 
+type ShareBatchRequest struct {
+	FromNodeID string               `json:"from_node_id"`
+	Shares     map[string]ShareData `json:"shares"`
+}
+
 type PublicShareData struct {
 	PublicShare []byte `json:"public_share"`
 }
@@ -66,12 +70,11 @@ func NewClient() *Client {
 	return &Client{
 		Identity:   identity,
 		PublicKeys: make(map[string]age.Recipient),
-		DKG:        nil, // Initialized later in Register
+		DKG:        nil,
 		httpClient: &http.Client{},
 	}
 }
 
-// Client HTTP Helpers
 func (c *Client) post(endpoint string, data interface{}) (DKGResponse, error) {
 	var respData DKGResponse
 	body, err := json.Marshal(data)
@@ -90,9 +93,7 @@ func (c *Client) post(endpoint string, data interface{}) (DKGResponse, error) {
 	if err != nil {
 		return respData, fmt.Errorf("%s: failed to send request to %s: %v", c.NodeID, endpoint, err)
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return respData, fmt.Errorf("%s: unexpected status %d from %s", c.NodeID, resp.StatusCode, endpoint)
 	}
@@ -111,9 +112,7 @@ func (c *Client) get(endpoint string, target interface{}) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("%s: failed to send request to %s: %v", c.NodeID, endpoint, err)
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
+	defer resp.Body.Close()
 	var respData DKGResponse
 	if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
 		return false, fmt.Errorf("%s: failed to decode response from %s: %v", c.NodeID, endpoint, err)
@@ -132,7 +131,7 @@ func (c *Client) get(endpoint string, target interface{}) (bool, error) {
 }
 
 func (c *Client) poll(endpoint string, condition func() bool) error {
-	timeout := time.After(15 * time.Second)
+	timeout := time.After(30 * time.Second) // Increased timeout for 5 nodes
 	for {
 		select {
 		case <-timeout:
@@ -146,7 +145,6 @@ func (c *Client) poll(endpoint string, condition func() bool) error {
 	}
 }
 
-// Client DKG Phases
 func (c *Client) Register() error {
 	fmt.Printf("Client registering\n")
 	resp, err := c.post("/dkg/register", struct {
@@ -174,7 +172,7 @@ func (c *Client) Register() error {
 		var nodesResp NodesResponse
 		ok, _ := c.get("/dkg/nodes", &nodesResp)
 		if ok {
-			c.DKG = utils.NewDKG(len(nodesResp.Nodes)-1, len(nodesResp.Nodes), nodesResp.Nodes)
+			c.DKG = utils.NewDKG(len(nodesResp.Nodes)-1, len(nodesResp.Nodes), nodesResp.Nodes, c.NodeID)
 			for nodeID, pubKeyStr := range nodesResp.PublicKeys {
 				recipient, err := age.ParseX25519Recipient(pubKeyStr)
 				if err != nil {
@@ -220,10 +218,7 @@ func (c *Client) FetchCommitments() (map[string][]*twistededwards.PointAffine, e
 	commitMap := make(map[string][]*twistededwards.PointAffine)
 	for nodeID, commBytes := range resp.Commitments {
 		var commits []*twistededwards.PointAffine
-		err := json.Unmarshal(commBytes, &commits)
-		if err != nil {
-			return nil, err
-		}
+		json.Unmarshal(commBytes, &commits)
 		commitMap[nodeID] = commits
 	}
 	fmt.Printf("%s: Fetched %d commitments\n", c.NodeID, len(commitMap))
@@ -232,6 +227,10 @@ func (c *Client) FetchCommitments() (map[string][]*twistededwards.PointAffine, e
 
 func (c *Client) SubmitShares() error {
 	c.DKG.GenerateShares()
+	shareBatch := ShareBatchRequest{
+		FromNodeID: c.NodeID,
+		Shares:     make(map[string]ShareData),
+	}
 	for toNodeID, share := range c.DKG.Shares {
 		if toNodeID == c.NodeID {
 			continue
@@ -245,21 +244,17 @@ func (c *Client) SubmitShares() error {
 		if err != nil {
 			return fmt.Errorf("%s: failed to write encrypted share for %s: %v", c.NodeID, toNodeID, err)
 		}
-		_ = w.Close()
-
-		resp, err := c.post("/dkg/shares", struct {
-			FromNodeID string    `json:"from_node_id"`
-			ToNodeID   string    `json:"to_node_id"`
-			Share      ShareData `json:"share"`
-		}{c.NodeID, toNodeID, ShareData{EncryptedShare: buf.Bytes()}})
-		if err != nil {
-			return err
-		}
-		if resp.Status != "success" {
-			return fmt.Errorf("%s: failed to submit share to %s: %s", c.NodeID, toNodeID, resp.Message)
-		}
+		w.Close()
+		shareBatch.Shares[toNodeID] = ShareData{EncryptedShare: buf.Bytes()}
 	}
-	fmt.Printf("%s: Submitted shares\n", c.NodeID)
+	resp, err := c.post("/dkg/shares", shareBatch)
+	if err != nil {
+		return err
+	}
+	if resp.Status != "success" {
+		return fmt.Errorf("%s: failed to submit share batch: %s", c.NodeID, resp.Message)
+	}
+	fmt.Printf("%s: Submitted batch of %d shares\n", c.NodeID, len(shareBatch.Shares))
 	return nil
 }
 
@@ -284,9 +279,10 @@ func (c *Client) FetchShares() error {
 					}
 					secret, _ := new(big.Int).SetString(decrypted.String(), 10)
 					c.DKG.ReceivedShares[fromNodeID] = secret
+					// fmt.Printf("%s: Received share from %s: %s\n", c.NodeID, fromNodeID, secret.String())
 				}
 			}
-			return len(c.DKG.ReceivedShares) == c.DKG.NumNodes-1 // account for our own share
+			return len(c.DKG.ReceivedShares) == c.DKG.NumNodes-1
 		}
 		return false
 	})
@@ -305,7 +301,7 @@ func (c *Client) SubmitPublicShare() error {
 	if resp.Status != "success" {
 		return fmt.Errorf("%s: failed to submit public share: %s", c.NodeID, resp.Message)
 	}
-	fmt.Printf("%s: Submitted public share\n", c.NodeID)
+	// fmt.Printf("%s: Submitted public share: X=%s, Y=%s\n", c.NodeID, c.DKG.PublicKey.X.String(), c.DKG.PublicKey.Y.String())
 	return nil
 }
 
@@ -313,7 +309,7 @@ func (c *Client) FetchPublicShares() (map[string]*twistededwards.PointAffine, er
 	var resp PublicSharesResponse
 	err := c.poll("/dkg/public_shares", func() bool {
 		ok, _ := c.get("/dkg/public_shares", &resp)
-		return ok && len(resp.PublicShares) >= c.DKG.Threshold
+		return ok && len(resp.PublicShares) == c.DKG.NumNodes
 	})
 	if err != nil {
 		return nil, err
@@ -321,13 +317,17 @@ func (c *Client) FetchPublicShares() (map[string]*twistededwards.PointAffine, er
 	publicShares := make(map[string]*twistededwards.PointAffine)
 	for nodeID, pubBytes := range resp.PublicShares {
 		var pubKey twistededwards.PointAffine
-		err := pubKey.Unmarshal(pubBytes)
-		if err != nil {
-			return nil, err
+		if err := pubKey.Unmarshal(pubBytes); err != nil {
+			fmt.Printf("%s: Failed to unmarshal public share for %s: %v\n", c.NodeID, nodeID, err)
+			continue
 		}
 		publicShares[nodeID] = &pubKey
+		// fmt.Printf("%s: Fetched public share for %s: X=%s, Y=%s\n", c.NodeID, nodeID, pubKey.X.String(), pubKey.Y.String())
 	}
-	fmt.Printf("%s: Fetched %d public shares\n", c.NodeID, len(publicShares))
+	if len(publicShares) != c.DKG.NumNodes {
+		return nil, fmt.Errorf("%s: expected %d public shares, got %d", c.NodeID, c.DKG.NumNodes, len(publicShares))
+	}
+	fmt.Printf("%s: Fetched %d public shares total\n", c.NodeID, len(publicShares))
 	return publicShares, nil
 }
 
@@ -358,6 +358,7 @@ func (c *Client) Run() {
 		return
 	}
 	c.DKG.ComputeFinalKeys()
+	// fmt.Printf("%s: Computed final public key: X=%s, Y=%s\n", c.NodeID, c.DKG.PublicKey.X.String(), c.DKG.PublicKey.Y.String())
 	if err := c.SubmitPublicShare(); err != nil {
 		fmt.Printf("%s: Failed to submit public share: %v\n", c.NodeID, err)
 		return
@@ -368,7 +369,7 @@ func (c *Client) Run() {
 		return
 	}
 	masterPubKey := c.DKG.ReconstructMasterPublicKey(publicShares)
-	fmt.Printf("%s: Master Public Key - X: %s, Y: %s\n", c.NodeID, masterPubKey.X.String(), masterPubKey.Y.String())
+	fmt.Printf("%s: Master Public Key - X=%s, Y=%s\n", c.NodeID, masterPubKey.X.String(), masterPubKey.Y.String())
 }
 
 func waitForServer() {
@@ -376,12 +377,12 @@ func waitForServer() {
 	for {
 		resp, err := client.Get("http://localhost:8080/health")
 		if err == nil && resp.StatusCode == http.StatusOK {
-			_ = resp.Body.Close()
+			resp.Body.Close()
 			fmt.Println("Server is ready")
 			break
 		}
 		if resp != nil {
-			_ = resp.Body.Close()
+			resp.Body.Close()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

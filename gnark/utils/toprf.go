@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/big"
 	rnd "math/rand/v2"
+	"strconv"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 )
@@ -63,7 +64,7 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
 	// Initialize DKG instances for each node
 	dkgs := make([]*DKG, N)
 	for i := 0; i < N; i++ {
-		dkgs[i] = NewDKG(T, N, nodes)
+		dkgs[i] = NewDKG(T, N, nodes, strconv.Itoa(i+1))
 		dkgs[i].GeneratePolynomials()
 		dkgs[i].GenerateShares()
 	}
@@ -97,7 +98,7 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
 	for i := 0; i < N; i++ {
 		result[i] = &Share{
 			Index:      i + 1,
-			PrivateKey: dkgs[i].SecretShare,
+			PrivateKey: dkgs[i].Secret,
 			PublicKey:  dkgs[i].PublicKey,
 		}
 	}

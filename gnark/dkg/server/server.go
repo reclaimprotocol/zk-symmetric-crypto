@@ -49,6 +49,11 @@ type ShareData struct {
 	EncryptedShare []byte `json:"encrypted_share"`
 }
 
+type ShareBatchRequest struct {
+	FromNodeID string               `json:"from_node_id"`
+	Shares     map[string]ShareData `json:"shares"`
+}
+
 type PublicShareData struct {
 	PublicShare []byte `json:"public_share"`
 }
@@ -115,16 +120,22 @@ func (s *Server) register(c echo.Context) error {
 	if len(s.RegisteredNodes) >= s.DKG.NumNodes {
 		return c.JSON(http.StatusForbidden, DKGResponse{Status: "error", Message: "Registration closed"})
 	}
-	nodeID := fmt.Sprintf("node%d", len(s.RegisteredNodes)+1)
-	s.RegisteredNodes[nodeID] = true
-	s.DKG.Nodes = append(s.DKG.Nodes, nodeID)
-	s.DKG.PublicKeys[nodeID] = req.PublicKey
-	log.Infof("Registered %s with public key %s", nodeID, req.PublicKey)
+	nodeID := len(s.RegisteredNodes) + 1 // Numeric ID: 1, 2, 3, ...
+	s.RegisteredNodes[fmt.Sprintf("%d", nodeID)] = true
+	s.DKG.Nodes = append(s.DKG.Nodes, fmt.Sprintf("%d", nodeID))
+	s.DKG.PublicKeys[fmt.Sprintf("%d", nodeID)] = req.PublicKey
+	log.Infof("Registered %d with public key %s", nodeID, req.PublicKey)
 	if len(s.RegisteredNodes) == s.DKG.NumNodes {
 		close(s.RegistrationDone)
 		log.Infof("All %d nodes registered, starting DKG", s.DKG.NumNodes)
 	}
-	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: RegisterResponse{NodeID: nodeID}})
+	return c.JSON(http.StatusOK, DKGResponse{
+		Status: "success",
+		Data: RegisterResponse{
+			NodeID:    fmt.Sprintf("%d", nodeID),
+			PublicKey: req.PublicKey,
+		},
+	})
 }
 
 func (s *Server) getNodes(c echo.Context) error {
@@ -193,20 +204,13 @@ func (s *Server) getCommitments(c echo.Context) error {
 }
 
 func (s *Server) submitShare(c echo.Context) error {
-	var req struct {
-		FromNodeID string    `json:"from_node_id"`
-		ToNodeID   string    `json:"to_node_id"`
-		Share      ShareData `json:"share"`
-	}
+	var req ShareBatchRequest
 	if err := c.Bind(&req); err != nil {
-		log.Errorf("Failed to bind share: %v", err)
+		log.Errorf("Failed to bind share batch: %v", err)
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Invalid request format"})
 	}
-	if req.FromNodeID == "" || req.ToNodeID == "" || len(req.Share.EncryptedShare) == 0 {
-		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "FromNodeID, ToNodeID, and Share are required"})
-	}
-	if req.FromNodeID == req.ToNodeID {
-		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Cannot send share to self"})
+	if req.FromNodeID == "" || len(req.Shares) == 0 {
+		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "FromNodeID and Shares map are required"})
 	}
 
 	select {
@@ -220,22 +224,37 @@ func (s *Server) submitShare(c echo.Context) error {
 	if _, ok := s.RegisteredNodes[req.FromNodeID]; !ok {
 		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered from_node_id"})
 	}
-	if _, ok := s.RegisteredNodes[req.ToNodeID]; !ok {
-		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Invalid to_node_id"})
+
+	for toNodeID, share := range req.Shares {
+		if toNodeID == req.FromNodeID {
+			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Cannot include self in share batch"})
+		}
+		if _, ok := s.RegisteredNodes[toNodeID]; !ok {
+			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: fmt.Sprintf("Invalid to_node_id: %s", toNodeID)})
+		}
+		if len(share.EncryptedShare) == 0 {
+			return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: fmt.Sprintf("Empty share for %s", toNodeID)})
+		}
+		if s.DKG.Shares[req.FromNodeID] == nil {
+			s.DKG.Shares[req.FromNodeID] = make(map[string]ShareData)
+		}
+		s.DKG.Shares[req.FromNodeID][toNodeID] = share
+		log.Infof("Received share from %s to %s in batch", req.FromNodeID, toNodeID)
 	}
-	if s.DKG.Shares[req.FromNodeID] == nil {
-		s.DKG.Shares[req.FromNodeID] = make(map[string]ShareData)
-	}
-	s.DKG.Shares[req.FromNodeID][req.ToNodeID] = req.Share
-	log.Infof("Received share from %s to %s", req.FromNodeID, req.ToNodeID)
+	log.Infof("Processed batch of %d shares from %s", len(req.Shares), req.FromNodeID)
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success"})
 }
 
 func (s *Server) getShares(c echo.Context) error {
 	s.DKG.Lock()
 	defer s.DKG.Unlock()
-	if len(s.DKG.Shares) < s.DKG.NumNodes {
-		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Not all shares received"})
+	expectedShareCount := s.DKG.NumNodes * (s.DKG.NumNodes - 1)
+	actualShareCount := 0
+	for _, shares := range s.DKG.Shares {
+		actualShareCount += len(shares)
+	}
+	if actualShareCount < expectedShareCount {
+		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: fmt.Sprintf("Not all shares received: got %d, expected %d", actualShareCount, expectedShareCount)})
 	}
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: SharesResponse{Shares: s.DKG.Shares}})
 }
@@ -271,20 +290,21 @@ func (s *Server) submitPublicShare(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Invalid public share data"})
 	}
 	s.DKG.PublicShares[nodeID] = &pubKey
-	log.Infof("Received public share from %s", nodeID)
+	log.Infof("Received public share from %s: X=%s, Y=%s", nodeID, pubKey.X.String(), pubKey.Y.String())
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success"})
 }
 
 func (s *Server) getPublicShares(c echo.Context) error {
 	s.DKG.Lock()
 	defer s.DKG.Unlock()
-	if len(s.DKG.PublicShares) < s.DKG.Threshold {
-		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: "Not enough public shares"})
+	if len(s.DKG.PublicShares) < s.DKG.NumNodes {
+		return c.JSON(http.StatusTooEarly, DKGResponse{Status: "error", Message: fmt.Sprintf("Not all public shares received: got %d, expected %d", len(s.DKG.PublicShares), s.DKG.NumNodes)})
 	}
 	serializedShares := make(map[string][]byte)
 	for nodeID, pubKey := range s.DKG.PublicShares {
 		serializedShares[nodeID] = pubKey.Marshal()
 	}
+	log.Infof("Returning all %d public shares to client", len(s.DKG.PublicShares))
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: PublicSharesResponse{PublicShares: serializedShares}})
 }
 

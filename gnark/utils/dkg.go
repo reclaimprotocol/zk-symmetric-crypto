@@ -4,83 +4,111 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"sort"
+	"strconv"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 )
 
-var curve = twistededwards.GetEdwardsCurve()
-
 type DKG struct {
 	Threshold      int
 	NumNodes       int
-	Nodes          []string
-	Secret         *big.Int
+	Nodes          []string // ["1", "2", ...]
+	ID             int      // Numeric ID: 1, 2, ...
 	Polynomial     []*big.Int
 	PublicCommits  []*twistededwards.PointAffine
-	Shares         map[string]*big.Int
-	ReceivedShares map[string]*big.Int
-	SecretShare    *big.Int
+	Shares         map[string]*big.Int // Keyed by string ID
+	ReceivedShares map[string]*big.Int // Keyed by string ID
 	PublicKey      *twistededwards.PointAffine
+	Secret         *big.Int
 }
 
-func NewDKG(threshold, numNodes int, nodes []string) *DKG {
+var curve = twistededwards.GetEdwardsCurve()
+
+func NewDKG(threshold, numNodes int, nodes []string, nodeID string) *DKG {
+	id, _ := strconv.Atoi(nodeID)
 	return &DKG{
 		Threshold:      threshold,
 		NumNodes:       numNodes,
 		Nodes:          nodes,
+		ID:             id,
 		Shares:         make(map[string]*big.Int),
 		ReceivedShares: make(map[string]*big.Int),
 	}
 }
 
 func (d *DKG) GeneratePolynomials() {
-	d.Secret, _ = rand.Int(rand.Reader, &curve.Order)
-	d.Polynomial = make([]*big.Int, d.Threshold)
-	d.Polynomial[0] = new(big.Int).Set(d.Secret)
-	for i := 1; i < d.Threshold; i++ {
-		d.Polynomial[i], _ = rand.Int(rand.Reader, &curve.Order)
-	}
-	d.PublicCommits = make([]*twistededwards.PointAffine, d.Threshold)
-	for i := 0; i < d.Threshold; i++ {
-		d.PublicCommits[i] = new(twistededwards.PointAffine).ScalarMultiplication(&curve.Base, d.Polynomial[i])
+	d.Polynomial = make([]*big.Int, d.Threshold+1)
+	d.PublicCommits = make([]*twistededwards.PointAffine, d.Threshold+1)
+	for i := 0; i <= d.Threshold; i++ {
+		coef, _ := rand.Int(rand.Reader, &curve.Order)
+		d.Polynomial[i] = coef
+		var commit twistededwards.PointAffine
+		commit.ScalarMultiplication(&curve.Base, coef)
+		d.PublicCommits[i] = &commit
 	}
 }
 
 func (d *DKG) GenerateShares() {
 	for _, nodeID := range d.Nodes {
-		idNum, _ := big.NewInt(0).SetString(nodeID[4:], 10)
-		d.Shares[nodeID] = evaluatePolynomial(d.Polynomial, idNum, &curve.Order)
+		if nodeID == fmt.Sprintf("%d", d.ID) {
+			continue
+		}
+		x, _ := strconv.Atoi(nodeID)
+		share := d.evaluatePolynomial(big.NewInt(int64(x)))
+		d.Shares[nodeID] = share
 	}
 }
 
+func (d *DKG) evaluatePolynomial(x *big.Int) *big.Int {
+	result := new(big.Int).Set(d.Polynomial[d.Threshold])
+	for i := d.Threshold - 1; i >= 0; i-- {
+		result.Mul(result, x)
+		result.Add(result, d.Polynomial[i])
+		result.Mod(result, &curve.Order)
+	}
+	return result
+}
+
 func (d *DKG) VerifyShares(commitments map[string][]*twistededwards.PointAffine, nodeID string) error {
-	for senderID, share := range d.ReceivedShares {
-		senderCommits := commitments[senderID]
-		lhs := new(twistededwards.PointAffine).ScalarMultiplication(&curve.Base, share)
-		rhs := new(twistededwards.PointAffine)
-		rhs.X.SetZero()
-		rhs.Y.SetOne()
-		x, _ := big.NewInt(0).SetString(nodeID[4:], 10)
-		for i := 0; i < d.Threshold; i++ {
-			xPow := new(big.Int).Exp(x, big.NewInt(int64(i)), &curve.Order)
-			term := new(twistededwards.PointAffine).ScalarMultiplication(senderCommits[i], xPow)
-			rhs.Add(rhs, term)
+	x, _ := strconv.Atoi(nodeID)
+	xBig := big.NewInt(int64(x))
+	for fromNodeID, share := range d.ReceivedShares {
+		commits := commitments[fromNodeID]
+		var rhs twistededwards.PointAffine
+		rhs.ScalarMultiplication(&curve.Base, share)
+		var lhs twistededwards.PointAffine
+		lhs.Set(&curve.Base)
+		for i := 0; i <= d.Threshold; i++ {
+			var term twistededwards.PointAffine
+			term.Set(commits[i])
+			for j := 0; j < i; j++ {
+				term.ScalarMultiplication(&term, xBig)
+			}
+			if i == 0 {
+				lhs.Set(&term)
+			} else {
+				lhs.Add(&lhs, &term)
+			}
 		}
-		if !lhs.Equal(rhs) {
-			return fmt.Errorf("share verification failed for %s from %s", nodeID, senderID)
+		if !lhs.Equal(&rhs) {
+			return fmt.Errorf("share from %s does not verify for %d", fromNodeID, x)
 		}
+		fmt.Printf("%d: Verified share from %s\n", x, fromNodeID)
 	}
 	return nil
 }
 
 func (d *DKG) ComputeFinalKeys() {
-	secretShare := big.NewInt(0)
+	d.Secret = new(big.Int)
 	for _, share := range d.ReceivedShares {
-		secretShare.Add(secretShare, share)
+		// fmt.Printf("%d: Adding share from %s: %s\n", d.ID, fromNodeID, share.String())
+		d.Secret.Add(d.Secret, share)
+		d.Secret.Mod(d.Secret, &curve.Order)
 	}
-	secretShare.Mod(secretShare, &curve.Order)
-	d.SecretShare = secretShare
-	d.PublicKey = new(twistededwards.PointAffine).ScalarMultiplication(&curve.Base, secretShare)
+	// fmt.Printf("%d: Final secret: %s\n", d.ID, d.Secret.String())
+	d.PublicKey = new(twistededwards.PointAffine)
+	d.PublicKey.ScalarMultiplication(&curve.Base, d.Secret)
 }
 
 func (d *DKG) ReconstructMasterPublicKey(publicShares map[string]*twistededwards.PointAffine) *twistededwards.PointAffine {
@@ -89,28 +117,27 @@ func (d *DKG) ReconstructMasterPublicKey(publicShares map[string]*twistededwards
 	result.Y.SetOne()
 	points := make(map[int]*twistededwards.PointAffine)
 	used := 0
-	for nodeID, pubKey := range publicShares {
+	// Use first Threshold numeric IDs
+	var ids []int
+	for nodeID := range publicShares {
+		id, _ := strconv.Atoi(nodeID)
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	for _, id := range ids {
 		if used >= d.Threshold {
 			break
 		}
-		idNum, _ := big.NewInt(0).SetString(nodeID[4:], 10)
-		points[int(idNum.Int64())] = pubKey
+		nodeID := fmt.Sprintf("%d", id)
+		points[id] = publicShares[nodeID]
+		// fmt.Printf("%d: Using public share %d: X=%s, Y=%s\n", d.ID, id, publicShares[nodeID].X.String(), publicShares[nodeID].Y.String())
 		used++
 	}
 	for j := range points {
 		lambda := lagrangeCoefficient(j, points, big.NewInt(0), &curve.Order)
+		// fmt.Printf("%d: Lagrange coefficient for %d: %s\n", d.ID, j, lambda.String())
 		term := new(twistededwards.PointAffine).ScalarMultiplication(points[j], lambda)
 		result.Add(result, term)
-	}
-	return result
-}
-
-func evaluatePolynomial(coeffs []*big.Int, x, modulus *big.Int) *big.Int {
-	result := new(big.Int).Set(coeffs[len(coeffs)-1])
-	for i := len(coeffs) - 2; i >= 0; i-- {
-		result.Mul(result, x)
-		result.Add(result, coeffs[i])
-		result.Mod(result, modulus)
 	}
 	return result
 }

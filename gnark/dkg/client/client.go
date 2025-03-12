@@ -58,6 +58,7 @@ type Client struct {
 	NodeIndex        int
 	PublicKeys       map[string]age.Recipient // UUID -> PublicKey
 	NodeIndices      map[string]int           // UUID -> NodeIndex
+	IndexToUUID      map[int]string           // NodeIndex -> UUID (reverse map)
 	Identity         *age.X25519Identity
 	DKG              *utils.DKG
 	httpClient       *http.Client
@@ -73,6 +74,7 @@ func NewClient() *Client {
 		Identity:         identity,
 		PublicKeys:       make(map[string]age.Recipient),
 		NodeIndices:      make(map[string]int),
+		IndexToUUID:      make(map[int]string),
 		DKG:              nil,
 		httpClient:       &http.Client{},
 		LocalCommitments: nil,
@@ -186,6 +188,10 @@ func (c *Client) Register() error {
 		if ok {
 			c.NodeIndex = nodesResp.NodeIndices[c.NodeID]
 			c.NodeIndices = nodesResp.NodeIndices
+			// Populate reverse map
+			for uuid, index := range nodesResp.NodeIndices {
+				c.IndexToUUID[index] = uuid
+			}
 			nodes := make([]string, len(nodesResp.Nodes))
 			for i, uuid := range nodesResp.Nodes {
 				nodes[i] = strconv.Itoa(nodesResp.NodeIndices[uuid])
@@ -315,12 +321,12 @@ func (c *Client) findUUIDByIndex(indexStr string) string {
 		fmt.Printf("%s: failed to parse index %s: %v\n", c.NodeID, indexStr, err)
 		return ""
 	}
-	for uuid, idx := range c.NodeIndices {
-		if idx == index {
-			return uuid
-		}
+	uuid, ok := c.IndexToUUID[index]
+	if !ok {
+		fmt.Printf("%s: no UUID mapped for index %d\n", c.NodeID, index)
+		return ""
 	}
-	return ""
+	return uuid
 }
 
 func (c *Client) FetchShares() error {

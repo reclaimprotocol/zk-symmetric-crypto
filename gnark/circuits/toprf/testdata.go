@@ -33,7 +33,7 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 	threshold := Threshold
 	nodes := threshold + 2
 
-	shares, err := utils.TOPRFCreateSharesDKG(nodes, threshold)
+	shares, err := utils.CreateLocalSharesDKG(nodes, threshold)
 	if err != nil {
 		panic(err)
 	}

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math"
 	"math/big"
 	rnd "math/rand/v2"
@@ -52,11 +53,56 @@ func TOPRFCreateShares(n, threshold int, secret *big.Int) ([]*Share, error) {
 	return shares, nil
 }
 
-func TOPRFCreateSharesDKG(n, threshold int) ([]*Share, error) {
+func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
+	// Generate node IDs
+	nodes := make([]string, N)
+	for i := 0; i < N; i++ {
+		nodes[i] = fmt.Sprintf("node%d", i+1)
+	}
 
-	shares := DKG(n, threshold)
+	// Initialize DKG instances for each node
+	dkgs := make([]*DKG, N)
+	for i := 0; i < N; i++ {
+		dkgs[i] = NewDKG(T, N, nodes)
+		dkgs[i].GeneratePolynomials()
+		dkgs[i].GenerateShares()
+	}
 
-	return shares, nil
+	// Distribute shares among nodes
+	for i := 0; i < N; i++ {
+		for nodeID, share := range dkgs[i].Shares {
+			for j := 0; j < N; j++ {
+				if dkgs[j].Nodes[j] == nodeID {
+					dkgs[j].ReceivedShares[dkgs[i].Nodes[i]] = share
+					break
+				}
+			}
+		}
+	}
+
+	// Verify shares and compute final keys
+	commitments := make(map[string][]*twistededwards.PointAffine)
+	for i := 0; i < N; i++ {
+		commitments[dkgs[i].Nodes[i]] = dkgs[i].PublicCommits
+	}
+	for i := 0; i < N; i++ {
+		if err := dkgs[i].VerifyShares(commitments, dkgs[i].Nodes[i]); err != nil {
+			return nil, fmt.Errorf("local DKG verification failed for %s: %v", dkgs[i].Nodes[i], err)
+		}
+		dkgs[i].ComputeFinalKeys()
+	}
+
+	// Prepare result
+	result := make([]*Share, N)
+	for i := 0; i < N; i++ {
+		result[i] = &Share{
+			Index:      i + 1,
+			PrivateKey: dkgs[i].SecretShare,
+			PublicKey:  dkgs[i].PublicKey,
+		}
+	}
+
+	return result, nil
 }
 
 // Coeff calculates Lagrange coefficient for node with index idx

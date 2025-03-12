@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 )
@@ -63,9 +63,9 @@ type DKGInstance struct {
 	NumNodes     int
 	Nodes        []string
 	PublicKeys   map[string]string
-	Commitments  map[string][]*twistededwards.PointAffine
+	Commitments  map[string][][]byte
 	Shares       map[string]map[string]ShareData
-	PublicShares map[string]*twistededwards.PointAffine
+	PublicShares map[string][]byte
 	sync.Mutex
 }
 
@@ -86,9 +86,9 @@ func NewServer(numNodes, threshold int) (*Server, error) {
 			NumNodes:     numNodes,
 			Nodes:        make([]string, 0, numNodes),
 			PublicKeys:   make(map[string]string),
-			Commitments:  make(map[string][]*twistededwards.PointAffine),
+			Commitments:  make(map[string][][]byte),
 			Shares:       make(map[string]map[string]ShareData),
-			PublicShares: make(map[string]*twistededwards.PointAffine),
+			PublicShares: make(map[string][]byte),
 		},
 		RegisteredNodes:  make(map[string]bool),
 		RegistrationDone: make(chan struct{}),
@@ -168,7 +168,7 @@ func (s *Server) submitCommitment(c echo.Context) error {
 
 	s.DKG.Lock()
 	defer s.DKG.Unlock()
-	var commits []*twistededwards.PointAffine
+	var commits [][]byte
 	if err := json.Unmarshal(req.Commitment, &commits); err != nil {
 		log.Errorf("Failed to unmarshal commitments: %v", err)
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Invalid commitment data"})
@@ -284,13 +284,8 @@ func (s *Server) submitPublicShare(c echo.Context) error {
 	if _, ok := s.RegisteredNodes[nodeID]; !ok {
 		return c.JSON(http.StatusUnauthorized, DKGResponse{Status: "error", Message: "Unregistered node"})
 	}
-	var pubKey twistededwards.PointAffine
-	if err := pubKey.Unmarshal(req.PublicShare); err != nil {
-		log.Errorf("Failed to unmarshal public share for %s: %v", nodeID, err)
-		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Invalid public share data"})
-	}
-	s.DKG.PublicShares[nodeID] = &pubKey
-	log.Infof("Received public share from %s: X=%s, Y=%s", nodeID, pubKey.X.String(), pubKey.Y.String())
+	s.DKG.PublicShares[nodeID] = req.PublicShare
+	log.Infof("Received public share from %s", nodeID)
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success"})
 }
 
@@ -302,7 +297,7 @@ func (s *Server) getPublicShares(c echo.Context) error {
 	}
 	serializedShares := make(map[string][]byte)
 	for nodeID, pubKey := range s.DKG.PublicShares {
-		serializedShares[nodeID] = pubKey.Marshal()
+		serializedShares[nodeID] = pubKey
 	}
 	log.Infof("Returning all %d public shares to client", len(s.DKG.PublicShares))
 	return c.JSON(http.StatusOK, DKGResponse{Status: "success", Data: PublicSharesResponse{PublicShares: serializedShares}})
@@ -342,7 +337,7 @@ func main() {
 	e.GET("/dkg/public_shares", s.getPublicShares)
 
 	go func() {
-		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
+		if err := e.Start(":" + port); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server failed: %v", err)
 		}
 	}()

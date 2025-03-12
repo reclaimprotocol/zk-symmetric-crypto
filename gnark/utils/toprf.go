@@ -82,9 +82,12 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
 	}
 
 	// Verify shares and compute final keys
-	commitments := make(map[string][]*twistededwards.PointAffine)
+	commitments := make(map[string][][]byte)
 	for i := 0; i < N; i++ {
-		commitments[dkgs[i].Nodes[i]] = dkgs[i].PublicCommits
+		for j := 0; j < len(dkgs[i].PublicCommits); j++ {
+			commitments[dkgs[i].Nodes[i]][j] = dkgs[i].PublicCommits[j].Marshal()
+		}
+
 	}
 	for i := 0; i < N; i++ {
 		if err := dkgs[i].VerifyShares(commitments, dkgs[i].Nodes[i]); err != nil {

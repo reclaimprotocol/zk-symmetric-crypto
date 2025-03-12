@@ -2,6 +2,7 @@ package utils
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"sort"
@@ -70,7 +71,7 @@ func (d *DKG) evaluatePolynomial(x *big.Int) *big.Int {
 	return result
 }
 
-func (d *DKG) VerifyShares(commitments map[string][]*twistededwards.PointAffine, nodeID string) error {
+func (d *DKG) VerifyShares(commitments map[string][][]byte, nodeID string) error {
 	x, _ := strconv.Atoi(nodeID)
 	xBig := big.NewInt(int64(x))
 	for fromNodeID, share := range d.ReceivedShares {
@@ -81,7 +82,10 @@ func (d *DKG) VerifyShares(commitments map[string][]*twistededwards.PointAffine,
 		lhs.Set(&curve.Base)
 		for i := 0; i <= d.Threshold; i++ {
 			var term twistededwards.PointAffine
-			term.Set(commits[i])
+			err := term.Unmarshal(commits[i])
+			if err != nil {
+				return err
+			}
 			for j := 0; j < i; j++ {
 				term.ScalarMultiplication(&term, xBig)
 			}
@@ -111,7 +115,7 @@ func (d *DKG) ComputeFinalKeys() {
 	d.PublicKey.ScalarMultiplication(&curve.Base, d.Secret)
 }
 
-func (d *DKG) ReconstructMasterPublicKey(publicShares map[string]*twistededwards.PointAffine) *twistededwards.PointAffine {
+func (d *DKG) ReconstructMasterPublicKey(publicShares map[string][]byte) *twistededwards.PointAffine {
 	result := new(twistededwards.PointAffine)
 	result.X.SetZero()
 	result.Y.SetOne()
@@ -120,7 +124,10 @@ func (d *DKG) ReconstructMasterPublicKey(publicShares map[string]*twistededwards
 	// Use first Threshold numeric IDs
 	var ids []int
 	for nodeID := range publicShares {
-		id, _ := strconv.Atoi(nodeID)
+		id, err := strconv.Atoi(nodeID)
+		if err != nil {
+			panic(err)
+		}
 		ids = append(ids, id)
 	}
 	sort.Ints(ids)
@@ -129,7 +136,12 @@ func (d *DKG) ReconstructMasterPublicKey(publicShares map[string]*twistededwards
 			break
 		}
 		nodeID := fmt.Sprintf("%d", id)
-		points[id] = publicShares[nodeID]
+		pubShare := &twistededwards.PointAffine{}
+		err := pubShare.Unmarshal(publicShares[nodeID])
+		if err != nil {
+			return nil
+		}
+		points[id] = pubShare
 		// fmt.Printf("%d: Using public share %d: X=%s, Y=%s\n", d.ID, id, publicShares[nodeID].X.String(), publicShares[nodeID].Y.String())
 		used++
 	}
@@ -159,4 +171,12 @@ func lagrangeCoefficient(j int, points map[int]*twistededwards.PointAffine, x, m
 	}
 	denInv := new(big.Int).ModInverse(den, modulus)
 	return new(big.Int).Mod(new(big.Int).Mul(num, denInv), modulus)
+}
+
+func (d *DKG) MarshalCommitments() ([]byte, error) {
+	commitments := make([][]byte, len(d.PublicCommits))
+	for i, commit := range d.PublicCommits {
+		commitments[i] = commit.Marshal()
+	}
+	return json.Marshal(&commitments)
 }

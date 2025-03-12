@@ -15,6 +15,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 )
 
@@ -124,7 +125,7 @@ func (s *Server) register(c echo.Context) error {
 	s.RegisteredNodes[fmt.Sprintf("%d", nodeID)] = true
 	s.DKG.Nodes = append(s.DKG.Nodes, fmt.Sprintf("%d", nodeID))
 	s.DKG.PublicKeys[fmt.Sprintf("%d", nodeID)] = req.PublicKey
-	log.Infof("Registered %d with public key %s", nodeID, req.PublicKey)
+	log.Infof("Registered node %d with public key %s", nodeID, req.PublicKey)
 	if len(s.RegisteredNodes) == s.DKG.NumNodes {
 		close(s.RegistrationDone)
 		log.Infof("All %d nodes registered, starting DKG", s.DKG.NumNodes)
@@ -325,6 +326,9 @@ func main() {
 	}
 
 	e := echo.New()
+	e.Use(middleware.Logger())
+	e.HideBanner = true
+	e.HidePort = true
 	e.Logger.SetLevel(log.INFO)
 	e.GET("/health", s.health)
 	e.POST("/dkg/register", s.register)

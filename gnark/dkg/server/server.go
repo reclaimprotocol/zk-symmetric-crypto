@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,7 +15,6 @@ import (
 	"filippo.io/age"
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 )
 
@@ -207,6 +205,9 @@ func (s *Server) submitShare(c echo.Context) error {
 	if req.FromNodeID == "" || req.ToNodeID == "" || len(req.Share.EncryptedShare) == 0 {
 		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "FromNodeID, ToNodeID, and Share are required"})
 	}
+	if req.FromNodeID == req.ToNodeID {
+		return c.JSON(http.StatusBadRequest, DKGResponse{Status: "error", Message: "Cannot send share to self"})
+	}
 
 	select {
 	case <-s.RegistrationDone:
@@ -288,7 +289,6 @@ func (s *Server) getPublicShares(c echo.Context) error {
 }
 
 func main() {
-	// Load configuration from environment variables
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -304,20 +304,12 @@ func main() {
 		log.Fatalf("Invalid THRESHOLD: %v", err)
 	}
 
-	// Initialize server
 	s, err := NewServer(numNodes, threshold)
 	if err != nil {
 		log.Fatalf("Failed to initialize server: %v", err)
 	}
 
-	// Set up Echo with logging
 	e := echo.New()
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(10))) // 10 req/s per IP
-
-	e.HideBanner = true
-	e.HidePort = true
 	e.Logger.SetLevel(log.INFO)
 	e.GET("/health", s.health)
 	e.POST("/dkg/register", s.register)
@@ -329,15 +321,13 @@ func main() {
 	e.POST("/dkg/public_shares", s.submitPublicShare)
 	e.GET("/dkg/public_shares", s.getPublicShares)
 
-	// Start server with graceful shutdown
 	go func() {
-		if err := e.Start(":" + port); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
 		}
 	}()
 	log.Infof("Server started on :%s with %d nodes and threshold %d", port, numNodes, threshold)
 
-	// Handle shutdown signals
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit

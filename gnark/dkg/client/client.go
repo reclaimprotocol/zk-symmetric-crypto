@@ -220,7 +220,10 @@ func (c *Client) FetchCommitments() (map[string][]*twistededwards.PointAffine, e
 	commitMap := make(map[string][]*twistededwards.PointAffine)
 	for nodeID, commBytes := range resp.Commitments {
 		var commits []*twistededwards.PointAffine
-		json.Unmarshal(commBytes, &commits)
+		err := json.Unmarshal(commBytes, &commits)
+		if err != nil {
+			return nil, err
+		}
 		commitMap[nodeID] = commits
 	}
 	fmt.Printf("%s: Fetched %d commitments\n", c.NodeID, len(commitMap))
@@ -230,6 +233,9 @@ func (c *Client) FetchCommitments() (map[string][]*twistededwards.PointAffine, e
 func (c *Client) SubmitShares() error {
 	c.DKG.GenerateShares()
 	for toNodeID, share := range c.DKG.Shares {
+		if toNodeID == c.NodeID {
+			continue
+		}
 		var buf bytes.Buffer
 		w, err := age.Encrypt(&buf, c.PublicKeys[toNodeID])
 		if err != nil {
@@ -280,7 +286,7 @@ func (c *Client) FetchShares() error {
 					c.DKG.ReceivedShares[fromNodeID] = secret
 				}
 			}
-			return len(c.DKG.ReceivedShares) == c.DKG.NumNodes
+			return len(c.DKG.ReceivedShares) == c.DKG.NumNodes-1 // account for our own share
 		}
 		return false
 	})
@@ -315,7 +321,10 @@ func (c *Client) FetchPublicShares() (map[string]*twistededwards.PointAffine, er
 	publicShares := make(map[string]*twistededwards.PointAffine)
 	for nodeID, pubBytes := range resp.PublicShares {
 		var pubKey twistededwards.PointAffine
-		pubKey.Unmarshal(pubBytes)
+		err := pubKey.Unmarshal(pubBytes)
+		if err != nil {
+			return nil, err
+		}
 		publicShares[nodeID] = &pubKey
 	}
 	fmt.Printf("%s: Fetched %d public shares\n", c.NodeID, len(publicShares))

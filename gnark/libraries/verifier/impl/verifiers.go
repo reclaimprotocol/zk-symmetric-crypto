@@ -165,7 +165,11 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		evals[i] = utils.UnmarshalPoint(resp.Evaluated)
 		cs[i] = new(big.Int).SetBytes(resp.C)
 		rs[i] = new(big.Int).SetBytes(resp.R)
-		coeffs[i] = utils.LagrangeCoefficient(idxs[i], idxs)
+		coeffs[i], err = utils.LagrangeCoefficient(idxs[i], idxs)
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
 	}
 
 	witness := &chacha_oprf.ChachaTOPRFCircuit{
@@ -250,7 +254,11 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		evals[i] = utils.UnmarshalPoint(resp.Evaluated)
 		cs[i] = new(big.Int).SetBytes(resp.C)
 		rs[i] = new(big.Int).SetBytes(resp.R)
-		coeffs[i] = utils.LagrangeCoefficient(idxs[i], idxs)
+		coeffs[i], err = utils.LagrangeCoefficient(idxs[i], idxs)
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
 	}
 
 	witness := &aes_oprf.AESTOPRFCircuit{

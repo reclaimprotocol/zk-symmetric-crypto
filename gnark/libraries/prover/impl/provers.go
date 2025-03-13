@@ -263,7 +263,10 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	}
 
 	for i := 0; i < toprf.Threshold; i++ {
-		coeffs[i] = utils.LagrangeCoefficient(idxs[i], idxs)
+		coeffs[i], err = utils.LagrangeCoefficient(idxs[i], idxs)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	secretElements, err := utils.CreateSecretElements(output[oprf.Pos:oprf.Pos+oprf.Len], oprf.DomainSeparator)
@@ -364,7 +367,10 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	}
 
 	for i := 0; i < toprf.Threshold; i++ {
-		coeffs[i] = utils.LagrangeCoefficient(idxs[i], idxs)
+		coeffs[i], err = utils.LagrangeCoefficient(idxs[i], idxs)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	secretElements, err := utils.CreateSecretElements(output[oprf.Pos:oprf.Pos+oprf.Len], oprf.DomainSeparator)

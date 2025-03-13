@@ -161,7 +161,7 @@ func (d *DKG) ReconstructMasterPublicKey(publicShares map[int][]byte) *twisteded
 		used++
 	}
 	for j := range points {
-		lambda := LagrangeCoefficient(j, indices)
+		lambda, _ := LagrangeCoefficient(j, indices)
 		term := new(twistededwards.PointAffine).ScalarMultiplication(points[j], lambda)
 		result.Add(result, term)
 	}
@@ -180,7 +180,7 @@ func (d *DKG) ReconstructPrivateKey(secretShares map[int]*big.Int) *big.Int {
 		count++
 	}
 	for _, j := range indices {
-		lambda := LagrangeCoefficient(j, indices)
+		lambda, _ := LagrangeCoefficient(j, indices)
 		term := new(big.Int).Mul(secretShares[j], lambda)
 		term.Mod(term, &curve.Order)
 		result.Add(result, term)
@@ -189,22 +189,77 @@ func (d *DKG) ReconstructPrivateKey(secretShares map[int]*big.Int) *big.Int {
 	return result
 }
 
-// LagrangeCoefficient computes λ_shareID(x) given a slice of share IDs
-func LagrangeCoefficient(shareID int, indices []int) *big.Int {
-	modulus := &curve.Order
-	num := big.NewInt(1)
-	den := big.NewInt(1)
-	x := big.NewInt(0)
-	for _, idx := range indices {
-		if idx != shareID {
-			num.Mul(num, new(big.Int).Sub(x, big.NewInt(int64(idx))))
-			den.Mul(den, new(big.Int).Sub(big.NewInt(int64(shareID)), big.NewInt(int64(idx))))
-		}
+// LagrangeCoefficient computes the Lagrange coefficient λ_shareID(x) for a given shareID
+// and a set of indices, used in polynomial interpolation. The result is computed modulo
+// the curve order (curve.Order). This function is critical for DKG and must handle all
+// edge cases to prevent subtle bugs.
+func LagrangeCoefficient(shareID int, indices []int) (*big.Int, error) {
+	// Step 1: Validate inputs
+	if len(indices) == 0 {
+		return nil, fmt.Errorf("indices cannot be empty")
 	}
-	num.Mod(num, modulus)
-	den.Mod(den, modulus)
+	// Check for duplicates in indices, as they would lead to a zero denominator
+	seen := make(map[int]bool)
+	for _, idx := range indices {
+		if seen[idx] {
+			return nil, fmt.Errorf("duplicate index %d in indices", idx)
+		}
+		seen[idx] = true
+	}
+	// Validate that shareID is in indices (required for correct interpolation in DKG)
+	if !seen[shareID] {
+		return nil, fmt.Errorf("shareID %d not found in indices; must be one of the interpolation points", shareID)
+	}
+
+	modulus := &curve.Order
+	if modulus.Sign() <= 0 {
+		return nil, fmt.Errorf("curve order is invalid (non-positive)")
+	}
+
+	// Step 2: Initialize numerator and denominator
+	num := big.NewInt(1) // Product of (x - x_j) for j != shareID
+	den := big.NewInt(1) // Product of (shareID - x_j) for j != shareID
+	x := big.NewInt(0)   // In DKG, we evaluate at x = 0 (secret reconstruction)
+
+	// Step 3: Compute the Lagrange terms
+	for _, idx := range indices {
+		if idx == shareID {
+			continue // Skip the shareID term to avoid zero in denominator
+		}
+		idxBig := big.NewInt(int64(idx))
+		shareIDBig := big.NewInt(int64(shareID))
+
+		// Numerator: (x - idx)
+		numTerm := new(big.Int).Sub(x, idxBig)
+		num.Mul(num, numTerm)
+		num.Mod(num, modulus) // Keep intermediate results bounded
+
+		// Denominator: (shareID - idx)
+		denTerm := new(big.Int).Sub(shareIDBig, idxBig)
+		if denTerm.Sign() == 0 {
+			return nil, fmt.Errorf("denominator term (shareID %d - idx %d) is zero", shareID, idx)
+		}
+		den.Mul(den, denTerm)
+		den.Mod(den, modulus) // Keep intermediate results bounded
+	}
+
+	// Step 4: Compute the modular inverse of the denominator
+	den.Mod(den, modulus) // Ensure denominator is in the field
 	denInv := new(big.Int).ModInverse(den, modulus)
-	return new(big.Int).Mod(new(big.Int).Mul(num, denInv), modulus)
+	if denInv == nil {
+		return nil, fmt.Errorf("failed to compute modular inverse of denominator %s modulo %s", den.String(), modulus.String())
+	}
+
+	// Step 5: Compute the final coefficient: num * denInv mod modulus
+	result := new(big.Int).Mul(num, denInv)
+	result.Mod(result, modulus)
+
+	// Step 6: Sanity check (optional, can be removed in production)
+	if result.Sign() < 0 || result.Cmp(modulus) >= 0 {
+		return nil, fmt.Errorf("result %s is out of bounds [0, %s)", result.String(), modulus.String())
+	}
+
+	return result, nil
 }
 
 func (d *DKG) MarshalCommitments() ([]byte, error) {

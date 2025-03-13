@@ -64,7 +64,7 @@ func reconstructPrivateKey(shares []*Share, T int) *big.Int {
 	}
 	result := new(big.Int)
 	for _, share := range shares[:T] {
-		lambda := LagrangeCoefficient(share.Index, indices)
+		lambda, _ := LagrangeCoefficient(share.Index, indices)
 		term := new(big.Int).Mul(share.PrivateKey, lambda)
 		term.Mod(term, &curve.Order)
 		result.Add(result, term)
@@ -85,7 +85,7 @@ func reconstructPublicKey(shares []*Share, T int) *twistededwards.PointAffine {
 	result.X.SetZero()
 	result.Y.SetOne()
 	for _, share := range shares[:T] {
-		lambda := LagrangeCoefficient(share.Index, indices)
+		lambda, _ := LagrangeCoefficient(share.Index, indices)
 		term := new(twistededwards.PointAffine).ScalarMultiplication(share.PublicKey, lambda)
 		result.Add(result, term)
 	}
@@ -198,9 +198,9 @@ func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twis
 	result.Y.SetOne()
 
 	for i := 0; i < len(elements); i++ {
-		lPoly := LagrangeCoefficient(idxs[i], idxs)
+		lambda, _ := LagrangeCoefficient(idxs[i], idxs)
 		gki := &twistededwards.PointAffine{}
-		gki.ScalarMultiplication(elements[i], lPoly)
+		gki.ScalarMultiplication(elements[i], lambda)
 		result.Add(result, gki)
 	}
 	return result

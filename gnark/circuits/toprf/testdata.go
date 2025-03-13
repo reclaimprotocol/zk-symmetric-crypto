@@ -63,7 +63,7 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 		resps[i] = utils.OutPointToInPoint(resp.EvaluatedPoint)
 		sharePublicKeysIn[i] = shares[idx].PublicKey
 		sharePublicKeys[i] = utils.OutPointToInPoint(shares[idx].PublicKey)
-		coefficients[i] = utils.LagrangeCoefficient(idxs[i], idxs)
+		coefficients[i], _ = utils.LagrangeCoefficient(idxs[i], idxs)
 		cs[i] = resp.C
 		rs[i] = resp.R
 

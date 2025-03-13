@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 )
 
 // Import shared types
@@ -367,7 +368,14 @@ func (c *Client) FetchPublicShares() (map[int][]byte, error) {
 	return publicShares, nil
 }
 
-func (c *Client) Run() {
+type ClientResult struct {
+	NodeID       string
+	Secret       *big.Int
+	PublicKey    *twistededwards.PointAffine
+	MasterPubKey *twistededwards.PointAffine
+}
+
+func (c *Client) Run(results chan<- *ClientResult) {
 	if err := c.Register(); err != nil {
 		fmt.Printf("%s: Failed to register: %v\n", c.NodeID, err)
 		return
@@ -405,6 +413,13 @@ func (c *Client) Run() {
 	}
 	masterPubKey := c.DKG.ReconstructMasterPublicKey(publicShares)
 	fmt.Printf("%s: Master Public Key - X=%s, Y=%s\n", c.NodeID, masterPubKey.X.String(), masterPubKey.Y.String())
+	// Send result to channel
+	results <- &ClientResult{
+		NodeID:       c.NodeID,
+		Secret:       new(big.Int).Set(c.DKG.Secret),
+		PublicKey:    c.DKG.PublicKey,
+		MasterPubKey: masterPubKey,
+	}
 }
 
 func waitForServer() {
@@ -431,13 +446,45 @@ func main() {
 	numNodes := 5
 	waitForServer()
 	var wg sync.WaitGroup
+	resultsChan := make(chan *ClientResult, numNodes)
+	clients := make([]*Client, numNodes)
+
 	for i := 0; i < numNodes; i++ {
 		wg.Add(1)
-		client := NewClient()
+		clients[i] = NewClient()
 		go func(c *Client) {
 			defer wg.Done()
-			c.Run()
-		}(client)
+			c.Run(resultsChan)
+		}(clients[i])
 	}
 	wg.Wait()
+	close(resultsChan)
+
+	// Process results
+	secretShares := make(map[int]*big.Int)
+	var masterPubKey *twistededwards.PointAffine
+	for result := range resultsChan {
+		index := clients[0].NodeIndices[result.NodeID]
+		secretShares[index] = result.Secret
+		if masterPubKey == nil {
+			masterPubKey = result.MasterPubKey
+		} else if !masterPubKey.Equal(result.MasterPubKey) {
+			fmt.Printf("Mismatch in master public keys: %s vs %s\n", masterPubKey.X.String(), result.MasterPubKey.X.String())
+		}
+	}
+	var curve = twistededwards.GetEdwardsCurve()
+	dkg := clients[0].DKG
+	masterPrivateKey := dkg.ReconstructPrivateKey(secretShares)
+	derivedPubKey := new(twistededwards.PointAffine)
+	derivedPubKey.ScalarMultiplication(&curve.Base, masterPrivateKey)
+
+	fmt.Printf("Reconstructed Master Private Key (with %d shares): %s\n", dkg.Threshold, masterPrivateKey.String())
+	fmt.Printf("Derived Master Public Key - X=%s, Y=%s\n", derivedPubKey.X.String(), derivedPubKey.Y.String())
+	fmt.Printf("Original Master Public Key - X=%s, Y=%s\n", masterPubKey.X.String(), masterPubKey.Y.String())
+
+	if derivedPubKey.Equal(masterPubKey) {
+		fmt.Println("Verification successful: Reconstructed private key matches master public key!")
+	} else {
+		fmt.Println("Verification failed: Reconstructed private key does not match master public key.")
+	}
 }

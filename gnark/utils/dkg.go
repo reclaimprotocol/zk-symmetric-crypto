@@ -39,9 +39,9 @@ func NewDKG(threshold, numNodes int, nodes []string, nodeID string) *DKG {
 }
 
 func (d *DKG) GeneratePolynomials() {
-	d.Polynomial = make([]*big.Int, d.Threshold+1)
-	d.PublicCommits = make([]*twistededwards.PointAffine, d.Threshold+1)
-	for i := 0; i <= d.Threshold; i++ {
+	d.Polynomial = make([]*big.Int, d.Threshold) // Degree t-1, t coefficients
+	d.PublicCommits = make([]*twistededwards.PointAffine, d.Threshold)
+	for i := 0; i < d.Threshold; i++ { // 0 to t-1
 		coef, _ := rand.Int(rand.Reader, &curve.Order)
 		d.Polynomial[i] = coef
 		var commit twistededwards.PointAffine
@@ -62,8 +62,8 @@ func (d *DKG) GenerateShares() {
 }
 
 func (d *DKG) evaluatePolynomial(x *big.Int) *big.Int {
-	result := new(big.Int).Set(d.Polynomial[d.Threshold])
-	for i := d.Threshold - 1; i >= 0; i-- {
+	result := new(big.Int).Set(d.Polynomial[d.Threshold-1]) // Start with highest degree term
+	for i := d.Threshold - 2; i >= 0; i-- {                 // t-2 down to 0
 		result.Mul(result, x)
 		result.Add(result, d.Polynomial[i])
 		result.Mod(result, &curve.Order)
@@ -80,7 +80,7 @@ func (d *DKG) VerifyShares(commitments map[string][][]byte, nodeID string) error
 		rhs.ScalarMultiplication(&curve.Base, share)
 		var lhs twistededwards.PointAffine
 		lhs.Set(&curve.Base)
-		for i := 0; i <= d.Threshold; i++ {
+		for i := 0; i < d.Threshold; i++ { // Changed from <= to <
 			var term twistededwards.PointAffine
 			err := term.Unmarshal(commits[i])
 			if err != nil {
@@ -105,14 +105,50 @@ func (d *DKG) VerifyShares(commitments map[string][][]byte, nodeID string) error
 
 func (d *DKG) ComputeFinalKeys() {
 	d.Secret = new(big.Int)
+
+	// Add received shares from other nodes
 	for _, share := range d.ReceivedShares {
-		// fmt.Printf("%d: Adding share from %s: %s\n", d.ID, fromNodeID, share.String())
 		d.Secret.Add(d.Secret, share)
 		d.Secret.Mod(d.Secret, &curve.Order)
 	}
-	// fmt.Printf("%d: Final secret: %s\n", d.ID, d.Secret.String())
+
+	// Add own share: evaluate own polynomial at own index
+	ownIndex := big.NewInt(int64(d.ID))
+	ownShare := d.evaluatePolynomial(ownIndex)
+	d.Secret.Add(d.Secret, ownShare)
+	d.Secret.Mod(d.Secret, &curve.Order)
+
+	// Compute public key from the final secret share
 	d.PublicKey = new(twistededwards.PointAffine)
 	d.PublicKey.ScalarMultiplication(&curve.Base, d.Secret)
+
+	// Optional: Log for debugging
+	fmt.Printf("Node %d: Included own share %s, final secret %s\n", d.ID, ownShare.String(), d.Secret.String())
+}
+
+func (d *DKG) ReconstructPrivateKey(secretShares map[int]*big.Int) *big.Int {
+	result := new(big.Int)
+
+	// Select first t shares
+	selectedShares := make(map[int]*big.Int)
+	count := 0
+	for j, share := range secretShares {
+		if count >= d.Threshold {
+			break
+		}
+		selectedShares[j] = share
+		count++
+	}
+
+	// Interpolate using only selected shares
+	for j := range selectedShares {
+		lambda := lagrangeCoefficient(j, selectedShares, big.NewInt(0), &curve.Order)
+		term := new(big.Int).Mul(secretShares[j], lambda)
+		term.Mod(term, &curve.Order)
+		result.Add(result, term)
+		result.Mod(result, &curve.Order)
+	}
+	return result
 }
 
 func (d *DKG) ReconstructMasterPublicKey(publicShares map[int][]byte) *twistededwards.PointAffine {
@@ -121,7 +157,6 @@ func (d *DKG) ReconstructMasterPublicKey(publicShares map[int][]byte) *twisteded
 	result.Y.SetOne()
 	points := make(map[int]*twistededwards.PointAffine)
 	used := 0
-	// Use first Threshold numeric IDs
 	var ids []int
 	for nodeID := range publicShares {
 		ids = append(ids, nodeID)
@@ -137,25 +172,33 @@ func (d *DKG) ReconstructMasterPublicKey(publicShares map[int][]byte) *twisteded
 			return nil
 		}
 		points[id] = pubShare
-		// fmt.Printf("%d: Using public share %d: X=%s, Y=%s\n", d.ID, id, publicShares[nodeID].X.String(), publicShares[nodeID].Y.String())
 		used++
 	}
 	for j := range points {
 		lambda := lagrangeCoefficient(j, points, big.NewInt(0), &curve.Order)
-		// fmt.Printf("%d: Lagrange coefficient for %d: %s\n", d.ID, j, lambda.String())
 		term := new(twistededwards.PointAffine).ScalarMultiplication(points[j], lambda)
 		result.Add(result, term)
 	}
 	return result
 }
 
-func lagrangeCoefficient(j int, points map[int]*twistededwards.PointAffine, x, modulus *big.Int) *big.Int {
+func lagrangeCoefficient(j int, points interface{}, x, modulus *big.Int) *big.Int {
 	num := big.NewInt(1)
 	den := big.NewInt(1)
-	for i := range points {
-		if i != j {
-			num.Mul(num, new(big.Int).Sub(x, big.NewInt(int64(i))))
-			den.Mul(den, new(big.Int).Sub(big.NewInt(int64(j)), big.NewInt(int64(i))))
+	switch p := points.(type) {
+	case map[int]*big.Int:
+		for i := range p {
+			if i != j {
+				num.Mul(num, new(big.Int).Sub(x, big.NewInt(int64(i))))
+				den.Mul(den, new(big.Int).Sub(big.NewInt(int64(j)), big.NewInt(int64(i))))
+			}
+		}
+	case map[int]*twistededwards.PointAffine:
+		for i := range p {
+			if i != j {
+				num.Mul(num, new(big.Int).Sub(x, big.NewInt(int64(i))))
+				den.Mul(den, new(big.Int).Sub(big.NewInt(int64(j)), big.NewInt(int64(i))))
+			}
 		}
 	}
 	if num.Sign() < 0 {
@@ -169,7 +212,7 @@ func lagrangeCoefficient(j int, points map[int]*twistededwards.PointAffine, x, m
 }
 
 func (d *DKG) MarshalCommitments() ([]byte, error) {
-	commitments := make([][]byte, len(d.PublicCommits))
+	commitments := make([][]byte, len(d.PublicCommits)) // Length is d.Threshold
 	for i, commit := range d.PublicCommits {
 		commitments[i] = commit.Marshal()
 	}

@@ -92,10 +92,10 @@ func reconstructPublicKey(shares []*Share, T int) *twistededwards.PointAffine {
 	return result
 }
 
-func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
+func CreateLocalSharesDKG(N, T int) ([]*Share, *twistededwards.PointAffine, error) {
 
 	if N <= 0 || T <= 0 || T > N {
-		return nil, fmt.Errorf("invalid parameters: N=%d, T=%d; must have 0 < T <= N", N, T)
+		return nil, nil, fmt.Errorf("invalid parameters: N=%d, T=%d; must have 0 < T <= N", N, T)
 	}
 
 	// Step 1: Simulate N nodes with their polynomials and shares
@@ -122,7 +122,7 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
 		for i := 0; i < T; i++ {
 			coef, err := rand.Int(rand.Reader, &curve.Order)
 			if err != nil {
-				return nil, fmt.Errorf("failed to generate coefficient: %v", err)
+				return nil, nil, fmt.Errorf("failed to generate coefficient: %v", err)
 			}
 			node.polynomial[i] = coef
 		}
@@ -134,7 +134,7 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
 			}
 			x, err := strconv.Atoi(targetID)
 			if err != nil {
-				return nil, fmt.Errorf("failed to generate coefficient: %v", err)
+				return nil, nil, fmt.Errorf("failed to generate coefficient: %v", err)
 			}
 			share := EvaluatePolynomial(node.polynomial, big.NewInt(int64(x)))
 			node.shares[targetID] = share
@@ -180,16 +180,16 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
 	derivedPublic := new(twistededwards.PointAffine)
 	derivedPublic.ScalarMultiplication(&curve.Base, masterPrivate)
 
-	fmt.Printf("\nReconstructed Master Private Key: %s\n", masterPrivate.String())
-	fmt.Printf("Reconstructed Master Public Key - X=%s, Y=%s\n", masterPublic.X.String(), masterPublic.Y.String())
-	fmt.Printf("Derived Master Public Key - X=%s, Y=%s\n", derivedPublic.X.String(), derivedPublic.Y.String())
+	// fmt.Printf("\nReconstructed Master Private Key: %s\n", masterPrivate.String())
+	// fmt.Printf("Reconstructed Master Public Key - X=%s, Y=%s\n", masterPublic.X.String(), masterPublic.Y.String())
+	// fmt.Printf("Derived Master Public Key - X=%s, Y=%s\n", derivedPublic.X.String(), derivedPublic.Y.String())
 	if masterPublic.Equal(derivedPublic) {
 		fmt.Println("Verification successful: Reconstructed keys match!")
 	} else {
-		fmt.Println("Verification failed: Reconstructed keys do not match.")
+		return nil, nil, fmt.Errorf("failed to reconstruct public key")
 	}
 
-	return shares, nil
+	return shares, masterPublic, nil
 }
 
 func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twistededwards.PointAffine {
@@ -198,7 +198,10 @@ func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twis
 	result.Y.SetOne()
 
 	for i := 0; i < len(elements); i++ {
-		lambda, _ := LagrangeCoefficient(idxs[i], idxs)
+		lambda, err := LagrangeCoefficient(idxs[i], idxs)
+		if err != nil {
+			panic(err)
+		}
 		gki := &twistededwards.PointAffine{}
 		gki.ScalarMultiplication(elements[i], lambda)
 		result.Add(result, gki)

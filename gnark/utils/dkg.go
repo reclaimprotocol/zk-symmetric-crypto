@@ -201,6 +201,9 @@ func LagrangeCoefficient(shareID int, indices []int) (*big.Int, error) {
 	// Check for duplicates in indices, as they would lead to a zero denominator
 	seen := make(map[int]bool)
 	for _, idx := range indices {
+		if idx == 0 {
+			panic("indices cannot be zero")
+		}
 		if seen[idx] {
 			return nil, fmt.Errorf("duplicate index %d in indices", idx)
 		}

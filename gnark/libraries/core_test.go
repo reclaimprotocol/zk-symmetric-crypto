@@ -266,17 +266,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	threshold := toprf.Threshold
 	nodes := threshold + 1
 
-	tParams := &oprf.InputGenerateParams{
-		Total: uint8(nodes),
-	}
-
-	btParams, err := json.Marshal(tParams)
-	assert.NoError(err)
-
-	bShares := oprf.TOPRFGenerateThresholdKeys(btParams)
-
-	var shares *oprf.OutputGenerateParams
-	err = json.Unmarshal(bShares, &shares)
+	shares, masterPublic, err := utils.CreateLocalSharesDKG(nodes, threshold)
 	assert.NoError(err)
 
 	req, err := utils.OPRFGenerateRequest(emailBytes, domainSeparator)
@@ -288,13 +278,13 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	responses := make([]*prover.TOPRFResponse, threshold)
 
 	for i := 0; i < threshold; i++ {
-		sk := new(big.Int).SetBytes(shares.Shares[idxs[i]].PrivateKey)
+		sk := shares[idxs[i]].PrivateKey
 		evalResult, err := utils.OPRFEvaluate(sk, req.MaskedData)
 		assert.NoError(err)
 
 		resp := &prover.TOPRFResponse{
-			Index:          uint8(idxs[i]),
-			PublicKeyShare: shares.Shares[idxs[i]].PublicKey,
+			Index:          uint8(idxs[i] + 1), // !!!
+			PublicKeyShare: shares[idxs[i]].PublicKey.Marshal(),
 			Evaluated:      evalResult.EvaluatedPoint.Marshal(),
 			C:              evalResult.C.Bytes(),
 			R:              evalResult.R.Bytes(),
@@ -321,7 +311,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	}
 
 	finReq := &oprf2.InputTOPRFFinalizeParams{
-		ServerPublicKey: shares.PublicKey,
+		ServerPublicKey: masterPublic.Marshal(),
 		Request: &oprf2.OPRFRequest{
 			Mask:           req.Mask.Bytes(),
 			MaskedData:     req.MaskedData.Marshal(),

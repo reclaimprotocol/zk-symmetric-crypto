@@ -45,7 +45,7 @@ func TestTOPRFDKG(t *testing.T) {
 	emailBytes := []byte(email)
 	nodes := 10
 	threshold := 5
-	shares, e := CreateLocalSharesDKG(nodes, threshold)
+	shares, _, e := CreateLocalSharesDKG(nodes, threshold)
 	require.NoError(t, e)
 
 	var out *big.Int

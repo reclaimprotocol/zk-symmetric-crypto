@@ -12,7 +12,7 @@ import (
 	"github.com/consensys/gnark/std/math/emulated"
 )
 
-const Threshold = 1
+const Threshold = 2
 const BytesPerElement = 31
 
 type Params struct {

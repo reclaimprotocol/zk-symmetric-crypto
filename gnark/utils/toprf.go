@@ -54,96 +54,142 @@ func TOPRFCreateShares(n, threshold int, secret *big.Int) ([]*Share, error) {
 	return shares, nil
 }
 
-func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
-
-	if T <= 0 || T > N {
-		return nil, fmt.Errorf("invalid threshold: T=%d with N=%d", T, N)
+func reconstructPrivateKey(shares []*Share, T int) *big.Int {
+	if len(shares) < T {
+		return nil
 	}
-	if N <= 0 {
-		return nil, fmt.Errorf("invalid number of nodes: %d", N)
+	indices := make([]int, T)
+	for i, share := range shares[:T] {
+		indices[i] = share.Index
 	}
-
-	// Generate node IDs
-	nodes := make([]string, N)
-	for i := 0; i < N; i++ {
-		nodes[i] = fmt.Sprintf("node%d", i+1)
+	result := new(big.Int)
+	for _, share := range shares[:T] {
+		lambda := LagrangeCoefficient(share.Index, indices)
+		term := new(big.Int).Mul(share.PrivateKey, lambda)
+		term.Mod(term, &curve.Order)
+		result.Add(result, term)
+		result.Mod(result, &curve.Order)
 	}
-
-	// Initialize DKG instances for each node
-	dkgs := make([]*DKG, N)
-	for i := 0; i < N; i++ {
-		dkgs[i] = NewDKG(T, N, nodes, strconv.Itoa(i+1))
-		dkgs[i].GeneratePolynomials()
-		dkgs[i].GenerateShares()
-	}
-
-	// Distribute shares among nodes
-	for i := 0; i < N; i++ {
-		for nodeID, share := range dkgs[i].Shares {
-			for j := 0; j < N; j++ {
-				if dkgs[j].Nodes[j] == nodeID {
-					dkgs[j].ReceivedShares[dkgs[i].Nodes[i]] = share
-					break
-				}
-			}
-		}
-	}
-
-	// Verify shares and compute final keys
-	commitments := make(map[string][][]byte)
-	for i := 0; i < N; i++ {
-		commitments[dkgs[i].Nodes[i]] = make([][]byte, len(dkgs[i].PublicCommits))
-		for j := 0; j < len(dkgs[i].PublicCommits); j++ {
-			commitments[dkgs[i].Nodes[i]][j] = dkgs[i].PublicCommits[j].Marshal()
-		}
-
-	}
-	for i := 0; i < N; i++ {
-		if err := dkgs[i].VerifyShares(commitments, dkgs[i].Nodes[i]); err != nil {
-			return nil, fmt.Errorf("local DKG verification failed for %s: %v", dkgs[i].Nodes[i], err)
-		}
-		dkgs[i].ComputeFinalKeys()
-	}
-
-	// Prepare result
-	result := make([]*Share, N)
-	for i := 0; i < N; i++ {
-		result[i] = &Share{
-			Index:      i + 1,
-			PrivateKey: dkgs[i].Secret,
-			PublicKey:  dkgs[i].PublicKey,
-		}
-	}
-
-	return result, nil
+	return result
 }
 
-// Coeff calculates Lagrange coefficient for node with index idx
-func Coeff(idx int, peers []int) *big.Int {
+func reconstructPublicKey(shares []*Share, T int) *twistededwards.PointAffine {
+	if len(shares) < T {
+		return nil
+	}
+	indices := make([]int, T)
+	for i, share := range shares[:T] {
+		indices[i] = share.Index
+	}
+	result := new(twistededwards.PointAffine)
+	result.X.SetZero()
+	result.Y.SetOne()
+	for _, share := range shares[:T] {
+		lambda := LagrangeCoefficient(share.Index, indices)
+		term := new(twistededwards.PointAffine).ScalarMultiplication(share.PublicKey, lambda)
+		result.Add(result, term)
+	}
+	return result
+}
 
-	// All peer indexes are [idx] + 1
+func CreateLocalSharesDKG(N, T int) ([]*Share, error) {
 
-	gf := &GF{P: TNBCurveOrder}
-	peerLen := len(peers)
-	iScalar := big.NewInt(int64(idx + 1))
-	num := big.NewInt(1)
-	den := big.NewInt(1)
+	if N <= 0 || T <= 0 || T > N {
+		return nil, fmt.Errorf("invalid parameters: N=%d, T=%d; must have 0 < T <= N", N, T)
+	}
 
-	for i := 0; i < peerLen; i++ {
-		if peers[i] == idx {
-			continue
+	// Step 1: Simulate N nodes with their polynomials and shares
+	type dkgNode struct {
+		id         int
+		polynomial []*big.Int
+		shares     map[string]*big.Int // Shares to send to others
+	}
+
+	nodes := make([]*dkgNode, N)
+	nodesList := make([]string, N)
+	for i := 0; i < N; i++ {
+		id := i + 1 // 1-based indexing
+		nodesList[i] = strconv.Itoa(id)
+		nodes[i] = &dkgNode{
+			id:     id,
+			shares: make(map[string]*big.Int),
 		}
-		tmp := big.NewInt(int64(peers[i] + 1))
-		num = gf.Mul(num, tmp)
-		tmp = gf.Sub(tmp, iScalar)
-		den = gf.Mul(den, tmp)
 	}
 
-	if den.Cmp(big.NewInt(0)) == 0 {
-		panic("coefficient cannot be zero")
+	// Step 2: Generate polynomials (degree T-1, T coefficients)
+	for _, node := range nodes {
+		node.polynomial = make([]*big.Int, T)
+		for i := 0; i < T; i++ {
+			coef, err := rand.Int(rand.Reader, &curve.Order)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate coefficient: %v", err)
+			}
+			node.polynomial[i] = coef
+		}
+
+		// Generate shares for other nodes
+		for _, targetID := range nodesList {
+			if targetID == strconv.Itoa(node.id) {
+				continue
+			}
+			x, err := strconv.Atoi(targetID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate coefficient: %v", err)
+			}
+			share := EvaluatePolynomial(node.polynomial, big.NewInt(int64(x)))
+			node.shares[targetID] = share
+		}
 	}
-	den = gf.Inv(den)
-	return gf.Mul(den, num)
+
+	// Step 3: Compute final shares for each node
+	shares := make([]*Share, N)
+	for i, node := range nodes {
+		privateKey := new(big.Int)
+
+		// Add received shares from other nodes
+		for _, otherNode := range nodes {
+			if otherNode.id == node.id {
+				continue
+			}
+			share, exists := otherNode.shares[strconv.Itoa(node.id)]
+			if exists {
+				privateKey.Add(privateKey, share)
+				privateKey.Mod(privateKey, &curve.Order)
+			}
+		}
+
+		// Add own share
+		ownShare := EvaluatePolynomial(node.polynomial, big.NewInt(int64(node.id)))
+		privateKey.Add(privateKey, ownShare)
+		privateKey.Mod(privateKey, &curve.Order)
+
+		// Compute public key
+		publicKey := new(twistededwards.PointAffine)
+		publicKey.ScalarMultiplication(&curve.Base, privateKey)
+
+		shares[i] = &Share{
+			Index:      node.id,
+			PrivateKey: privateKey,
+			PublicKey:  publicKey,
+		}
+	}
+
+	// Verify reconstruction
+	masterPrivate := reconstructPrivateKey(shares, T)
+	masterPublic := reconstructPublicKey(shares, T)
+	derivedPublic := new(twistededwards.PointAffine)
+	derivedPublic.ScalarMultiplication(&curve.Base, masterPrivate)
+
+	fmt.Printf("\nReconstructed Master Private Key: %s\n", masterPrivate.String())
+	fmt.Printf("Reconstructed Master Public Key - X=%s, Y=%s\n", masterPublic.X.String(), masterPublic.Y.String())
+	fmt.Printf("Derived Master Public Key - X=%s, Y=%s\n", derivedPublic.X.String(), derivedPublic.Y.String())
+	if masterPublic.Equal(derivedPublic) {
+		fmt.Println("Verification successful: Reconstructed keys match!")
+	} else {
+		fmt.Println("Verification failed: Reconstructed keys do not match.")
+	}
+
+	return shares, nil
 }
 
 func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twistededwards.PointAffine {
@@ -152,7 +198,7 @@ func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twis
 	result.Y.SetOne()
 
 	for i := 0; i < len(elements); i++ {
-		lPoly := Coeff(idxs[i], idxs)
+		lPoly := LagrangeCoefficient(idxs[i], idxs)
 		gki := &twistededwards.PointAffine{}
 		gki.ScalarMultiplication(elements[i], lPoly)
 		result.Add(result, gki)

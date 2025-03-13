@@ -27,7 +27,10 @@ type DKG struct {
 var curve = twistededwards.GetEdwardsCurve()
 
 func NewDKG(threshold, numNodes int, nodes []string, nodeID string) *DKG {
-	id, _ := strconv.Atoi(nodeID)
+	id, err := strconv.Atoi(nodeID)
+	if err != nil {
+		panic(err)
+	}
 	return &DKG{
 		Threshold:      threshold,
 		NumNodes:       numNodes,
@@ -55,24 +58,30 @@ func (d *DKG) GenerateShares() {
 		if nodeID == fmt.Sprintf("%d", d.ID) {
 			continue
 		}
-		x, _ := strconv.Atoi(nodeID)
-		share := d.evaluatePolynomial(big.NewInt(int64(x)))
+		x, err := strconv.Atoi(nodeID)
+		if err != nil {
+			panic(err)
+		}
+		share := EvaluatePolynomial(d.Polynomial, big.NewInt(int64(x)))
 		d.Shares[nodeID] = share
 	}
 }
 
-func (d *DKG) evaluatePolynomial(x *big.Int) *big.Int {
-	result := new(big.Int).Set(d.Polynomial[d.Threshold-1]) // Start with highest degree term
-	for i := d.Threshold - 2; i >= 0; i-- {                 // t-2 down to 0
+func EvaluatePolynomial(polynomial []*big.Int, x *big.Int) *big.Int {
+	result := new(big.Int).Set(polynomial[len(polynomial)-1])
+	for i := len(polynomial) - 2; i >= 0; i-- {
 		result.Mul(result, x)
-		result.Add(result, d.Polynomial[i])
+		result.Add(result, polynomial[i])
 		result.Mod(result, &curve.Order)
 	}
 	return result
 }
 
 func (d *DKG) VerifyShares(commitments map[string][][]byte, nodeID string) error {
-	x, _ := strconv.Atoi(nodeID)
+	x, err := strconv.Atoi(nodeID)
+	if err != nil {
+		panic(err)
+	}
 	xBig := big.NewInt(int64(x))
 	for fromNodeID, share := range d.ReceivedShares {
 		commits := commitments[fromNodeID]
@@ -82,7 +91,7 @@ func (d *DKG) VerifyShares(commitments map[string][][]byte, nodeID string) error
 		lhs.Set(&curve.Base)
 		for i := 0; i < d.Threshold; i++ { // Changed from <= to <
 			var term twistededwards.PointAffine
-			err := term.Unmarshal(commits[i])
+			err = term.Unmarshal(commits[i])
 			if err != nil {
 				return err
 			}
@@ -114,7 +123,7 @@ func (d *DKG) ComputeFinalKeys() {
 
 	// Add own share: evaluate own polynomial at own index
 	ownIndex := big.NewInt(int64(d.ID))
-	ownShare := d.evaluatePolynomial(ownIndex)
+	ownShare := EvaluatePolynomial(d.Polynomial, ownIndex)
 	d.Secret.Add(d.Secret, ownShare)
 	d.Secret.Mod(d.Secret, &curve.Order)
 
@@ -126,36 +135,12 @@ func (d *DKG) ComputeFinalKeys() {
 	fmt.Printf("Node %d: Included own share %s, final secret %s\n", d.ID, ownShare.String(), d.Secret.String())
 }
 
-func (d *DKG) ReconstructPrivateKey(secretShares map[int]*big.Int) *big.Int {
-	result := new(big.Int)
-
-	// Select first t shares
-	selectedShares := make(map[int]*big.Int)
-	count := 0
-	for j, share := range secretShares {
-		if count >= d.Threshold {
-			break
-		}
-		selectedShares[j] = share
-		count++
-	}
-
-	// Interpolate using only selected shares
-	for j := range selectedShares {
-		lambda := lagrangeCoefficient(j, selectedShares, big.NewInt(0), &curve.Order)
-		term := new(big.Int).Mul(secretShares[j], lambda)
-		term.Mod(term, &curve.Order)
-		result.Add(result, term)
-		result.Mod(result, &curve.Order)
-	}
-	return result
-}
-
 func (d *DKG) ReconstructMasterPublicKey(publicShares map[int][]byte) *twistededwards.PointAffine {
 	result := new(twistededwards.PointAffine)
 	result.X.SetZero()
 	result.Y.SetOne()
 	points := make(map[int]*twistededwards.PointAffine)
+	var indices []int
 	used := 0
 	var ids []int
 	for nodeID := range publicShares {
@@ -172,41 +157,52 @@ func (d *DKG) ReconstructMasterPublicKey(publicShares map[int][]byte) *twisteded
 			return nil
 		}
 		points[id] = pubShare
+		indices = append(indices, id)
 		used++
 	}
 	for j := range points {
-		lambda := lagrangeCoefficient(j, points, big.NewInt(0), &curve.Order)
+		lambda := LagrangeCoefficient(j, indices)
 		term := new(twistededwards.PointAffine).ScalarMultiplication(points[j], lambda)
 		result.Add(result, term)
 	}
 	return result
 }
 
-func lagrangeCoefficient(j int, points interface{}, x, modulus *big.Int) *big.Int {
+func (d *DKG) ReconstructPrivateKey(secretShares map[int]*big.Int) *big.Int {
+	result := new(big.Int)
+	var indices []int
+	count := 0
+	for j := range secretShares {
+		if count >= d.Threshold {
+			break
+		}
+		indices = append(indices, j)
+		count++
+	}
+	for _, j := range indices {
+		lambda := LagrangeCoefficient(j, indices)
+		term := new(big.Int).Mul(secretShares[j], lambda)
+		term.Mod(term, &curve.Order)
+		result.Add(result, term)
+		result.Mod(result, &curve.Order)
+	}
+	return result
+}
+
+// LagrangeCoefficient computes λ_shareID(x) given a slice of share IDs
+func LagrangeCoefficient(shareID int, indices []int) *big.Int {
+	modulus := &curve.Order
 	num := big.NewInt(1)
 	den := big.NewInt(1)
-	switch p := points.(type) {
-	case map[int]*big.Int:
-		for i := range p {
-			if i != j {
-				num.Mul(num, new(big.Int).Sub(x, big.NewInt(int64(i))))
-				den.Mul(den, new(big.Int).Sub(big.NewInt(int64(j)), big.NewInt(int64(i))))
-			}
-		}
-	case map[int]*twistededwards.PointAffine:
-		for i := range p {
-			if i != j {
-				num.Mul(num, new(big.Int).Sub(x, big.NewInt(int64(i))))
-				den.Mul(den, new(big.Int).Sub(big.NewInt(int64(j)), big.NewInt(int64(i))))
-			}
+	x := big.NewInt(0)
+	for _, idx := range indices {
+		if idx != shareID {
+			num.Mul(num, new(big.Int).Sub(x, big.NewInt(int64(idx))))
+			den.Mul(den, new(big.Int).Sub(big.NewInt(int64(shareID)), big.NewInt(int64(idx))))
 		}
 	}
-	if num.Sign() < 0 {
-		num.Add(num, modulus)
-	}
-	if den.Sign() < 0 {
-		den.Add(den, modulus)
-	}
+	num.Mod(num, modulus)
+	den.Mod(den, modulus)
 	denInv := new(big.Int).ModInverse(den, modulus)
 	return new(big.Int).Mod(new(big.Int).Mul(num, denInv), modulus)
 }

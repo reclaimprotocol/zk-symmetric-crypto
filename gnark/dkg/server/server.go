@@ -36,6 +36,8 @@ type (
 	PublicSharesResponse   = types.PublicSharesResponse
 )
 
+var nodeIds = map[string]bool{}
+
 // BaseResponse holds common fields for all responses
 type BaseResponse struct {
 	Status  string `json:"status"`
@@ -142,6 +144,22 @@ func (s *Server) register(c echo.Context) error {
 		log.Errorf("Failed to bind request: %v", err)
 		return c.JSON(http.StatusBadRequest, &BaseResponse{Status: "error", Message: "Invalid request format"})
 	}
+
+	nodeID := c.Request().Header.Get("Node-ID")
+	if nodeID == "" {
+		return c.JSON(http.StatusBadRequest, &BaseResponse{Status: "error", Message: "Node-ID header is required"})
+	}
+
+	if _, ok := nodeIds[nodeID]; !ok {
+		return c.JSON(http.StatusBadRequest, &BaseResponse{Status: "error", Message: "Invalid Node-ID"})
+	}
+
+	if nodeIds[nodeID] {
+		return c.JSON(http.StatusBadRequest, &BaseResponse{Status: "error", Message: "Node-ID already registered"})
+	} else {
+		nodeIds[nodeID] = true
+	}
+
 	if req.PublicKey == "" {
 		return c.JSON(http.StatusBadRequest, &BaseResponse{Status: "error", Message: "Public key is required"})
 	}
@@ -156,7 +174,6 @@ func (s *Server) register(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, &BaseResponse{Status: "error", Message: "Registration closed"})
 	}
 
-	nodeID := uuid.New().String()
 	s.RegisteredNodes[nodeID] = true
 	s.Nodes = append(s.Nodes, nodeID)
 	s.PublicKeys[nodeID] = req.PublicKey
@@ -380,7 +397,7 @@ func main() {
 		port = "8080"
 	}
 	if numNodesStr == "" {
-		numNodesStr = "5"
+		numNodesStr = "4"
 	}
 	if thresholdStr == "" {
 		thresholdStr = "3"
@@ -393,6 +410,12 @@ func main() {
 	threshold, err := strconv.Atoi(thresholdStr)
 	if err != nil {
 		log.Fatalf("Invalid THRESHOLD: %v", err)
+	}
+
+	for i := 0; i < numNodes; i++ {
+		uid := uuid.New().String()
+		nodeIds[uid] = false
+		fmt.Printf("%s\n", uid)
 	}
 
 	s, err := NewServer(numNodes, threshold)

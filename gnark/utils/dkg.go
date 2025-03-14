@@ -132,7 +132,7 @@ func (d *DKG) ComputeFinalKeys() {
 	d.PublicKey.ScalarMultiplication(&curve.Base, d.Secret)
 
 	// Optional: Log for debugging
-	fmt.Printf("Node %d: Included own share %s, final secret %s\n", d.ID, ownShare.String(), d.Secret.String())
+	// fmt.Printf("Node %d: Included own share %s, final secret %s\n", d.ID, ownShare.String(), d.Secret.String())
 }
 
 func (d *DKG) ReconstructMasterPublicKey(publicShares map[int][]byte) *twistededwards.PointAffine {

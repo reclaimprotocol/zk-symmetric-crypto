@@ -2,18 +2,19 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	types "gnark-symmetric-crypto/dkg"
 	"gnark-symmetric-crypto/utils"
 	"math/big"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	"filippo.io/age"
-	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 )
 
 // Import shared types
@@ -29,6 +30,10 @@ type (
 	PublicShareData      = types.PublicShareData
 	PublicSharesResponse = types.PublicSharesResponse
 )
+
+var DkgHost = "http://localhost:8080"
+
+var nodeID string
 
 // DKGResponse is a generic response type with a typed Data field
 type DKGResponse[T any] struct {
@@ -72,7 +77,7 @@ func post[TReq any, TResp any](c *Client, endpoint string, data *TReq) (*DKGResp
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to marshal data for %s: %v", c.NodeID, endpoint, err)
 	}
-	req, err := http.NewRequest("POST", "http://localhost:8080"+endpoint, bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", DkgHost+endpoint, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to create request for %s: %v", c.NodeID, endpoint, err)
 	}
@@ -97,9 +102,12 @@ func post[TReq any, TResp any](c *Client, endpoint string, data *TReq) (*DKGResp
 // get returns a pointer to DKGResponse
 func get[TResp any](c *Client, endpoint string) (*DKGResponse[TResp], error) {
 	respData := &DKGResponse[TResp]{}
-	req, err := http.NewRequest("GET", "http://localhost:8080"+endpoint, nil)
+	req, err := http.NewRequest("GET", DkgHost+endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to create request for %s: %v", c.NodeID, endpoint, err)
+	}
+	if c.NodeID != "" {
+		req.Header.Set("Node-ID", c.NodeID)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -114,7 +122,7 @@ func get[TResp any](c *Client, endpoint string) (*DKGResponse[TResp], error) {
 
 // poll uses pointer to DKGResponse
 func poll[T any](c *Client, endpoint string, condition func(*DKGResponse[T]) bool) error {
-	timeout := time.After(30 * time.Second)
+	timeout := time.After(30 * time.Minute)
 	for {
 		select {
 		case <-timeout:
@@ -144,7 +152,6 @@ func (c *Client) Register() error {
 	if resp.Status != "success" {
 		return fmt.Errorf("failed to register: %s", resp.Message)
 	}
-	c.NodeID = resp.Data.NodeID
 	fmt.Printf("%s: Registered with public key %s\n", c.NodeID, c.Identity.Recipient().String())
 
 	err = poll(c, "/dkg/nodes", func(resp *DKGResponse[NodesResponse]) bool {
@@ -368,14 +375,14 @@ func (c *Client) FetchPublicShares() (map[int][]byte, error) {
 	return publicShares, nil
 }
 
-type ClientResult struct {
-	NodeID       string
-	Secret       *big.Int
-	PublicKey    *twistededwards.PointAffine
-	MasterPubKey *twistededwards.PointAffine
-}
+// type ClientResult struct {
+// 	NodeID       string
+// 	Secret       *big.Int
+// 	PublicKey    *twistededwards.PointAffine
+// 	MasterPubKey *twistededwards.PointAffine
+// }
 
-func (c *Client) Run(results chan<- *ClientResult) {
+func (c *Client) Run() {
 	if err := c.Register(); err != nil {
 		fmt.Printf("%s: Failed to register: %v\n", c.NodeID, err)
 		return
@@ -413,19 +420,21 @@ func (c *Client) Run(results chan<- *ClientResult) {
 	}
 	masterPubKey := c.DKG.ReconstructMasterPublicKey(publicShares)
 	fmt.Printf("%s: Master Public Key - X=%s, Y=%s\n", c.NodeID, masterPubKey.X.String(), masterPubKey.Y.String())
+
+	fmt.Printf("Share secret key: %s Public key: %s\n", c.DKG.Secret.String(), base64.StdEncoding.EncodeToString(c.DKG.PublicKey.Marshal()))
 	// Send result to channel
-	results <- &ClientResult{
+	/*results <- &ClientResult{
 		NodeID:       c.NodeID,
 		Secret:       new(big.Int).Set(c.DKG.Secret),
 		PublicKey:    c.DKG.PublicKey,
 		MasterPubKey: masterPubKey,
-	}
+	}*/
 }
 
 func waitForServer() {
 	client := &http.Client{Timeout: 1 * time.Second}
 	for {
-		resp, err := client.Get("http://localhost:8080/health")
+		resp, err := client.Get(DkgHost + "/health")
 		if err == nil && resp.StatusCode == http.StatusOK {
 			if err := resp.Body.Close(); err != nil {
 				fmt.Printf("Failed to close health check response body: %v\n", err)
@@ -443,24 +452,33 @@ func waitForServer() {
 }
 
 func main() {
-	numNodes := 5
+
+	if len(os.Args) < 3 {
+		fmt.Printf("Usage: %s URL Node-ID\n", os.Args[0])
+		return
+	}
+
+	DkgHost = os.Args[1]
+	nodeID = os.Args[2]
+
+	numNodes := 1
 	waitForServer()
 	var wg sync.WaitGroup
-	resultsChan := make(chan *ClientResult, numNodes)
+	// resultsChan := make(chan *ClientResult, numNodes)
 	clients := make([]*Client, numNodes)
 
 	for i := 0; i < numNodes; i++ {
 		wg.Add(1)
 		clients[i] = NewClient()
+		clients[i].NodeID = nodeID
 		go func(c *Client) {
 			defer wg.Done()
-			c.Run(resultsChan)
+			c.Run()
 		}(clients[i])
 	}
 	wg.Wait()
-	close(resultsChan)
 
-	// Process results
+	/*// Process results
 	secretShares := make(map[int]*big.Int)
 	var masterPubKey *twistededwards.PointAffine
 	for result := range resultsChan {
@@ -486,5 +504,5 @@ func main() {
 		fmt.Println("Verification successful: Reconstructed private key matches master public key!")
 	} else {
 		fmt.Println("Verification failed: Reconstructed private key does not match master public key.")
-	}
+	}*/
 }

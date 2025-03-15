@@ -53,11 +53,12 @@ func TestTOPRFDKG(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		req, ee := OPRFGenerateRequest(emailBytes, ds)
 		require.NoError(t, ee)
-		idxs := PickRandomIndexes(nodes, threshold)
+		idxs := PickRandomIndices(nodes, threshold)
 		for j := 0; j < threshold; j++ {
 			resp, err := OPRFEvaluate(shares[idxs[j]].PrivateKey, req.MaskedData)
 			require.NoError(t, err)
 			resps[j] = resp.EvaluatedPoint
+			idxs[j]++ // !!! 1-based
 		}
 		tmp, err := TOPRFFinalize(idxs, resps, req.SecretElements, req.Mask)
 		require.NoError(t, err)

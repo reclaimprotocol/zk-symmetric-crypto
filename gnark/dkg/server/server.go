@@ -397,10 +397,10 @@ func main() {
 		port = "8080"
 	}
 	if numNodesStr == "" {
-		numNodesStr = "4"
+		numNodesStr = "2"
 	}
 	if thresholdStr == "" {
-		thresholdStr = "3"
+		thresholdStr = "2"
 	}
 
 	numNodes, err := strconv.Atoi(numNodesStr)

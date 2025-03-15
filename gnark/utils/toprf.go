@@ -54,7 +54,7 @@ func TOPRFCreateShares(n, threshold int, secret *big.Int) ([]*Share, error) {
 	return shares, nil
 }
 
-func reconstructPrivateKey(shares []*Share, T int) *big.Int {
+func ReconstructPrivateKey(shares []*Share, T int) *big.Int {
 	if len(shares) < T {
 		return nil
 	}
@@ -175,7 +175,7 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, *twistededwards.PointAffine, erro
 	}
 
 	// Verify reconstruction
-	masterPrivate := reconstructPrivateKey(shares, T)
+	masterPrivate := ReconstructPrivateKey(shares, T)
 	masterPublic := reconstructPublicKey(shares, T)
 	derivedPublic := new(twistededwards.PointAffine)
 	derivedPublic.ScalarMultiplication(&curve.Base, masterPrivate)
@@ -192,6 +192,7 @@ func CreateLocalSharesDKG(N, T int) ([]*Share, *twistededwards.PointAffine, erro
 	return shares, masterPublic, nil
 }
 
+// TOPRFThresholdMul expects 1-based indexes
 func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twistededwards.PointAffine {
 	result := &twistededwards.PointAffine{}
 	result.X.SetZero()
@@ -273,7 +274,8 @@ func (Src) Uint64() uint64 {
 	return i.Uint64()
 }
 
-func PickRandomIndexes(n, k int) []int {
+// PickRandomIndices produces 0-based randomized array
+func PickRandomIndices(n, k int) []int {
 	r := rnd.New(Src{})
 	idxs := r.Perm(n)
 	return idxs[:k]

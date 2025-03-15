@@ -273,7 +273,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	assert.NoError(err)
 
 	// TOPRF requests
-	idxs := utils.PickRandomIndexes(nodes, threshold)
+	idxs := utils.PickRandomIndices(nodes, threshold)
 
 	responses := make([]*prover.TOPRFResponse, threshold)
 
@@ -438,7 +438,7 @@ func TestFullAES128OPRF(t *testing.T) {
 	assert.NoError(err)
 
 	// TOPRF requests
-	idxs := utils.PickRandomIndexes(nodes, threshold)
+	idxs := utils.PickRandomIndices(nodes, threshold)
 
 	responses := make([]*prover.TOPRFResponse, threshold)
 
@@ -448,7 +448,7 @@ func TestFullAES128OPRF(t *testing.T) {
 		assert.NoError(err)
 
 		resp := &prover.TOPRFResponse{
-			Index:          uint8(idxs[i]),
+			Index:          uint8(idxs[i] + 1),
 			PublicKeyShare: shares.Shares[idxs[i]].PublicKey,
 			Evaluated:      evalResult.EvaluatedPoint.Marshal(),
 			C:              evalResult.C.Bytes(),
@@ -464,7 +464,11 @@ func TestFullAES128OPRF(t *testing.T) {
 		assert.NoError(err)
 	}
 
-	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
+	lIdxs := make([]int, len(idxs))
+	for j := 0; j < len(idxs); j++ {
+		lIdxs[j] = idxs[j] + 1
+	}
+	out, err := utils.TOPRFFinalize(lIdxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
 	inputParams := &prover.InputParams{
@@ -578,7 +582,7 @@ func TestFullAES256OPRF(t *testing.T) {
 	assert.NoError(err)
 
 	// TOPRF requests
-	idxs := utils.PickRandomIndexes(nodes, threshold)
+	idxs := utils.PickRandomIndices(nodes, threshold)
 
 	responses := make([]*prover.TOPRFResponse, threshold)
 
@@ -588,7 +592,7 @@ func TestFullAES256OPRF(t *testing.T) {
 		assert.NoError(err)
 
 		resp := &prover.TOPRFResponse{
-			Index:          uint8(idxs[i]),
+			Index:          uint8(idxs[i] + 1),
 			PublicKeyShare: shares.Shares[idxs[i]].PublicKey,
 			Evaluated:      evalResult.EvaluatedPoint.Marshal(),
 			C:              evalResult.C.Bytes(),
@@ -604,7 +608,12 @@ func TestFullAES256OPRF(t *testing.T) {
 		assert.NoError(err)
 	}
 
-	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
+	lIdxs := make([]int, len(idxs))
+	for j := 0; j < len(idxs); j++ {
+		lIdxs[j] = idxs[j] + 1
+	}
+
+	out, err := utils.TOPRFFinalize(lIdxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
 	inputParams := &prover.InputParams{

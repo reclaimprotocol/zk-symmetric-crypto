@@ -38,7 +38,7 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 		panic(err)
 	}
 
-	idxs := utils.PickRandomIndexes(nodes, threshold)
+	idxs := utils.PickRandomIndices(nodes, threshold)
 
 	resps := make([]twistededwards.Point, threshold)
 	respsIn := make([]*tbn254.PointAffine, threshold)
@@ -63,7 +63,12 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 		resps[i] = utils.OutPointToInPoint(resp.EvaluatedPoint)
 		sharePublicKeysIn[i] = shares[idx].PublicKey
 		sharePublicKeys[i] = utils.OutPointToInPoint(shares[idx].PublicKey)
-		coefficients[i], _ = utils.LagrangeCoefficient(idxs[i], idxs)
+		// idxs need to be 1-based for lagrange
+		lIdxs := make([]int, len(idxs))
+		for j := 0; j < len(idxs); j++ {
+			lIdxs[j] = idxs[j] + 1
+		}
+		coefficients[i], _ = utils.LagrangeCoefficient(idxs[i]+1, lIdxs)
 		cs[i] = resp.C
 		rs[i] = resp.R
 
@@ -71,8 +76,11 @@ func PrepareTestData(secretData string, domainSeparator string) (*Params, [2]fro
 
 	// pk := utils.TOPRFThresholdMul(idxs, sharePublicKeysIn)
 	// fmt.Println("master public key X:", pk.X.String())
-
-	out, err := utils.TOPRFFinalize(idxs, respsIn, req.SecretElements, req.Mask)
+	lIdxs := make([]int, len(idxs))
+	for j := 0; j < len(idxs); j++ {
+		lIdxs[j] = idxs[j] + 1
+	}
+	out, err := utils.TOPRFFinalize(lIdxs, respsIn, req.SecretElements, req.Mask)
 	if err != nil {
 		panic(err)
 	}

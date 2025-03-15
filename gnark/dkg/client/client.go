@@ -421,7 +421,7 @@ func (c *Client) Run() {
 	masterPubKey := c.DKG.ReconstructMasterPublicKey(publicShares)
 	fmt.Printf("%s: Master Public Key - X=%s, Y=%s\n", c.NodeID, masterPubKey.X.String(), masterPubKey.Y.String())
 
-	fmt.Printf("Share secret key: %s Public key: %s\n", c.DKG.Secret.String(), base64.StdEncoding.EncodeToString(c.DKG.PublicKey.Marshal()))
+	fmt.Printf("Node index: %d, Share secret key: %s Public key: %s\n", c.NodeIndex, c.DKG.Secret.String(), base64.StdEncoding.EncodeToString(c.DKG.PublicKey.Marshal()))
 	// Send result to channel
 	/*results <- &ClientResult{
 		NodeID:       c.NodeID,

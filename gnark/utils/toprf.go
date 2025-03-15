@@ -2,9 +2,11 @@ package utils
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math"
 	"math/big"
 	rnd "math/rand/v2"
+	"strconv"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 )
@@ -52,39 +54,157 @@ func TOPRFCreateShares(n, threshold int, secret *big.Int) ([]*Share, error) {
 	return shares, nil
 }
 
-// Coeff calculates Lagrange coefficient for node with index idx
-func Coeff(idx int, peers []int) *big.Int {
-
-	// All peer indexes are [idx] + 1
-
-	gf := &GF{P: TNBCurveOrder}
-	peerLen := len(peers)
-	iScalar := big.NewInt(int64(idx + 1))
-	divident := big.NewInt(1)
-	divisor := big.NewInt(1)
-
-	for i := 0; i < peerLen; i++ {
-		if peers[i] == idx {
-			continue
-		}
-		tmp := big.NewInt(int64(peers[i] + 1))
-		divident = gf.Mul(divident, tmp)
-		tmp = gf.Sub(tmp, iScalar)
-		divisor = gf.Mul(divisor, tmp)
+func ReconstructPrivateKey(shares []*Share, T int) *big.Int {
+	if len(shares) < T {
+		return nil
 	}
-	divisor = gf.Inv(divisor)
-	return gf.Mul(divisor, divident)
+	indices := make([]int, T)
+	for i, share := range shares[:T] {
+		indices[i] = share.Index
+	}
+	result := new(big.Int)
+	for _, share := range shares[:T] {
+		lambda, _ := LagrangeCoefficient(share.Index, indices)
+		term := new(big.Int).Mul(share.PrivateKey, lambda)
+		term.Mod(term, &curve.Order)
+		result.Add(result, term)
+		result.Mod(result, &curve.Order)
+	}
+	return result
 }
 
+func reconstructPublicKey(shares []*Share, T int) *twistededwards.PointAffine {
+	if len(shares) < T {
+		return nil
+	}
+	indices := make([]int, T)
+	for i, share := range shares[:T] {
+		indices[i] = share.Index
+	}
+	result := new(twistededwards.PointAffine)
+	result.X.SetZero()
+	result.Y.SetOne()
+	for _, share := range shares[:T] {
+		lambda, _ := LagrangeCoefficient(share.Index, indices)
+		term := new(twistededwards.PointAffine).ScalarMultiplication(share.PublicKey, lambda)
+		result.Add(result, term)
+	}
+	return result
+}
+
+func CreateLocalSharesDKG(N, T int) ([]*Share, *twistededwards.PointAffine, error) {
+
+	if N <= 0 || T <= 0 || T > N {
+		return nil, nil, fmt.Errorf("invalid parameters: N=%d, T=%d; must have 0 < T <= N", N, T)
+	}
+
+	// Step 1: Simulate N nodes with their polynomials and shares
+	type dkgNode struct {
+		id         int
+		polynomial []*big.Int
+		shares     map[string]*big.Int // Shares to send to others
+	}
+
+	nodes := make([]*dkgNode, N)
+	nodesList := make([]string, N)
+	for i := 0; i < N; i++ {
+		id := i + 1 // 1-based indexing
+		nodesList[i] = strconv.Itoa(id)
+		nodes[i] = &dkgNode{
+			id:     id,
+			shares: make(map[string]*big.Int),
+		}
+	}
+
+	// Step 2: Generate polynomials (degree T-1, T coefficients)
+	for _, node := range nodes {
+		node.polynomial = make([]*big.Int, T)
+		for i := 0; i < T; i++ {
+			coef, err := rand.Int(rand.Reader, &curve.Order)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to generate coefficient: %v", err)
+			}
+			node.polynomial[i] = coef
+		}
+
+		// Generate shares for other nodes
+		for _, targetID := range nodesList {
+			if targetID == strconv.Itoa(node.id) {
+				continue
+			}
+			x, err := strconv.Atoi(targetID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to generate coefficient: %v", err)
+			}
+			share := EvaluatePolynomial(node.polynomial, big.NewInt(int64(x)))
+			node.shares[targetID] = share
+		}
+	}
+
+	// Step 3: Compute final shares for each node
+	shares := make([]*Share, N)
+	for i, node := range nodes {
+		privateKey := new(big.Int)
+
+		// Add received shares from other nodes
+		for _, otherNode := range nodes {
+			if otherNode.id == node.id {
+				continue
+			}
+			share, exists := otherNode.shares[strconv.Itoa(node.id)]
+			if exists {
+				privateKey.Add(privateKey, share)
+				privateKey.Mod(privateKey, &curve.Order)
+			}
+		}
+
+		// Add own share
+		ownShare := EvaluatePolynomial(node.polynomial, big.NewInt(int64(node.id)))
+		privateKey.Add(privateKey, ownShare)
+		privateKey.Mod(privateKey, &curve.Order)
+
+		// Compute public key
+		publicKey := new(twistededwards.PointAffine)
+		publicKey.ScalarMultiplication(&curve.Base, privateKey)
+
+		shares[i] = &Share{
+			Index:      node.id,
+			PrivateKey: privateKey,
+			PublicKey:  publicKey,
+		}
+	}
+
+	// Verify reconstruction
+	masterPrivate := ReconstructPrivateKey(shares, T)
+	masterPublic := reconstructPublicKey(shares, T)
+	derivedPublic := new(twistededwards.PointAffine)
+	derivedPublic.ScalarMultiplication(&curve.Base, masterPrivate)
+
+	// fmt.Printf("\nReconstructed Master Private Key: %s\n", masterPrivate.String())
+	// fmt.Printf("Reconstructed Master Public Key - X=%s, Y=%s\n", masterPublic.X.String(), masterPublic.Y.String())
+	// fmt.Printf("Derived Master Public Key - X=%s, Y=%s\n", derivedPublic.X.String(), derivedPublic.Y.String())
+	if masterPublic.Equal(derivedPublic) {
+		fmt.Println("Verification successful: Reconstructed keys match!")
+	} else {
+		return nil, nil, fmt.Errorf("failed to reconstruct public key")
+	}
+
+	return shares, masterPublic, nil
+}
+
+// TOPRFThresholdMul expects 1-based indexes
 func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twistededwards.PointAffine {
 	result := &twistededwards.PointAffine{}
 	result.X.SetZero()
 	result.Y.SetOne()
 
 	for i := 0; i < len(elements); i++ {
-		lPoly := Coeff(idxs[i], idxs)
+		lambda, err := LagrangeCoefficient(idxs[i], idxs)
+		if err != nil {
+			panic(err)
+		}
 		gki := &twistededwards.PointAffine{}
-		gki.ScalarMultiplication(elements[i], lPoly)
+		gki.ScalarMultiplication(elements[i], lambda)
 		result.Add(result, gki)
 	}
 	return result
@@ -116,9 +236,10 @@ type SharedKey struct {
 }
 
 func TOPRFGenerateSharedKey(nodes, threshold int) *SharedKey {
-
-	curve := twistededwards.GetEdwardsCurve()
-	sk, _ := rand.Int(rand.Reader, TNBCurveOrder)
+	sk, err := rand.Int(rand.Reader, TNBCurveOrder)
+	if err != nil {
+		panic(err)
+	}
 	serverPublic := &twistededwards.PointAffine{}
 	serverPublic.ScalarMultiplication(&curve.Base, sk) // G*sk
 
@@ -153,7 +274,8 @@ func (Src) Uint64() uint64 {
 	return i.Uint64()
 }
 
-func PickRandomIndexes(n, k int) []int {
+// PickRandomIndices produces 0-based randomized array
+func PickRandomIndices(n, k int) []int {
 	r := rnd.New(Src{})
 	idxs := r.Perm(n)
 	return idxs[:k]

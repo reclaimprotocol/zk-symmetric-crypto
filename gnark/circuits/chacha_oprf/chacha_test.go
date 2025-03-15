@@ -1,9 +1,9 @@
-package chachaV3_oprf
+package chacha_oprf
 
 import (
 	"crypto/rand"
 	"fmt"
-	"gnark-symmetric-crypto/circuits/chachaV3"
+	"gnark-symmetric-crypto/circuits/chacha"
 	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
 	"testing"
@@ -30,10 +30,10 @@ func TestCipher(t *testing.T) {
 
 	pos := 128 - 62
 	counter := 12345
-	plaintext := make([]byte, chachaV3.Blocks*64)
+	plaintext := make([]byte, chacha.Blocks*64)
 	copy(plaintext[pos:], secretBytes)
 
-	ciphertext := make([]byte, chachaV3.Blocks*64)
+	ciphertext := make([]byte, chacha.Blocks*64)
 
 	cipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
 	assert.NoError(err)
@@ -73,14 +73,16 @@ func createWitness(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int, c
 	witness := ChachaTOPRFCircuit{
 		Len: len,
 		TOPRF: toprf.Params{
-			Mask:            d.Mask,
 			DomainSeparator: d.DomainSeparator,
+			Mask:            d.Mask,
 			Responses:       d.Responses,
 			Coefficients:    d.Coefficients,
-			Output:          d.Output,
 			SharePublicKeys: d.SharePublicKeys,
 			C:               d.C,
 			R:               d.R,
+			Output:          d.Output,
+			Counter:         d.Counter,
+			X:               d.X,
 		},
 	}
 

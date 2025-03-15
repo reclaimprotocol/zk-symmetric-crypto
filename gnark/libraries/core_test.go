@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
-	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
+	aes_v2 "gnark-symmetric-crypto/circuits/aes"
 	"gnark-symmetric-crypto/circuits/toprf"
 	prover "gnark-symmetric-crypto/libraries/prover/impl"
 	oprf2 "gnark-symmetric-crypto/libraries/prover/oprf"
@@ -255,46 +255,36 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	pos := uint32(59)
 	copy(bOutput[pos:], email)
 
-	cipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
+	chachaCipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
 	assert.NoError(err)
 
-	cipher.SetCounter(counter)
-	cipher.XORKeyStream(bInput, bOutput)
+	chachaCipher.SetCounter(counter)
+	chachaCipher.XORKeyStream(bInput, bOutput)
 
 	// TOPRF setup
 
 	threshold := toprf.Threshold
 	nodes := threshold + 1
 
-	tParams := &oprf.InputGenerateParams{
-		Total: uint8(nodes),
-	}
-
-	btParams, err := json.Marshal(tParams)
-	assert.NoError(err)
-
-	bShares := oprf.TOPRFGenerateThresholdKeys(btParams)
-
-	var shares *oprf.OutputGenerateParams
-	err = json.Unmarshal(bShares, &shares)
+	shares, masterPublic, err := utils.CreateLocalSharesDKG(nodes, threshold)
 	assert.NoError(err)
 
 	req, err := utils.OPRFGenerateRequest(emailBytes, domainSeparator)
 	assert.NoError(err)
 
 	// TOPRF requests
-	idxs := utils.PickRandomIndexes(nodes, threshold)
+	idxs := utils.PickRandomIndices(nodes, threshold)
 
 	responses := make([]*prover.TOPRFResponse, threshold)
 
 	for i := 0; i < threshold; i++ {
-		sk := new(big.Int).SetBytes(shares.Shares[idxs[i]].PrivateKey)
+		sk := shares[idxs[i]].PrivateKey
 		evalResult, err := utils.OPRFEvaluate(sk, req.MaskedData)
 		assert.NoError(err)
 
 		resp := &prover.TOPRFResponse{
-			Index:          uint8(idxs[i]),
-			PublicKeyShare: shares.Shares[idxs[i]].PublicKey,
+			Index:          uint8(idxs[i] + 1), // !!!
+			PublicKeyShare: shares[idxs[i]].PublicKey.Marshal(),
 			Evaluated:      evalResult.EvaluatedPoint.Marshal(),
 			C:              evalResult.C.Bytes(),
 			R:              evalResult.R.Bytes(),
@@ -309,22 +299,25 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		assert.NoError(err)
 	}
 
+	resps := make([]*oprf2.OPRFResponse, threshold)
+	for i := 0; i < threshold; i++ {
+		resps[i] = &oprf2.OPRFResponse{
+			Index:          responses[i].Index,
+			PublicKeyShare: responses[i].PublicKeyShare,
+			Evaluated:      responses[i].Evaluated,
+			C:              responses[i].C,
+			R:              responses[i].R,
+		}
+	}
+
 	finReq := &oprf2.InputTOPRFFinalizeParams{
-		ServerPublicKey: shares.PublicKey,
+		ServerPublicKey: masterPublic.Marshal(),
 		Request: &oprf2.OPRFRequest{
 			Mask:           req.Mask.Bytes(),
 			MaskedData:     req.MaskedData.Marshal(),
 			SecretElements: [][]byte{req.SecretElements[0].Bytes(), req.SecretElements[1].Bytes()},
 		},
-		Responses: []*oprf2.OPRFResponse{
-			{
-				Index:          responses[0].Index,
-				PublicKeyShare: responses[0].PublicKeyShare,
-				Evaluated:      responses[0].Evaluated,
-				C:              responses[0].C,
-				R:              responses[0].R,
-			},
-		},
+		Responses: resps,
 	}
 
 	finReqJSON, _ := json.Marshal(finReq)
@@ -445,7 +438,7 @@ func TestFullAES128OPRF(t *testing.T) {
 	assert.NoError(err)
 
 	// TOPRF requests
-	idxs := utils.PickRandomIndexes(nodes, threshold)
+	idxs := utils.PickRandomIndices(nodes, threshold)
 
 	responses := make([]*prover.TOPRFResponse, threshold)
 
@@ -455,7 +448,7 @@ func TestFullAES128OPRF(t *testing.T) {
 		assert.NoError(err)
 
 		resp := &prover.TOPRFResponse{
-			Index:          uint8(idxs[i]),
+			Index:          uint8(idxs[i] + 1),
 			PublicKeyShare: shares.Shares[idxs[i]].PublicKey,
 			Evaluated:      evalResult.EvaluatedPoint.Marshal(),
 			C:              evalResult.C.Bytes(),
@@ -471,7 +464,11 @@ func TestFullAES128OPRF(t *testing.T) {
 		assert.NoError(err)
 	}
 
-	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
+	lIdxs := make([]int, len(idxs))
+	for j := 0; j < len(idxs); j++ {
+		lIdxs[j] = idxs[j] + 1
+	}
+	out, err := utils.TOPRFFinalize(lIdxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
 	inputParams := &prover.InputParams{
@@ -585,7 +582,7 @@ func TestFullAES256OPRF(t *testing.T) {
 	assert.NoError(err)
 
 	// TOPRF requests
-	idxs := utils.PickRandomIndexes(nodes, threshold)
+	idxs := utils.PickRandomIndices(nodes, threshold)
 
 	responses := make([]*prover.TOPRFResponse, threshold)
 
@@ -595,7 +592,7 @@ func TestFullAES256OPRF(t *testing.T) {
 		assert.NoError(err)
 
 		resp := &prover.TOPRFResponse{
-			Index:          uint8(idxs[i]),
+			Index:          uint8(idxs[i] + 1),
 			PublicKeyShare: shares.Shares[idxs[i]].PublicKey,
 			Evaluated:      evalResult.EvaluatedPoint.Marshal(),
 			C:              evalResult.C.Bytes(),
@@ -611,7 +608,12 @@ func TestFullAES256OPRF(t *testing.T) {
 		assert.NoError(err)
 	}
 
-	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
+	lIdxs := make([]int, len(idxs))
+	for j := 0; j < len(idxs); j++ {
+		lIdxs[j] = idxs[j] + 1
+	}
+
+	out, err := utils.TOPRFFinalize(lIdxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
 	inputParams := &prover.InputParams{

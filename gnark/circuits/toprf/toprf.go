@@ -12,7 +12,7 @@ import (
 	"github.com/consensys/gnark/std/math/emulated"
 )
 
-const Threshold = 1
+const Threshold = 2
 const BytesPerElement = 31
 
 type Params struct {
@@ -24,6 +24,8 @@ type Params struct {
 	C               [Threshold]frontend.Variable    `gnark:",public"`
 	R               [Threshold]frontend.Variable    `gnark:",public"`
 	Output          frontend.Variable               `gnark:",public"` // hash of deblinded point + secret data
+	Counter         frontend.Variable               // counter used in hashToCurve
+	X               frontend.Variable               // orig X
 }
 
 type TOPRF struct {
@@ -85,7 +87,7 @@ func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) e
 	maskBits := bits.ToBinary(api, p.Mask, bits.WithNbDigits(api.Compiler().Field().BitLen()))
 	mask := field.FromBits(maskBits...)
 
-	dataPoint, err := hashToPoint(api, curve, secretData, p.DomainSeparator)
+	dataPoint, err := hashToPoint(api, curve, secretData, p.DomainSeparator, p.Counter, p.X)
 	if err != nil {
 		return err
 	}
@@ -158,22 +160,11 @@ func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, 
 	vG := curve.DoubleBaseScalarMul(basePoint, serverPublicKey, r, c)
 	vH := curve.DoubleBaseScalarMul(masked, response, r, c)
 
-	hField.Write(basePoint.X)
 	hField.Write(basePoint.Y)
-
-	hField.Write(serverPublicKey.X)
 	hField.Write(serverPublicKey.Y)
-
-	hField.Write(vG.X)
 	hField.Write(vG.Y)
-
-	hField.Write(vH.X)
 	hField.Write(vH.Y)
-
-	hField.Write(masked.X)
 	hField.Write(masked.Y)
-
-	hField.Write(response.X)
 	hField.Write(response.Y)
 
 	expectedChallenge := hField.Sum()
@@ -182,7 +173,11 @@ func verifyDLEQ(api frontend.API, curve twistededwards.Curve, masked, response, 
 	return nil
 }
 
-func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator frontend.Variable) (*twistededwards.Point, error) {
+func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.Variable, domainSeparator, counter, xOrig frontend.Variable) (*twistededwards.Point, error) {
+	api.AssertIsLessOrEqual(counter, 255) // hash counter is 0..255
+
+	d := curve.Params().D
+
 	hField, err := mimc.NewMiMC(api)
 	if err != nil {
 		return nil, err
@@ -190,13 +185,26 @@ func hashToPoint(api frontend.API, curve twistededwards.Curve, data [2]frontend.
 	hField.Write(data[0])
 	hField.Write(data[1])
 	hField.Write(domainSeparator)
-	hashedSecretData := hField.Sum()
+	hField.Write(counter)
+	y := hField.Sum() // original Y is data hash
 	hField.Reset()
 
-	basePoint := twistededwards.Point{
-		X: curve.Params().Base[0],
-		Y: curve.Params().Base[1],
-	}
-	dataPoint := curve.ScalarMul(basePoint, hashedSecretData)
-	return &dataPoint, nil
+	// calculate X
+	y2 := api.Mul(y, y)
+	num := api.Sub(1, y2)
+	denom := api.Mul(d.String(), y2)
+	denom = api.Add(denom, 1)
+	denom = api.Neg(denom)
+	x2 := api.Div(num, denom)
+	api.AssertIsEqual(x2, api.Mul(xOrig, xOrig)) // check calculated X^2 against passed original X
+
+	// clear cofactor by p*8
+	point := twistededwards.Point{X: xOrig, Y: y} // original point
+	point = curve.Double(point)                   // p2
+	point = curve.Double(point)                   // p4
+	point = curve.Double(point)                   // p8
+
+	curve.AssertIsOnCurve(point)
+
+	return &point, nil
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tbn254 "github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,25 +36,36 @@ func TestOPRF(t *testing.T) {
 	res, err := OPRFFinalize(serverPublic, req, resp)
 	require.NoError(t, err)
 
-	require.Equal(t, "EnTod4kXJzeXybI7tRvGjU7GYYRXz8tEJ2Az0L2XQIc=", base64.StdEncoding.EncodeToString(res.Bytes()))
+	require.Equal(t, "AaYom3iSNY0vhCDPIXt96j+oQAQdRFzdGfQTIcZQlsg=", base64.StdEncoding.EncodeToString(res.Bytes()))
+}
 
-	nodes := 100
-	threshold := 50
-	shares, err := TOPRFCreateShares(nodes, threshold, sk)
-	require.NoError(t, err)
+func TestTOPRFDKG(t *testing.T) {
+	email := "test@example.com"
+	ds := "reclaim"
+	emailBytes := []byte(email)
+	nodes := 10
+	threshold := 5
+	shares, _, e := CreateLocalSharesDKG(nodes, threshold)
+	require.NoError(t, e)
+
+	var out *big.Int
 	resps := make([]*tbn254.PointAffine, threshold)
-	for i := 0; i < threshold; i++ {
-		resp, err = OPRFEvaluate(shares[i].PrivateKey, req.MaskedData)
+	for i := 0; i < 200; i++ {
+		req, ee := OPRFGenerateRequest(emailBytes, ds)
+		require.NoError(t, ee)
+		idxs := PickRandomIndices(nodes, threshold)
+		for j := 0; j < threshold; j++ {
+			resp, err := OPRFEvaluate(shares[idxs[j]].PrivateKey, req.MaskedData)
+			require.NoError(t, err)
+			resps[j] = resp.EvaluatedPoint
+			idxs[j]++ // !!! 1-based
+		}
+		tmp, err := TOPRFFinalize(idxs, resps, req.SecretElements, req.Mask)
 		require.NoError(t, err)
-		resps[i] = resp.EvaluatedPoint
+		if out == nil {
+			out = tmp
+		} else {
+			assert.Equal(t, out, tmp)
+		}
 	}
-
-	idxs := make([]int, threshold)
-	for i := 0; i < threshold; i++ {
-		idxs[i] = i
-	}
-
-	out, err := TOPRFFinalize(idxs, resps, req.SecretElements, req.Mask)
-	require.NoError(t, err)
-	require.Equal(t, "EnTod4kXJzeXybI7tRvGjU7GYYRXz8tEJ2Az0L2XQIc=", base64.StdEncoding.EncodeToString(out.Bytes()))
 }

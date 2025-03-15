@@ -1,16 +1,16 @@
-package aes_v2_oprf
+package aes_oprf
 
 import (
-	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
+	"gnark-symmetric-crypto/circuits/aes"
 	"gnark-symmetric-crypto/circuits/toprf"
 
 	"github.com/consensys/gnark/frontend"
 )
 
 type AESTOPRFCircuit struct {
-	aes_v2.AESBaseCircuit
-	Out     [aes_v2.BLOCKS * 16]frontend.Variable
-	Bitmask [aes_v2.BLOCKS * 16 * 8]frontend.Variable `gnark:",public"` // bit mask for bytes being hashed
+	aes.AESBaseCircuit
+	Out     [aes.BLOCKS * 16]frontend.Variable
+	Bitmask [aes.BLOCKS * 16 * 8]frontend.Variable `gnark:",public"` // bit mask for bytes being hashed
 	// Length of "secret data" elements to be hashed. In bytes
 	Len   frontend.Variable `gnark:",public"`
 	TOPRF toprf.Params

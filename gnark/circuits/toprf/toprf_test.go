@@ -2,6 +2,7 @@ package toprf
 
 import (
 	"crypto/rand"
+	"fmt"
 	"gnark-symmetric-crypto/utils"
 	"math/big"
 	"testing"
@@ -9,12 +10,50 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	tbn254 "github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
+	tbn "github.com/consensys/gnark-crypto/ecc/twistededwards"
+	"github.com/consensys/gnark/frontend"
+	"github.com/consensys/gnark/frontend/cs/r1cs"
+	"github.com/consensys/gnark/std/algebra/native/twistededwards"
 	"github.com/consensys/gnark/test"
 )
 
+type HasherCircuit struct {
+	Data            [2]frontend.Variable
+	DomainSeparator frontend.Variable
+	Counter         frontend.Variable
+	X               frontend.Variable
+}
+
+func (h *HasherCircuit) Define(api frontend.API) error {
+	curve, err := twistededwards.NewEdCurve(api, tbn.BN254)
+	if err != nil {
+		return err
+	}
+
+	_, err = hashToPoint(api, curve, h.Data, h.DomainSeparator, h.Counter, h.X)
+	return err
+}
+
+func TestHashToPoint(t *testing.T) {
+	assert := test.NewAssert(t)
+	testData, secretData := PrepareTestData("23r23r", "reclaim")
+
+	wtns := HasherCircuit{
+		Data:            secretData,
+		DomainSeparator: testData.DomainSeparator,
+		Counter:         testData.Counter,
+		X:               testData.X,
+	}
+
+	assert.CheckCircuit(&wtns, test.WithCurves(ecc.BN254), test.WithValidAssignment(&wtns))
+	rcs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &wtns)
+	assert.NoError(err)
+	fmt.Println(rcs.GetNbConstraints())
+}
+
 func TestTOPRF(t *testing.T) {
 	assert := test.NewAssert(t)
-	testData, secretData := PrepareTestData("randomiiiiiiiiiiiiiizerrandomiiiiiiiiiiiiiizerrandomiiiiiiiiir", "")
+	testData, secretData := PrepareTestData("10010101000101011001010100010101", "reclaim")
 
 	wtns := TOPRF{
 		Params:     testData,

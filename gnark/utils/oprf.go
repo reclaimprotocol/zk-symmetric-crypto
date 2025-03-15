@@ -7,6 +7,7 @@ import (
 
 	"math/big"
 
+	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	_ "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"
 	"github.com/consensys/gnark-crypto/hash"
@@ -19,9 +20,11 @@ var TNBCurveOrder = func() *big.Int { order := twistededwards.GetEdwardsCurve().
 const BytesPerElement = 31
 
 type OPRFRequest struct {
+	SecretElements [2]*big.Int
 	Mask           *big.Int `json:"mask"`
 	MaskedData     *twistededwards.PointAffine
-	SecretElements [2]*big.Int
+	Counter        int
+	X              *big.Int // original X
 }
 
 type OPRFResponse struct {
@@ -31,25 +34,15 @@ type OPRFResponse struct {
 }
 
 func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFRequest, error) {
-	if len(secretBytes) > BytesPerElement*2 {
-		return nil, fmt.Errorf("secret data too big: %d, max %d bytes is allowed", len(secretBytes), BytesPerElement*2)
-	}
-	domainBytes := []byte(domainSeparator)
-	if len(domainBytes) > BytesPerElement {
-		return nil, fmt.Errorf("domain separator is %d bytes, max %d bytes is allowed", len(domainBytes), BytesPerElement)
+	secretElements, err := CreateSecretElements(secretBytes, []byte(domainSeparator))
+	if err != nil {
+		return nil, err
 	}
 
-	var secretElements [2]*big.Int
-
-	if len(secretBytes) > BytesPerElement {
-		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes[:BytesPerElement]))
-		secretElements[1] = new(big.Int).SetBytes(BEtoLE(secretBytes[BytesPerElement:]))
-	} else {
-		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes))
-		secretElements[1] = big.NewInt(0)
+	H, origX, counter, err := HashToPointPrecompute(secretElements[0].Bytes(), secretElements[1].Bytes(), []byte(domainSeparator)) // H
+	if err != nil {
+		return nil, err
 	}
-
-	H := HashToCurve(secretElements[0].Bytes(), secretElements[1].Bytes(), domainBytes) // H
 	if !H.IsOnCurve() {
 		return nil, errors.New("point is not on curve")
 	}
@@ -59,7 +52,6 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 	if err != nil {
 		return nil, err
 	}
-
 	masked := &twistededwards.PointAffine{}
 	masked.ScalarMultiplication(H, mask) // H*mask
 
@@ -67,12 +59,12 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 		Mask:           mask,
 		MaskedData:     masked,
 		SecretElements: secretElements,
+		Counter:        counter,
+		X:              origX,
 	}, nil
 }
 
 func OPRFEvaluate(serverPrivate *big.Int, request *twistededwards.PointAffine) (*OPRFResponse, error) {
-	curve := twistededwards.GetEdwardsCurve()
-
 	t := new(twistededwards.PointAffine)
 	t.Set(request)
 	t.ScalarMultiplication(t, big.NewInt(8)) // cofactor check
@@ -136,13 +128,8 @@ func hashToScalar(data ...[]byte) []byte {
 func HashPointsToScalar(data ...*twistededwards.PointAffine) []byte {
 	hasher := hash.MIMC_BN254.New()
 	for _, p := range data {
-		x := p.X.BigInt(new(big.Int))
 		y := p.Y.BigInt(new(big.Int))
-		_, err := hasher.Write(x.Bytes())
-		if err != nil {
-			panic(err)
-		}
-		_, err = hasher.Write(y.Bytes())
+		_, err := hasher.Write(y.Bytes())
 		if err != nil {
 			panic(err)
 		}
@@ -150,13 +137,71 @@ func HashPointsToScalar(data ...*twistededwards.PointAffine) []byte {
 	return hasher.Sum(nil)
 }
 
-func HashToCurve(data ...[]byte) *twistededwards.PointAffine {
-	hashedData := hashToScalar(data...)
-	scalar := new(big.Int).SetBytes(hashedData)
-	params := twistededwards.GetEdwardsCurve()
-	multiplicationResult := &twistededwards.PointAffine{}
-	multiplicationResult.ScalarMultiplication(&params.Base, scalar)
-	return multiplicationResult
+func CreateSecretElements(secretBytes []byte, domainBytes []byte) ([2]*big.Int, error) {
+	if len(secretBytes) > BytesPerElement*2 {
+		return [2]*big.Int{}, fmt.Errorf("secret data too big: %d, max %d bytes is allowed", len(secretBytes), BytesPerElement*2)
+	}
+	if len(domainBytes) > BytesPerElement {
+		return [2]*big.Int{}, fmt.Errorf("domain separator is %d bytes, max %d bytes is allowed", len(domainBytes), BytesPerElement)
+	}
+
+	var secretElements [2]*big.Int
+
+	if len(secretBytes) > BytesPerElement {
+		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes[:BytesPerElement]))
+		secretElements[1] = new(big.Int).SetBytes(BEtoLE(secretBytes[BytesPerElement:]))
+	} else {
+		secretElements[0] = new(big.Int).SetBytes(BEtoLE(secretBytes))
+		secretElements[1] = big.NewInt(0)
+	}
+	return secretElements, nil
+}
+
+func HashToPointPrecompute(data ...[]byte) (*twistededwards.PointAffine, *big.Int, int, error) {
+	var a, d, one fr.Element
+	a.SetInt64(-1)
+	d = curve.D
+	one.SetOne()
+	var counterFr fr.Element
+	for counter := 0; counter <= 255; counter++ {
+		counterFr.SetInt64(int64(counter))
+		yBytes := hashToScalar(append(data, counterFr.Marshal())...)
+		var y fr.Element
+		y.SetBytes(yBytes)
+
+		var y2, num, denom, x2 fr.Element
+		y2.Square(&y)
+		num.Sub(&one, &y2)
+		denom.Mul(&d, &y2).Add(&denom, &one).Neg(&denom)
+		if denom.IsZero() {
+			// fmt.Printf("Counter %d: x² denominator is zero\n", counter)
+			continue
+		}
+		x2.Div(&num, &denom)
+
+		// fmt.Printf("Counter %d: y² = %s, x² = %s, Legendre(x²) = %d\n", counter, y2.String(), x2.String(), x2.Legendre())
+		var x fr.Element
+		if x.Sqrt(&x2) != nil {
+			point := twistededwards.PointAffine{X: x, Y: y}
+			if point.IsOnCurve() {
+				clearedPoint := point.ScalarMultiplication(&point, big.NewInt(8))
+				if !clearedPoint.IsOnCurve() {
+					return nil, nil, 0, fmt.Errorf("cofactor-cleared point not on curve")
+				}
+
+				xOrig := new(big.Int)
+				x.BigInt(xOrig)
+				return clearedPoint, xOrig, counter, nil
+			}
+			// var lhs, rhs fr.Element
+			// lhs.Mul(&a, &x2).Add(&lhs, &y2)
+			// rhs.Mul(&d, &x2).Mul(&rhs, &y2).Add(&rhs, &one)
+			// fmt.Printf("Counter %d: LHS = %s\nRHS = %s\n", counter, lhs.String(), rhs.String())
+			// fmt.Printf("Counter %d: Point not on curve: x=%s, y=%s\n", counter, x.String(), y.String())
+		}
+	}
+
+	return nil, nil, 0, fmt.Errorf("failed to find valid point after 256 attempts")
 }
 
 func SetBitmask(bits []frontend.Variable, pos, length uint32) {
@@ -178,10 +223,12 @@ func SetBitmask(bits []frontend.Variable, pos, length uint32) {
 }
 
 func BEtoLE(b []byte) []byte {
-	for i := 0; i < len(b)/2; i++ {
-		b[i], b[len(b)-1-i] = b[len(b)-1-i], b[i]
+	res := make([]byte, len(b))
+	copy(res, b)
+	for i := 0; i < len(res)/2; i++ {
+		res[i], res[len(res)-1-i] = b[len(res)-1-i], res[i]
 	}
-	return b
+	return res
 }
 
 func OutPointToInPoint(point *twistededwards.PointAffine) tbn.Point {

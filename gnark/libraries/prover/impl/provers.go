@@ -6,10 +6,10 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
-	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
-	aes_v2_oprf "gnark-symmetric-crypto/circuits/aesV2_oprf"
-	"gnark-symmetric-crypto/circuits/chachaV3"
-	"gnark-symmetric-crypto/circuits/chachaV3_oprf"
+	aes_v2 "gnark-symmetric-crypto/circuits/aes"
+	"gnark-symmetric-crypto/circuits/aes_oprf"
+	"gnark-symmetric-crypto/circuits/chacha"
+	"gnark-symmetric-crypto/circuits/chacha_oprf"
 	"gnark-symmetric-crypto/circuits/toprf"
 	"gnark-symmetric-crypto/utils"
 	"log"
@@ -81,8 +81,8 @@ func (cp *ChaChaProver) Prove(params *InputParams) (proof []byte, output []uint8
 	if len(nonce) != 12 {
 		log.Panicf("nonce length must be 12: %d", len(nonce))
 	}
-	if len(input) != 64*chachaV3.Blocks {
-		log.Panicf("input length must be %d: %d", 64*chachaV3.Blocks, len(input))
+	if len(input) != 64*chacha.Blocks {
+		log.Panicf("input length must be %d: %d", 64*chacha.Blocks, len(input))
 	}
 
 	// calculate output ourselves
@@ -108,7 +108,7 @@ func (cp *ChaChaProver) Prove(params *InputParams) (proof []byte, output []uint8
 	bNonce := utils.BytesToUint32LEBits(nonce)
 	bCounter := utils.Uint32ToBits(counter)
 
-	witness := &chachaV3.ChaChaCircuit{}
+	witness := &chacha.ChaChaCircuit{}
 
 	copy(witness.Key[:], bKey)
 	copy(witness.Nonce[:], bNonce)
@@ -220,8 +220,8 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	if len(nonce) != 12 {
 		log.Panicf("nonce length must be 12: %d", len(nonce))
 	}
-	if len(input) != chachaV3.Blocks*64 {
-		log.Panicf("input length must be %d: %d", chachaV3.Blocks*64, len(input))
+	if len(input) != chacha.Blocks*64 {
+		log.Panicf("input length must be %d: %d", chacha.Blocks*64, len(input))
 	}
 
 	// calculate ciphertext ourselves
@@ -263,10 +263,22 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	}
 
 	for i := 0; i < toprf.Threshold; i++ {
-		coeffs[i] = utils.Coeff(idxs[i], idxs)
+		coeffs[i], err = utils.LagrangeCoefficient(idxs[i], idxs)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	witness := &chachaV3_oprf.ChachaTOPRFCircuit{
+	secretElements, err := utils.CreateSecretElements(output[oprf.Pos:oprf.Pos+oprf.Len], oprf.DomainSeparator)
+	if err != nil {
+		panic(err)
+	}
+	_, origX, hashCounter, err := utils.HashToPointPrecompute(secretElements[0].Bytes(), secretElements[1].Bytes(), oprf.DomainSeparator) // H
+	if err != nil {
+		panic(err)
+	}
+
+	witness := &chacha_oprf.ChachaTOPRFCircuit{
 		TOPRF: toprf.Params{
 			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
 			Mask:            new(big.Int).SetBytes(oprf.Mask),
@@ -276,6 +288,8 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 			SharePublicKeys: pubKeys,
 			C:               cs,
 			R:               rs,
+			Counter:         hashCounter,
+			X:               origX,
 		},
 	}
 
@@ -353,10 +367,22 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	}
 
 	for i := 0; i < toprf.Threshold; i++ {
-		coeffs[i] = utils.Coeff(idxs[i], idxs)
+		coeffs[i], err = utils.LagrangeCoefficient(idxs[i], idxs)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	circuit := &aes_v2_oprf.AESTOPRFCircuit{
+	secretElements, err := utils.CreateSecretElements(output[oprf.Pos:oprf.Pos+oprf.Len], oprf.DomainSeparator)
+	if err != nil {
+		panic(err)
+	}
+	_, origX, hashCounter, err := utils.HashToPointPrecompute(secretElements[0].Bytes(), secretElements[1].Bytes(), oprf.DomainSeparator) // H
+	if err != nil {
+		panic(err)
+	}
+
+	circuit := &aes_oprf.AESTOPRFCircuit{
 		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, len(key))},
 		TOPRF: toprf.Params{
 			DomainSeparator: new(big.Int).SetBytes(oprf.DomainSeparator),
@@ -367,6 +393,8 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 			SharePublicKeys: pubKeys,
 			C:               cs,
 			R:               rs,
+			Counter:         hashCounter,
+			X:               origX,
 		},
 	}
 

@@ -25,7 +25,7 @@ type AESGadget struct {
 	keySize        int
 }
 
-// retuns AESGadget instance which can be used inside a circuit
+// returns AESGadget instance which can be used inside a circuit
 func NewAESGadget(api frontend.API, keySize int) AESGadget {
 
 	t0 := logderivlookup.New(api)

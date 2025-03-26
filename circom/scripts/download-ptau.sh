@@ -3,7 +3,7 @@ set -e
 
 # Official trusted BLAKE2b-512 checksum for powersOfTau28_hez_final_17.ptau
 OFFICIAL_CHECKSUM="6247a3433948b35fbfae414fa5a9355bfb45f56efa7ab4929e669264a0258976741dfbe3288bfb49828e5df02c2e633df38d2245e30162ae7e3bcca5b8b49345"
-
+mkdir -p pot
 echo "Downloading official ptau file..."
 curl -o pot/pot_final.ptau https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_17.ptau
 

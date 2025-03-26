@@ -2,11 +2,10 @@
 set -e
 
 # Official trusted checksum for powersOfTau28_hez_final_17.ptau
-# (Replace with the actual published checksum from Hermez/Polygon)
-OFFICIAL_CHECKSUM="add your checksum"  # EXAMPLE - GET REAL VALUE!
+OFFICIAL_CHECKSUM="6247a3433948b35fbfae414fa5a9355bfb45f56efa7ab4929e669264a0258976741dfbe3288bfb49828e5df02c2e633df38d2245e30162ae7e3bcca5b8b49345"  
 
 echo "Downloading official ptau file..."
-curl -o pot/pot_final.ptau https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_17.ptau
+curl -o pot/pot_final.ptau https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_17.ptau
 
 echo -e "\nVerifying checksum..."
 DOWNLOADED_CHECKSUM=$(sha256sum pot/pot_final.ptau | awk '{print $1}')

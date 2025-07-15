@@ -19,6 +19,7 @@ template AES_CTR(n_bits, KEY_SIZE_BYTES)
     var ctr_t[128] = ctr;
     var out_t[msg_len][8];
 
+    // key = KEY_EXPAND()
 	component ke = AES_KEY_EXPAND(KEY_SIZE_BYTES);
 	ke.key <== key;
 
@@ -35,6 +36,7 @@ template AES_CTR(n_bits, KEY_SIZE_BYTES)
         aes_encrypt_1[i].in <== ctr_t;
         aes_encrypt_1[i].ks <== ke.out;
 
+        // Keystream = AES_ENCRYPT(ctr, key) : AES_ENCRYPT(ctr_t, ke.out)
         EK = aes_encrypt_1[i].out;
 
         for(j=0; j<4; j++)
@@ -47,10 +49,13 @@ template AES_CTR(n_bits, KEY_SIZE_BYTES)
                     xor_1[i][j][k][l].a <== in[i*128+j*32+k*8+l];
                     xor_1[i][j][k][l].b <== EK[j*32+k*8+l];
 
+                    // encrypt, decrypt
                     out[i*128+j*32+k*8+l] <== xor_1[i][j][k][l].out;
                 }
             }
         }
+
+        // counter 를 1만큼 증가시킴
         bits2num_1[i] = Bits2Num(32);
         num2bits_1[i] = Num2Bits(32);
         for(j=0; j<4; j++) 

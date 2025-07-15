@@ -48,6 +48,7 @@
     }
   },
   "dependencies": {
+    "@aztec/bb.js": "0.84.0",
     "@stablelib/chacha20poly1305": "^1.0.0",
     "js-base64": "^3.7.7",
     "p-queue": "^6.0.0"
@@ -56,7 +57,9 @@
     "@adiwajshing/eslint-config": "github:adiwajshing/eslint-config",
     "@commitlint/cli": "^17.7.1",
     "@commitlint/config-conventional": "^17.7.0",
+    "@noir-lang/noir_js": "^1.0.0-beta.8",
     "@swc-node/register": "^1.10.9",
+    "@swc/core": "^1.12.14",
     "@swc/jest": "^0.2.36",
     "@types/jest": "^29.5.5",
     "@types/node": "^22.0.0",

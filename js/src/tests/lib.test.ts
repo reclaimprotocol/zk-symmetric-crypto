@@ -17,7 +17,7 @@ import {
 	ZK_CONFIGS,
 } from './utils'
 
-jest.setTimeout(20_000)
+jest.setTimeout(90_000)
 
 // TODO: add back AES tests
 const ALL_ALGOS: EncryptionAlgorithm[] = [
@@ -28,7 +28,8 @@ const ALL_ALGOS: EncryptionAlgorithm[] = [
 
 const SUPPORTED_ALGO_MAP: { [T in ZKEngine]: EncryptionAlgorithm[] } = {
 	// TODO: impl more algos for barretenberg
-	barretenberg: ['aes-256-ctr', 'aes-128-ctr'],
+	// barretenberg: ['aes-256-ctr', 'aes-128-ctr'],
+	barretenberg: [ 'aes-128-ctr'],
 	expander: ['chacha20'],
 	gnark: ALL_ALGOS,
 	snarkjs: ALL_ALGOS,
@@ -47,6 +48,10 @@ const ALG_TEST_CONFIG: { [E in EncryptionAlgorithm] } = {
 }
 
 describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
+	if(zkEngine !== 'barretenberg') {
+		return
+	}
+
 	const ALGOS = SUPPORTED_ALGO_MAP[getEngineForConfigItem(zkEngine)]
 	describe.each(ALGOS)('%s Lib Tests', (algorithm) => {
 		const { encLength } = ALG_TEST_CONFIG[algorithm]

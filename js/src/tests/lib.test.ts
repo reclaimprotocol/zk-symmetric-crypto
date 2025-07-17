@@ -91,6 +91,40 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 			await verifyProof({ proof, publicInput, operator })
 		})
 
+		it('should verify encrypted with static plaintext', async() => {
+			// 76,  97, 100, 105, 101, 115,  32,  97,
+			// 110, 100,  32,  71, 101, 110, 116, 108,
+			// 101, 109, 101, 110,  32, 111, 102,  32,
+			// 116, 104, 101,  32,  99, 108,  97, 115,
+			// 115,  32, 111, 102
+			const text = 'Ladies and Gentlemen of the class of'
+			const plaintext = Uint8Array.from(text.split('').map(char => char.charCodeAt(0)))
+
+			const privateInput: PrivateInput = {
+				key: Buffer.alloc(keySizeBytes, 2),
+			}
+
+			const iv = new Uint8Array(Array.from(Array(12).keys()))
+
+			const ciphertext = encryptData(
+				algorithm,
+				plaintext,
+				privateInput.key,
+				iv
+			)
+			const publicInput: PublicInput = { ciphertext, iv: iv }
+
+			const proof = await generateProof({
+				algorithm,
+				privateInput,
+				publicInput,
+				operator,
+			})
+			// client will send proof to witness
+			// witness would verify proof
+			await verifyProof({ proof, publicInput, operator })
+		})
+
 		it('should verify encrypted data with another counter', async() => {
 			const totalPlaintext = new Uint8Array(randomBytes(chunkSizeBytes * 5))
 			// use two blocks as offset (not chunks)

@@ -1,3 +1,4 @@
+import { CONFIG } from '../config'
 import { EncryptionAlgorithm, ZKProofInput } from '../types'
 import { NoirWitnessInput } from './types'
 
@@ -15,6 +16,9 @@ export function convertToNoirWitness(
 		throw new Error('ChaCha20 is not implemented in Noir circuits')
 	}
 
+	const { chunkSize, bitsPerWord } = CONFIG[algorithm]
+	const expectedSizeBytes = (chunkSize * bitsPerWord) / 8
+
 	// For AES-CTR, construct the full 16-byte counter from nonce + counter
 	// Counter format: 12 bytes nonce + 4 bytes counter (big-endian)
 	const fullCounter = new Uint8Array(16)
@@ -31,14 +35,12 @@ export function convertToNoirWitness(
 
 	// For Noir circuits, we only process the first 16 bytes (1 AES block)
 	// The input may be padded to 80 bytes (5 blocks) but Noir only expects 1 block
-	const plaintextBlock = input.in.slice(0, 16)
-	const ciphertextBlock = input.out.slice(0, 16)
 
 	// Convert Uint8Arrays to regular arrays for Noir
 	const keyArray = Array.from(input.key)
 	const counterArray = Array.from(fullCounter)
-	const plaintextArray = Array.from(plaintextBlock)
-	const expectedCiphertextArray = Array.from(ciphertextBlock)
+	const plaintextArray = Array.from(input.in)
+	const expectedCiphertextArray = Array.from(input.out)
 
 	// Validate key size based on algorithm
 	if(algorithm === 'aes-256-ctr' && keyArray.length !== 32) {
@@ -48,12 +50,12 @@ export function convertToNoirWitness(
 	}
 
 	// Validate block sizes
-	if(plaintextArray.length !== 16) {
-		throw new Error(`Invalid plaintext size: expected 16 bytes, got ${plaintextArray.length}`)
+	if(plaintextArray.length !== expectedSizeBytes) {
+		throw new Error(`Invalid plaintext size: expected ${expectedSizeBytes} bytes, got ${plaintextArray.length}`)
 	}
 
-	if(expectedCiphertextArray.length !== 16) {
-		throw new Error(`Invalid ciphertext size: expected 16 bytes, got ${expectedCiphertextArray.length}`)
+	if(expectedCiphertextArray.length !== expectedSizeBytes) {
+		throw new Error(`Invalid ciphertext size: expected ${expectedSizeBytes} bytes, got ${expectedCiphertextArray.length}`)
 	}
 
 	// For AES, the Noir circuit expects:

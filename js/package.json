@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "run:tsc": "SWC_NODE_IGNORE_DYNAMIC=true node -r @swc-node/register",
-    "test": "SWC_NODE_IGNORE_DYNAMIC=true NODE_ENV=test node --experimental-strip-types node_modules/.bin/jest --forceExit --detectOpenHandles",
+    "test": "SWC_NODE_IGNORE_DYNAMIC=true NODE_ENV=test npx jest --forceExit --detectOpenHandles",
     "bench": "NODE_ENV=test npm run run:tsc -- ./src/tests/benchmark",
     "build": "npm exec tsc",
     "prepare": "npm run build",

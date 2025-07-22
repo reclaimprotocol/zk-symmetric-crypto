@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto'
 import {
+	BarretenbergOperator,
 	CONFIG,
 	EncryptionAlgorithm,
 	generateProof,
@@ -60,7 +61,7 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 
 		const chunkSizeBytes = chunkSize * bitsPerWord / 8
 
-		let operator: ZKOperator
+		let operator: ZKOperator | BarretenbergOperator
 		beforeAll(async() => {
 			operator = await ZK_CONFIG_MAP[zkEngine](algorithm)
 		})

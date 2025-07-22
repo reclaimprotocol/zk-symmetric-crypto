@@ -77,7 +77,7 @@ export type GenerateProofOpts = GenerateWitnessOpts & {
 	/**
 	 * Operator to use for proving the circuit
 	 */
-	operator: ZKOperator | OPRFOperator
+	operator: ZKOperator | BarretenbergOperator | OPRFOperator
 	logger?: Logger
 }
 
@@ -92,7 +92,7 @@ export type GetPublicSignalsOpts = {
 
 export type VerifyProofOpts = GetPublicSignalsOpts & (
 	{
-		operator: ZKOperator
+		operator: ZKOperator | BarretenbergOperator
 		logger?: Logger
 	} | {
 		operator: OPRFOperator
@@ -215,6 +215,7 @@ export type ZKOperator = {
 		proof: ZKProof,
 		logger?: Logger
 	): Promise<boolean>
+
 	/**
 	 * Release any used resources. The operator
 	 * should still be usable after this call.
@@ -226,8 +227,30 @@ export type ZKOperator = {
 	release?(): void
 }
 
+export type BarretenbergOperator = Omit<ZKOperator, 'groth16Prove' | 'groth16Verify'> & {
+		/**
+	 * UltraHonk proving and verification methods
+	 * Used by Barretenberg backend
+	 */
+		ultrahonkProve(witness: Uint8Array, logger?: Logger): Promise<ZKProofOutput>
+		ultrahonkVerify(
+			publicSignals: ZKProofPublicSignals,
+			proof: ZKProof,
+			logger?: Logger
+		): Promise<boolean>
+}
+
+// **
+// type guard for BarretenbergOperator
+// **
+export const isBarretenbergOperator = (operator: ZKOperator | BarretenbergOperator | OPRFOperator): operator is BarretenbergOperator => {
+	return 'ultrahonkProve' in operator && 'ultrahonkVerify' in operator
+}
+
+
 export type OPRFOperator = {
 	generateWitness(input: ZKProofInputOPRF, logger?: Logger): Promise<Uint8Array>
+
 	groth16Prove(witness: Uint8Array, logger?: Logger): Promise<ZKProofOutput>
 	groth16Verify(
 		publicSignals: ZKProofPublicSignalsOPRF,

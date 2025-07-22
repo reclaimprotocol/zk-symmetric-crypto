@@ -22,9 +22,12 @@ const ALL_ALGOS: EncryptionAlgorithm[] = [
 ]
 
 const SUPPORTED_ALGO_MAP: { [T in ZKEngine]: EncryptionAlgorithm[] } = {
-	'expander': ['chacha20'],
-	'gnark': ALL_ALGOS,
-	'snarkjs': ALL_ALGOS,
+	// TODO: impl more algos for barretenberg
+	// barretenberg: ['aes-256-ctr', 'aes-128-ctr'],
+	barretenberg: [ 'aes-128-ctr'],
+	expander: ['chacha20'],
+	gnark: ALL_ALGOS,
+	snarkjs: ALL_ALGOS,
 }
 
 const ALG_TEST_CONFIG: { [E in EncryptionAlgorithm] } = {
@@ -139,11 +142,14 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 				algorithm,
 				privateInput,
 				publicInput,
-				operator
+				operator,
 			})
-			// fill output with 0s
-			for(let i = 0;i < proof.plaintext.length;i++) {
-				proof.plaintext[i] = 0
+			if(zkEngine === 'barretenberg') {
+				(proof.proofData as Uint8Array)[0] = ((proof.proofData as Uint8Array)[0] + 1) % 256
+			} else {
+				for(let i = 0; i < proof.plaintext.length; i++) {
+					proof.plaintext[i] = 0
+				}
 			}
 
 			await expect(

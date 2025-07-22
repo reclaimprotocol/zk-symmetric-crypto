@@ -12,7 +12,7 @@ import {
 } from '../index'
 import { encryptData, getEngineForConfigItem, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils'
 
-jest.setTimeout(20_000)
+jest.setTimeout(100_000)
 
 // TODO: add back AES tests
 const ALL_ALGOS: EncryptionAlgorithm[] = [

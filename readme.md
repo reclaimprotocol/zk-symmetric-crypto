@@ -55,6 +55,39 @@ Before contributing to this project, please read and sign our [Contributor Licen
 
 For Indie Hackers: [Check out our guidelines and potential grant opportunities](https://github.com/reclaimprotocol/.github/blob/main/Indie-Hackers.md).
 
+## 📊 Performance Benchmarks
+
+### ChaCha20 Noir Circuit Benchmarks
+
+The following benchmarks were conducted for ChaCha20 encryption using Noir circuits with 1KB data payload (8 proof chunks):
+
+| ZK Proof System | Proof Generation Time | Test Command |
+|---|---|---|
+| **Barretenberg (Noir)** | ~70 seconds (8 proofs) | `cd js && npm run bench` |
+| **Expander (Multi-thread)** | ~5 seconds (8 proofs) | `cd js && npm run bench` |
+
+**Test Environment:**
+- Data size: 1024 bytes
+- Chunk size: 128 bytes per proof
+- Total proofs generated: 8
+- Algorithm: ChaCha20 symmetric encryption
+
+**Running Benchmarks:**
+
+```bash
+# Run all benchmarks
+cd js && npm run bench
+
+# Run specific tests
+cd js && npm test
+
+# Run Circom circuit tests
+cd circom && npm test
+
+# Run Gnark tests
+cd gnark && go test ./...
+```
+
 ## 📄 License
 
 This project is licensed under a [custom license](https://github.com/reclaimprotocol/.github/blob/main/LICENSE). By contributing, you agree that your contributions will be licensed under its terms.

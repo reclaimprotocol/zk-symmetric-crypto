@@ -1,18 +1,18 @@
-import { randomBytes } from 'crypto'
+import assert from 'node:assert'
+import { randomBytes } from 'node:crypto'
+import { after, before, describe, it } from 'node:test'
 import {
 	CONFIG,
-	EncryptionAlgorithm,
+	type EncryptionAlgorithm,
 	generateProof,
 	getBlockSizeBytes,
-	PrivateInput,
-	PublicInput,
+	type PrivateInput,
+	type PublicInput,
 	verifyProof,
-	ZKEngine,
-	ZKOperator,
-} from '../index'
-import { encryptData, getEngineForConfigItem, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils'
-
-jest.setTimeout(20_000)
+	type ZKEngine,
+	type ZKOperator,
+} from '../index.ts'
+import { encryptData, getEngineForConfigItem, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils.ts'
 
 // TODO: add back AES tests
 const ALL_ALGOS: EncryptionAlgorithm[] = [
@@ -27,7 +27,7 @@ const SUPPORTED_ALGO_MAP: { [T in ZKEngine]: EncryptionAlgorithm[] } = {
 	'snarkjs': ALL_ALGOS,
 }
 
-const ALG_TEST_CONFIG: { [E in EncryptionAlgorithm] } = {
+const ALG_TEST_CONFIG: { [E in EncryptionAlgorithm]: { encLength: number } } = {
 	'chacha20': {
 		encLength: 45,
 	},
@@ -39,10 +39,13 @@ const ALG_TEST_CONFIG: { [E in EncryptionAlgorithm] } = {
 	},
 }
 
-describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
+const TEST_MATRIX = ZK_CONFIGS.flatMap(zkEngine => (
+	SUPPORTED_ALGO_MAP[getEngineForConfigItem(zkEngine)]
+		.map(algorithm => ({ zkEngine, algorithm }))
+))
 
-	const ALGOS = SUPPORTED_ALGO_MAP[getEngineForConfigItem(zkEngine)]
-	describe.each(ALGOS)('%s Lib Tests', (algorithm) => {
+for(const { zkEngine, algorithm } of TEST_MATRIX) {
+	describe(`${zkEngine} - ${algorithm} Engine Tests`, () => {
 		const { encLength } = ALG_TEST_CONFIG[algorithm]
 		const {
 			bitsPerWord,
@@ -53,11 +56,11 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 		const chunkSizeBytes = chunkSize * bitsPerWord / 8
 
 		let operator: ZKOperator
-		beforeAll(async() => {
+		before(async() => {
 			operator = await ZK_CONFIG_MAP[zkEngine](algorithm)
 		})
 
-		afterEach(async() => {
+		after(async() => {
 			await operator.release?.()
 		})
 
@@ -146,11 +149,13 @@ describe.each(ZK_CONFIGS)('%s Engine Tests', (zkEngine) => {
 				proof.plaintext[i] = 0
 			}
 
-			await expect(
-				verifyProof({ proof, publicInput, operator })
-			).rejects.toHaveProperty('message', 'invalid proof')
+			await assert.rejects(
+				() => verifyProof({ proof, publicInput, operator }),
+				(err: Error) => {
+					assert.match(err.message, /invalid proof/)
+					return true
+				}
+			)
 		})
 	})
-
-
-})
+}

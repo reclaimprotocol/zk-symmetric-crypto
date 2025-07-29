@@ -1,6 +1,6 @@
 import { isMainThread, parentPort, Worker, workerData } from 'worker_threads'
-import type { Logger } from '../types'
-import type { ErrorRPCMessage, RPCMessageMap, WorkerChannel, WorkerInitData } from './types'
+import type { Logger } from '../types.ts'
+import type { ErrorRPCMessage, RPCMessageMap, WorkerChannel, WorkerInitData } from './types.ts'
 import init, { prove } from './wasm-binding.js'
 
 const BYTES_PER_PAGE = 65536
@@ -38,7 +38,7 @@ async function main() {
 				sendOutputRpcBack({ id: input.id!, result })
 
 				logger.debug({ id: input.id }, 'prove done')
-			} catch(err) {
+			} catch(err: any) {
 				logger.error({ err }, 'prove error')
 				sendOutputRpcBack({
 					id: input.id!,
@@ -64,6 +64,7 @@ async function main() {
 }
 
 export async function initWorker(workerData: WorkerInitData) {
+	const __filename = import.meta.url.replace('file://', '')
 	const worker = new Worker(__filename, { workerData })
 	await new Promise<void>((resolve, reject) => {
 		worker.once('message', resolve)

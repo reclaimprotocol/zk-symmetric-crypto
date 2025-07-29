@@ -1,7 +1,7 @@
 import { Base64 } from 'js-base64'
-import { EncryptionAlgorithm, FileFetch, Logger, ZKProofInput, ZKProofInputOPRF, ZKProofPublicSignals, ZKProofPublicSignalsOPRF, ZKTOPRFResponsePublicSignals } from '../types'
+import type { EncryptionAlgorithm, FileFetch, Logger, ZKProofInput, ZKProofInputOPRF, ZKProofPublicSignals, ZKProofPublicSignalsOPRF, ZKTOPRFResponsePublicSignals } from '../types.ts'
 
-const BIN_PATH = '../../bin/gnark'
+const BIN_PATH = './bin/gnark'
 
 let globalGnarkLib: ReturnType<typeof loadGnarkLib> | undefined
 
@@ -20,7 +20,7 @@ export type GnarkLib = {
 
 // golang uses different arch names
 // for some archs -- so this map corrects the name
-const ARCH_MAP = {
+const ARCH_MAP: { [A in NodeJS.Architecture]?: string } = {
 	'x64': 'x86_64',
 }
 
@@ -33,7 +33,9 @@ async function loadGnarkLib(): Promise<GnarkLib> {
 		throw new Error('Koffi not available, cannot use gnark')
 	}
 
-	const { join } = await import('path')
+	const { join, dirname, resolve } = await import('path')
+
+	const __dirname = resolve(dirname(''))
 	const { default: koffi } = koffiMod
 	koffi.reset() //otherwise tests will fail
 
@@ -87,7 +89,7 @@ async function loadGnarkLib(): Promise<GnarkLib> {
 			toprfFinalize: libProve.func('TOPRFFinalize', LibReturn, [GoSlice]),
 			koffi
 		}
-	} catch(err) {
+	} catch(err: any) {
 		if(err.message.includes('not a mach-o')) {
 			throw new Error(
 				`Gnark library not compatible with OS/arch (${platform}/${arch})`

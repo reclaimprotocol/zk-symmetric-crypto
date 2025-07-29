@@ -1,5 +1,5 @@
-import { CONFIG } from './config'
-import { EncryptionAlgorithm, UintArray } from './types'
+import { CONFIG } from './config.ts'
+import type { EncryptionAlgorithm, UintArray } from './types.ts'
 
 export const BITS_PER_WORD = 32
 

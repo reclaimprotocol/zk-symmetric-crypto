@@ -1,7 +1,7 @@
 import { ChaCha20Poly1305 } from '@stablelib/chacha20poly1305'
-import { AlgorithmConfig, EncryptionAlgorithm } from './types'
-import { bitsToUint8Array, bitsToUintArray, toUint8Array, toUintArray, uint8ArrayToBits, uintArrayToBits } from './utils'
-import { webcrypto } from './webcrypto'
+import type { AlgorithmConfig, EncryptionAlgorithm } from './types.ts'
+import { bitsToUint8Array, bitsToUintArray, toUint8Array, toUintArray, uint8ArrayToBits, uintArrayToBits } from './utils.ts'
+import { webcrypto } from './webcrypto.ts'
 
 const { subtle } = webcrypto
 

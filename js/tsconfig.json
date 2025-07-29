@@ -1,20 +1,17 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "allowJs": true,
-    "checkJs": false,
+    "lib": ["ES2022", "DOM"],
+    "moduleResolution": "nodenext",
+    "module": "nodenext",
     "outDir": "lib",
-    "strict": false,
-    "strictNullChecks": true,
-    "noImplicitThis": true,
-    "esModuleInterop": true,
+    "strict": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "resolveJsonModule": true,
-    "lib": [ "es2020", "DOM" ]
+    "erasableSyntaxOnly": true,
+    "rewriteRelativeImportExtensions": true,
+    "allowJs": true,
+    "baseUrl": ".",
+    "paths": {},
+    "declaration": true
   },
   "include": [
     "src/**/*.ts",

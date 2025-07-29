@@ -1,6 +1,8 @@
 import PQueue from 'p-queue'
-import { CircuitWasm, Logger, MakeZKOperatorOpts, VerificationKey, ZKOperator } from '../types'
-import { serialiseValuesToBits } from '../utils'
+// @ts-expect-error
+import * as snarkjs from 'snarkjs'
+import type { CircuitWasm, Logger, MakeZKOperatorOpts, VerificationKey, ZKOperator } from '../types.ts'
+import { serialiseValuesToBits } from '../utils.ts'
 
 type WitnessData = {
 	type: 'mem'
@@ -44,8 +46,6 @@ export function makeSnarkJsZKOperator({
 	let zkey: Promise<VerificationKey> | VerificationKey | undefined
 	let circuitWasm: Promise<CircuitWasm> | CircuitWasm | undefined
 	let wc: Promise<unknown> | undefined
-
-	const snarkjs = loadSnarkjs()
 
 	const concurrencyLimiter = new PQueue({ concurrency: maxProofConcurrency })
 
@@ -159,8 +159,4 @@ export function makeSnarkJsZKOperator({
 			.fetch('snarkjs', `${algorithm}/circuit_final.zkey`, logger)
 		return { data }
 	}
-}
-
-function loadSnarkjs() {
-	return require('snarkjs')
 }

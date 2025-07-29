@@ -1,15 +1,13 @@
-import { wasm as WasmTester } from 'circom_tester'
 import { createCipheriv } from 'crypto'
 import { cpus } from 'os'
-import { join } from 'path'
+import { makeExpanderZkOperator } from '../expander/operator.ts'
+import { makeGnarkZkOperator } from '../gnark/operator.ts'
 import {
-	EncryptionAlgorithm,
-	makeExpanderZkOperator,
-	makeGnarkZkOperator,
+	type EncryptionAlgorithm,
 	makeLocalFileFetch,
-	makeSnarkJsZKOperator,
-	ZKOperator
-} from '../index'
+	type ZKOperator
+} from '../index.ts'
+import { makeSnarkJsZKOperator } from '../snarkjs/operator.ts'
 
 export function encryptData(
 	algorithm: EncryptionAlgorithm,
@@ -33,10 +31,6 @@ export function encryptData(
 		cipher.update(plaintext),
 		cipher.final()
 	])
-}
-
-export function loadCircuit(name: string) {
-	return WasmTester(join(__dirname, `../../circuits/tests/${name}.circom`))
 }
 
 const fetcher = makeLocalFileFetch()

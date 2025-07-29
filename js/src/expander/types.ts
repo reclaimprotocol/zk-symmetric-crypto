@@ -1,4 +1,4 @@
-import type { prove } from './wasm-binding'
+import type { prove } from './wasm-binding.js'
 
 export type WorkerInitData = {
 	module: Uint8Array

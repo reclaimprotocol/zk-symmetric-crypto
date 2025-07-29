@@ -6,7 +6,7 @@ import { exec } from 'child_process'
 import { compareVersions } from 'compare-versions'
 import { readFile, writeFile } from 'fs/promises'
 import { promisify } from 'util'
-import { Logger } from '../types'
+import type { Logger } from '../types.ts'
 
 const logger: Logger = console
 const execPromise = promisify(exec)

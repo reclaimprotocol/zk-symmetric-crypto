@@ -1,8 +1,8 @@
 import { Base64 } from 'js-base64'
-import { CONFIG } from '../config'
-import { EncryptionAlgorithm, Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
-import { serialiseNumberTo4Bytes } from '../utils'
-import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils'
+import { CONFIG } from '../config.ts'
+import type { EncryptionAlgorithm, Logger, MakeZKOperatorOpts, ZKOperator } from '../types.ts'
+import { serialiseNumberTo4Bytes } from '../utils.ts'
+import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils.ts'
 
 const ALGS_MAP: {
 	[key in EncryptionAlgorithm]: { ext: string }

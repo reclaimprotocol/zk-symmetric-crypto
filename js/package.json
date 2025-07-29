@@ -1,13 +1,27 @@
 {
   "name": "@reclaimprotocol/zk-symmetric-crypto",
-  "version": "3.0.5",
+  "version": "4.0.0",
   "description": "JS Wrappers for Various ZK Snark Circuits",
-  "main": "lib/index.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./lib/index.js"
+    },
+    "./snarkjs": {
+      "import": "./lib/snarkjs/operator.js"
+    },
+    "./gnark": {
+      "import": "./lib/gnark/index.js"
+    },
+    "./expander": {
+      "import": "./lib/expander/operator.js"
+    }
+  },
   "scripts": {
     "run:tsc": "SWC_NODE_IGNORE_DYNAMIC=true node -r @swc-node/register",
-    "test": "SWC_NODE_IGNORE_DYNAMIC=true NODE_ENV=test node --experimental-strip-types node_modules/.bin/jest --forceExit --detectOpenHandles",
+    "test": "node --experimental-strip-types --test --test-force-exit",
     "bench": "NODE_ENV=test npm run run:tsc -- ./src/tests/benchmark",
-    "build": "npm exec tsc",
+    "build": "npm exec tsc -- -p tsconfig.build.json",
     "prepare": "npm run build",
     "commitlint": "commitlint --edit",
     "lint": "eslint ./ --ext .js,.ts,.jsx,.tsx",
@@ -37,6 +51,7 @@
   ],
   "peerDependencies": {
     "koffi": "*",
+    "p-queue": "*",
     "snarkjs": "*"
   },
   "peerDependenciesMeta": {
@@ -45,27 +60,26 @@
     },
     "koffi": {
       "optional": true
+    },
+    "p-queue": {
+      "optional": true
     }
   },
   "dependencies": {
     "@stablelib/chacha20poly1305": "^1.0.0",
-    "js-base64": "^3.7.7",
-    "p-queue": "^6.0.0"
+    "js-base64": "^3.7.7"
   },
   "devDependencies": {
     "@adiwajshing/eslint-config": "github:adiwajshing/eslint-config",
     "@commitlint/cli": "^17.7.1",
     "@commitlint/config-conventional": "^17.7.0",
-    "@swc-node/register": "^1.10.9",
-    "@swc/jest": "^0.2.36",
-    "@types/jest": "^29.5.5",
     "@types/node": "^22.0.0",
     "circom_tester": "^0.0.20",
     "circomlib": "^2.0.5",
     "compare-versions": "^6.1.1",
     "eslint": "^8.57.1",
-    "jest": "^29.7.0",
     "koffi": "^2.8.11",
+    "p-queue": "^8.0.0",
     "snarkjs": "git+https://github.com/reclaimprotocol/snarkjs.git",
     "tinybench": "^3.0.3",
     "typescript": "^5.2.2"

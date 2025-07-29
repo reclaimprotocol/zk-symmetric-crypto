@@ -1,6 +1,6 @@
-import { CONFIG } from './config'
-import { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types'
-import { getCounterForByteOffset } from './utils'
+import { CONFIG } from './config.ts'
+import type { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
+import { getCounterForByteOffset } from './utils.ts'
 
 /**
  * Generate ZK proof for CHACHA20-CTR encryption.

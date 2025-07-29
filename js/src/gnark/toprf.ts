@@ -1,7 +1,7 @@
 import { Base64, fromUint8Array, toUint8Array } from 'js-base64'
-import * as koffi from 'koffi'
-import { EncryptionAlgorithm, KeyShare, Logger, MakeZKOperatorOpts, OPRFOperator } from '../types'
-import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils'
+import koffi from 'koffi'
+import type { EncryptionAlgorithm, KeyShare, Logger, MakeZKOperatorOpts, OPRFOperator } from '../types.ts'
+import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils.ts'
 
 const ALGS_MAP: {
 	[key in EncryptionAlgorithm]: {

@@ -1,9 +1,9 @@
-import { CONFIG } from '../config'
-import { Logger, MakeZKOperatorOpts, ZKOperator } from '../types'
-import { serialiseValuesToBits } from '../utils'
-import { initWorker } from './node-worker'
-import { loadCircuitIfRequired, loadExpander, loadProverCircuitIfRequired, makeWorkerPool } from './utils'
-import { prove, verify } from './wasm-binding'
+import { CONFIG } from '../config.ts'
+import type { Logger, MakeZKOperatorOpts, ZKOperator } from '../types.ts'
+import { serialiseValuesToBits } from '../utils.ts'
+import { initWorker } from './node-worker.ts'
+import { loadCircuitIfRequired, loadExpander, loadProverCircuitIfRequired, makeWorkerPool } from './utils.ts'
+import { prove, verify } from './wasm-binding.js'
 
 let wasmInit: ReturnType<typeof loadExpander> | undefined
 

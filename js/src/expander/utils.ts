@@ -1,6 +1,6 @@
-import { EncryptionAlgorithm, FileFetch, Logger } from '../types'
-import { WorkerChannel, WorkerPool } from './types'
-import init, { is_circuit_loaded, is_solver_loaded, load_circuit, load_solver } from './wasm-binding'
+import type { EncryptionAlgorithm, FileFetch, Logger } from '../types.ts'
+import type { WorkerChannel, WorkerPool } from './types.ts'
+import init, { is_circuit_loaded, is_solver_loaded, load_circuit, load_solver } from './wasm-binding.js'
 
 const BIN_NAME = 'release'
 

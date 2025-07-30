@@ -22,7 +22,7 @@
     }
   },
   "scripts": {
-    "run:tsc": "SWC_NODE_IGNORE_DYNAMIC=true node -r @swc-node/register",
+    "run:tsc": "node --experimental-strip-types",
     "test": "node --experimental-strip-types --test --test-force-exit",
     "bench": "NODE_ENV=test npm run run:tsc -- ./src/tests/benchmark",
     "build": "npm exec tsc -- -p tsconfig.build.json",
@@ -30,7 +30,7 @@
     "commitlint": "commitlint --edit",
     "lint": "eslint ./ --ext .js,.ts,.jsx,.tsx",
     "lint:fix": "npm run lint -- --fix",
-    "publish:pkg": "node -r @swc-node/register ./src/scripts/publish-pkg"
+    "publish:pkg": "npm run run:tsc -- ./src/scripts/publish-pkg.ts"
   },
   "keywords": [
     "circom",

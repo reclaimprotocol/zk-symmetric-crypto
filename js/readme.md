@@ -21,7 +21,8 @@ For `expander`: No additional dependencies needed
 ### Generating & Verifying Proofs
 
 ```ts
-import { generateProof, verifyProof, makeSnarkJsZkOperator } from '@reclaimprotocol/zk-symmetric-crypto'
+import { generateProof, verifyProof } from '@reclaimprotocol/zk-symmetric-crypto'
+import { makeSnarkJsZkOperator } from '@reclaimprotocol/zk-symmetric-crypto/snarkjs'
 import { createCipheriv, randomBytes } from 'crypto'
 
 async function main() {

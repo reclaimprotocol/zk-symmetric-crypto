@@ -53,8 +53,8 @@ export function makeLocalFileFetch(
 			// import here to avoid loading fs in
 			// a browser env
 			const { readFile } = await import('fs/promises')
-			const { join, resolve, dirname } = await import('path')
-			const __dirname = resolve(dirname(''))
+			const { join, dirname } = await import('path')
+			const __dirname = dirname(import.meta.url.replace('file://', ''))
 			const fullPath = join(__dirname, path)
 			const buff = await readFile(fullPath)
 			return buff

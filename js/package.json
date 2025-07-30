@@ -5,15 +5,19 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": "./lib/index.js"
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
     },
     "./snarkjs": {
-      "import": "./lib/snarkjs/operator.js"
+      "types": "./lib/snarkjs/operator.d.ts",
+      "default": "./lib/snarkjs/operator.js"
     },
     "./gnark": {
-      "import": "./lib/gnark/index.js"
+      "types": "./lib/gnark/index.d.ts",
+      "default": "./lib/gnark/index.js"
     },
     "./expander": {
+      "types": "./lib/expander/operator.d.ts",
       "import": "./lib/expander/operator.js"
     }
   },

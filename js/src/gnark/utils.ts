@@ -1,7 +1,7 @@
 import { Base64 } from 'js-base64'
 import type { EncryptionAlgorithm, FileFetch, Logger, ZKProofInput, ZKProofInputOPRF, ZKProofPublicSignals, ZKProofPublicSignalsOPRF, ZKTOPRFResponsePublicSignals } from '../types.ts'
 
-const BIN_PATH = './bin/gnark'
+const BIN_PATH = '../../bin/gnark'
 
 let globalGnarkLib: ReturnType<typeof loadGnarkLib> | undefined
 
@@ -33,9 +33,9 @@ async function loadGnarkLib(): Promise<GnarkLib> {
 		throw new Error('Koffi not available, cannot use gnark')
 	}
 
-	const { join, dirname, resolve } = await import('path')
+	const { join, dirname } = await import('path')
 
-	const __dirname = resolve(dirname(''))
+	const __dirname = dirname(import.meta.url.replace('file://', ''))
 	const { default: koffi } = koffiMod
 	koffi.reset() //otherwise tests will fail
 

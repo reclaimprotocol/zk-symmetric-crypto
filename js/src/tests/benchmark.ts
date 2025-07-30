@@ -1,9 +1,9 @@
 import { randomBytes } from 'crypto'
 import { Bench } from 'tinybench'
-import { CONFIG } from '../config'
-import { EncryptionAlgorithm, PrivateInput, PublicInput, ZKOperator } from '../types'
-import { generateZkWitness } from '../zk'
-import { encryptData, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils'
+import { CONFIG } from '../config.ts'
+import type { EncryptionAlgorithm, PrivateInput, PublicInput, ZKOperator } from '../types.ts'
+import { generateZkWitness } from '../zk.ts'
+import { encryptData, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils.ts'
 
 const ALL_ALGOS: EncryptionAlgorithm[] = [
 	'chacha20',

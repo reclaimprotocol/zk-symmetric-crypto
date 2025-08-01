@@ -64,6 +64,7 @@ The following benchmarks were conducted for ChaCha20 encryption using Noir circu
 | ZK Proof System | Proof Generation Time | Test Command |
 |---|---|---|
 | **Barretenberg (Noir)** | ~70 seconds (8 proofs) | `cd js && npm run bench` |
+| **Gnark** | ~3 seconds (8 proofs) | `cd js && npm run bench` |
 | **Expander (Multi-thread)** | ~5 seconds (8 proofs) | `cd js && npm run bench` |
 
 **Test Environment:**

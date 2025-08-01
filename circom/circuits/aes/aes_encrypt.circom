@@ -5,6 +5,10 @@ include "aes_emulation_tables.circom";
 include "aes_emulation.circom";
 include "helper_functions.circom";
 
+// Keystream 을 만들어 내는 컴포넌트
+// in: ctr
+// ks: key
+// out = AES(ctr, key)
 template AESEncrypt(ROUNDS)
 {
     // (rounds + 1) * word_size * bytes_in_word * bits_in_byte
@@ -20,6 +24,7 @@ template AESEncrypt(ROUNDS)
     
     component xor_1[4][32];
 
+    // 1. AddRoundKey
     for(i=0; i<4; i++)
     {
         for(j=0; j<32; j++)
@@ -39,6 +44,12 @@ template AESEncrypt(ROUNDS)
     component num2bits_1[ROUNDS - 1][4][4];
     component xor_3[ROUNDS - 1][4][32];
 
+    // 2. T-Table 기반 최적화
+    //   j=0 (첫 번째 열)일 때:
+    //   k=0: T₀[s₀] 저장
+    //   k=1: T₀[s₀] ⊕ T₁[s₁] 계산
+    //   k=2: (T₀[s₀] ⊕ T₁[s₁]) ⊕ T₂[s₂] 계산
+    //   k=3: ((T₀[s₀] ⊕ T₁[s₁]) ⊕ T₂[s₂]) ⊕ T₃[s₃] = MixColumns 결과
     for(i=0; i<ROUNDS-1; i++)
     {
         for(j=0; j<4; j++)
@@ -47,12 +58,16 @@ template AESEncrypt(ROUNDS)
             {
                 bits2num_1[i][j][k] = Bits2Num(8);
                 num2bits_1[i][j][k] = Num2Bits(32);
+                // 2.1 ShiftRows
                 var s_tmp[32] = s[(j+k)%4];
                 
                 for(l=0; l<8; l++) bits2num_1[i][j][k].in[l] <== s_tmp[k*8+7-l];
 
+                // 2.2 SubBytes + MixColumns : T-table 조회로 대체
                 num2bits_1[i][j][k].in <-- emulated_aesenc_enc_table(k, bits2num_1[i][j][k].out);
+                // in에 들어있는건 0x64d5d5b1 처럼 concat되어있는것. 그러므로 이를 각각 잘라서 xor 해줘야지 Multiplication이 완료된다.
 
+                // 2.3 열 결합
                 if(k==0)
                 {
                     for(l=0; l<4; l++)
@@ -93,6 +108,7 @@ template AESEncrypt(ROUNDS)
             }
         }
 
+        // 2.4 AddRoundKey
         for(j=0; j<4; j++)
         {
             for(l=0; l<32; l++)
@@ -104,6 +120,8 @@ template AESEncrypt(ROUNDS)
         ks_index += 4;
     }
 
+    // 3. 마지막 라운드
+    // SubBytpes + ShiftRows + AddRoundKey
     component bits2num_2[16];
     var s_bytes[16];
 
@@ -119,7 +137,9 @@ template AESEncrypt(ROUNDS)
 
     component row_shifting = EmulatedAesencRowShifting();
     component sub_bytes = EmulatedAesencSubstituteBytes();
+    // 3.1 Shift Rows
     for(i=0; i<16; i++) row_shifting.in[i] <== s_bytes[i];
+    // 3.2 SubBytes
     for(i=0; i<16; i++) sub_bytes.in[i] <== row_shifting.out[i];
 
     component num2bits_2[16];
@@ -136,6 +156,7 @@ template AESEncrypt(ROUNDS)
 
     component xor_4[4][32];
 
+    // 3.3 AddRoundKey
     for(i=0; i<4; i++)
     {
         for(j=0; j<32; j++)

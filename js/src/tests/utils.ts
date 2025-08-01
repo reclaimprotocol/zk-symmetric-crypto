@@ -2,6 +2,7 @@ import { wasm as WasmTester } from 'circom_tester'
 import { createCipheriv } from 'crypto'
 import { cpus } from 'os'
 import { join } from 'path'
+import { makeBarretenbergZKOperator } from '../barretenberg/operator'
 import {
 	EncryptionAlgorithm,
 	makeExpanderZkOperator,
@@ -41,18 +42,20 @@ export function loadCircuit(name: string) {
 
 const fetcher = makeLocalFileFetch()
 
-type ConfigItem = 'snarkjs'
-	| 'gnark'
-	| 'expander-single-thread'
-	| 'expander-multi-thread'
+type ConfigItem ='barretenberg'
+| 'snarkjs'
+| 'gnark'
+| 'expander-single-thread'
+| 'expander-multi-thread'
 
 export function getEngineForConfigItem(item: ConfigItem) {
 	return item === 'snarkjs'
-		? 'snarkjs'
-		: (
-			item === 'gnark'
-				? 'gnark'
-				: 'expander'
+		? 'snarkjs' : (
+			item === 'barretenberg'
+				? 'barretenberg'
+				: item === 'gnark'
+					? 'gnark'
+					: 'expander'
 		)
 }
 
@@ -81,6 +84,13 @@ export const ZK_CONFIG_MAP: {
 			algorithm,
 			fetcher,
 			options: { maxWorkers: cpus().length }
+		})
+	),
+	'barretenberg': (algorithm) => (
+		makeBarretenbergZKOperator({
+			algorithm,
+			fetcher,
+			options: { maxProofConcurrency: 2 }
 		})
 	),
 }

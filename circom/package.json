@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "sh scripts/build-circuit.sh",
-    "test": "node --experimental-strip-types --test",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:aes": "node --experimental-strip-types --test tests/aes-circuits.test.ts",
     "generate:ptau": "sh scripts/generate-ptau.sh",
     "download:ptau": "sh scripts/download-ptau.sh"
   },
@@ -14,6 +15,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/mocha": "^10.0.10",
     "circomlib": "^2.0.5"
   },
   "devDependencies": {

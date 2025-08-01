@@ -13,4 +13,5 @@ module.exports = {
 			'@swc/jest',
 		]
 	},
+	testTimeout: 300000, // 5 minutes for ZK proof generation
 }

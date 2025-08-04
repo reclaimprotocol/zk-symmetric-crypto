@@ -8,7 +8,7 @@ const execPromise = promisify(exec)
 
 const logger: Logger = console
 
-const GIT_COMMIT_HASH_OF_CIRCUIT = '4cc22d253eb4baa967ced3d99a3d7c9b9d98bbfe'
+const GIT_COMMIT_HASH_OF_CIRCUIT = '4784c61c4c8a75fe67bf3deeb9fe6dcd8af9ba3d'
 
 const CLONE_DIR = './zk-symmetric-crypto'
 const CLONE_CMD = [

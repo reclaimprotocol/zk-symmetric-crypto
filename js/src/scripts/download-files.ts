@@ -2,18 +2,19 @@ import { exec } from 'child_process'
 import { rename, rm } from 'fs/promises'
 import { join } from 'path'
 import { promisify } from 'util'
-import { GIT_COMMIT_HASH } from '../config'
 import { Logger } from '../types'
 
 const execPromise = promisify(exec)
 
 const logger: Logger = console
 
+const GIT_COMMIT_HASH_OF_CIRCUIT = '4cc22d253eb4baa967ced3d99a3d7c9b9d98bbfe'
+
 const CLONE_DIR = './zk-symmetric-crypto'
 const CLONE_CMD = [
 	`git clone https://github.com/ModoriLabs/zk-symmetric-crypto ${CLONE_DIR}`,
 	`cd ${CLONE_DIR}`,
-	`git reset ${GIT_COMMIT_HASH} --hard`
+	`git reset ${GIT_COMMIT_HASH_OF_CIRCUIT} --hard`
 ].join(' && ')
 
 const BASE_DIR = join(__dirname, '../../')
@@ -32,7 +33,7 @@ async function main() {
 	await rm(CLONE_DIR, { recursive: true, force: true })
 	logger.info(`removed old cloned "${CLONE_DIR}" directory`)
 
-	logger.info(`cloning repo, #${GIT_COMMIT_HASH}. This may take a while...`)
+	logger.info(`cloning repo, #${GIT_COMMIT_HASH_OF_CIRCUIT}. This may take a while...`)
 
 	await execPromise(CLONE_CMD)
 	logger.info(`cloned repo to "${CLONE_DIR}"`)

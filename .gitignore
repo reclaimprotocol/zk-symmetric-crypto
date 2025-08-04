@@ -3,7 +3,7 @@ resources/*.r1cs
 resources/*.sym
 js/src/test.ts
 node_modules
-lib
+# lib
 
 .idea
 .DS_Store

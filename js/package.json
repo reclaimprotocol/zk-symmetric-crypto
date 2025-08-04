@@ -1,7 +1,7 @@
 {
-  "name": "@reclaimprotocol/zk-symmetric-crypto",
-  "version": "3.0.5",
-  "description": "JS Wrappers for Various ZK Snark Circuits",
+  "name": "zk-symmetric-crypto-test",
+  "version": "1.0.0",
+  "description": "JS Wrappers for Various ZK Snark Circuits for noir integration test",
   "main": "lib/index.js",
   "scripts": {
     "run:tsc": "SWC_NODE_IGNORE_DYNAMIC=true node -r @swc-node/register",

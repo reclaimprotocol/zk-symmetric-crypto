@@ -12,9 +12,8 @@ import {
 	type ZKEngine,
 	type ZKOperator,
 } from '../index.ts'
-import { encryptData, getEngineForConfigItem, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils.ts'
+import { getEngineForConfigItem, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils.ts'
 
-// TODO: add back AES tests
 const ALL_ALGOS: EncryptionAlgorithm[] = [
 	'chacha20',
 	'aes-256-ctr',
@@ -50,7 +49,8 @@ for(const { zkEngine, algorithm } of TEST_MATRIX) {
 		const {
 			bitsPerWord,
 			chunkSize,
-			keySizeBytes
+			keySizeBytes,
+			encrypt
 		} = CONFIG[algorithm]
 
 		const chunkSizeBytes = chunkSize * bitsPerWord / 8
@@ -73,12 +73,11 @@ for(const { zkEngine, algorithm } of TEST_MATRIX) {
 
 			const iv = new Uint8Array(Array.from(Array(12).keys()))
 
-			const ciphertext = encryptData(
-				algorithm,
-				plaintext,
-				privateInput.key,
+			const ciphertext = await encrypt({
+				in: plaintext,
+				key: privateInput.key,
 				iv
-			)
+			})
 			const publicInput: PublicInput = { ciphertext, iv: iv }
 
 			const proof = await generateProof({
@@ -102,12 +101,11 @@ for(const { zkEngine, algorithm } of TEST_MATRIX) {
 				key: Buffer.alloc(keySizeBytes, 2),
 			}
 
-			const totalCiphertext = encryptData(
-				algorithm,
-				totalPlaintext,
-				privateInput.key,
+			const totalCiphertext = await encrypt({
+				in: totalPlaintext,
+				key: privateInput.key,
 				iv,
-			)
+			})
 			const ciphertext = totalCiphertext
 				.subarray(offsetBytes, chunkSizeBytes + offsetBytes)
 
@@ -130,12 +128,11 @@ for(const { zkEngine, algorithm } of TEST_MATRIX) {
 			}
 
 			const iv = Buffer.alloc(12, 3)
-			const ciphertext = encryptData(
-				algorithm,
-				plaintext,
-				privateInput.key,
+			const ciphertext = await encrypt({
+				in: plaintext,
+				key: privateInput.key,
 				iv
-			)
+			})
 			const publicInput: PublicInput = { ciphertext, iv }
 
 			const proof = await generateProof({

@@ -3,7 +3,7 @@ import { Bench } from 'tinybench'
 import { CONFIG } from '../config.ts'
 import type { EncryptionAlgorithm, PrivateInput, PublicInput, ZKOperator } from '../types.ts'
 import { generateZkWitness } from '../zk.ts'
-import { encryptData, ZK_CONFIG_MAP, ZK_CONFIGS } from './utils.ts'
+import { ZK_CONFIG_MAP, ZK_CONFIGS } from './utils.ts'
 
 const ALL_ALGOS: EncryptionAlgorithm[] = [
 	'chacha20',
@@ -67,7 +67,7 @@ async function prepareDataForAlgo(
 	algo: EncryptionAlgorithm,
 	operator: ZKOperator
 ) {
-	const { keySizeBytes, chunkSize, bitsPerWord } = CONFIG[algo]
+	const { keySizeBytes, chunkSize, bitsPerWord, encrypt } = CONFIG[algo]
 	const plaintext = new Uint8Array(randomBytes(DATA_LENGTH))
 	const privateInput: PrivateInput = {
 		key: Buffer.alloc(keySizeBytes, 2),
@@ -75,12 +75,11 @@ async function prepareDataForAlgo(
 
 	const iv = new Uint8Array(12).fill(0)
 
-	const ciphertext = encryptData(
-		algo,
-		plaintext,
-		privateInput.key,
+	const ciphertext = await encrypt({
+		in: plaintext,
+		key: privateInput.key,
 		iv
-	)
+	})
 
 	const witnesses: Uint8Array[] = []
 	const chunkSizeBytes = chunkSize * bitsPerWord / 8

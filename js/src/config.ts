@@ -1,9 +1,6 @@
-import { ChaCha20Poly1305 } from '@stablelib/chacha20poly1305'
+import { type AuthenticatedSymmetricCryptoAlgorithm, crypto } from '@reclaimprotocol/tls'
 import type { AlgorithmConfig, EncryptionAlgorithm } from './types.ts'
 import { bitsToUint8Array, bitsToUintArray, toUint8Array, toUintArray, uint8ArrayToBits, uintArrayToBits } from './utils.ts'
-import { webcrypto } from './webcrypto.ts'
-
-const { subtle } = webcrypto
 
 // commit hash for this repo
 export const GIT_COMMIT_HASH = '2fcb282deb2b994a3ea4dd9039630ce2f94df8bf'
@@ -27,11 +24,7 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 			const arr = bitsToUintArray(bits)
 			return toUint8Array(arr)
 		},
-		encrypt({ key, iv, in: data }) {
-			const cipher = new ChaCha20Poly1305(key)
-			const ciphertext = cipher.seal(iv, data)
-			return ciphertext.slice(0, data.length)
-		},
+		encrypt: makeAuthenticatedEncrypt('CHACHA20-POLY1305')
 	},
 	'aes-256-ctr': {
 		index: 2,
@@ -46,7 +39,7 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 		isLittleEndian: false,
 		uint8ArrayToBits,
 		bitsToUint8Array,
-		encrypt: makeAesCtr(256),
+		encrypt: makeAuthenticatedEncrypt('AES-256-GCM')
 	},
 	'aes-128-ctr': {
 		index: 1,
@@ -61,23 +54,21 @@ export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 		isLittleEndian: false,
 		uint8ArrayToBits,
 		bitsToUint8Array,
-		encrypt: makeAesCtr(128),
+		encrypt: makeAuthenticatedEncrypt('AES-128-GCM')
 	},
 }
 
-function makeAesCtr(keyLenBits: number): AlgorithmConfig['encrypt'] {
-	return async({ key, iv, in: inp }) => {
-		const keyImp = await subtle.importKey(
-			'raw', key,
-			{ name: 'AES-GCM', length: keyLenBits },
-			false,
-			['encrypt']
-		)
-		const buff = await subtle.encrypt(
-			{ name: 'AES-GCM', iv },
-			keyImp,
-			inp
-		)
-		return new Uint8Array(buff).slice(0, inp.length)
+function makeAuthenticatedEncrypt(
+	alg: AuthenticatedSymmetricCryptoAlgorithm
+): AlgorithmConfig['encrypt'] {
+	return async({ key, iv, in: data }) => {
+		const impKey = await crypto.importKey(alg, key)
+		const { ciphertext } = await crypto.authenticatedEncrypt(alg, {
+			key: impKey,
+			iv,
+			data,
+			aead: new Uint8Array(0),
+		})
+		return ciphertext.slice(0, data.length)
 	}
 }

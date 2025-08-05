@@ -5,8 +5,9 @@ The JS (typescript really) package for generating & verifying ZK proofs for symm
 ## Install
 
 ``` sh
-npm i @reclaimprotocol/zk-symmetric-crypto
+npm i @reclaimprotocol/zk-symmetric-crypto @reclaimprotocol/tls
 ```
+(the TLS package is required for a platform-agnostic interface to crypto functions)
 
 The individual backends are optional dependencies. You can install them as needed.
 For `snarkjs`: `npm i snarkjs`
@@ -17,6 +18,15 @@ For `gnark`: `npm i koffi`
 For `expander`: No additional dependencies needed
 
 ## Usage
+
+### Setup
+
+```ts
+Set a crypto impl to use. In the browser, or NodeJS, you can use the `webcrypto` backend.
+import { setCryptoImplementation } from '@reclaimprotocol/tls'
+import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto'
+setCryptoImplementation(webcryptoCrypto)
+```
 
 ### Generating & Verifying Proofs
 

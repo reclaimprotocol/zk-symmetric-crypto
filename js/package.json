@@ -1,6 +1,6 @@
 {
   "name": "@reclaimprotocol/zk-symmetric-crypto",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "JS Wrappers for Various ZK Snark Circuits",
   "type": "module",
   "exports": {
@@ -23,7 +23,7 @@
   },
   "scripts": {
     "run:tsc": "node --experimental-strip-types",
-    "test": "node --experimental-strip-types --test --test-force-exit",
+    "test": "node --experimental-strip-types --import=./src/tests/setup.ts --test --test-force-exit",
     "bench": "NODE_ENV=test npm run run:tsc -- ./src/tests/benchmark",
     "build": "npm exec tsc -- -p tsconfig.build.json",
     "prepare": "npm run build",
@@ -56,7 +56,8 @@
   "peerDependencies": {
     "koffi": "*",
     "p-queue": "*",
-    "snarkjs": "*"
+    "snarkjs": "*",
+    "@reclaimprotocol/tls": "*"
   },
   "peerDependenciesMeta": {
     "snarkjs": {
@@ -70,13 +71,13 @@
     }
   },
   "dependencies": {
-    "@stablelib/chacha20poly1305": "^1.0.0",
     "js-base64": "^3.7.7"
   },
   "devDependencies": {
     "@adiwajshing/eslint-config": "github:adiwajshing/eslint-config",
     "@commitlint/cli": "^17.7.1",
     "@commitlint/config-conventional": "^17.7.0",
+    "@reclaimprotocol/tls": "^0.1.0",
     "@types/node": "^22.0.0",
     "circom_tester": "^0.0.20",
     "circomlib": "^2.0.5",

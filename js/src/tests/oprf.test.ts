@@ -5,7 +5,6 @@ import { makeGnarkOPRFOperator } from '../gnark/toprf.ts'
 import { strToUint8Array } from '../gnark/utils.ts'
 import type { EncryptionAlgorithm, OPRFOperator, OPRFResponseData, ZKEngine, ZKTOPRFPublicSignals } from '../types.ts'
 import { generateProof, verifyProof } from '../zk.ts'
-import { encryptData } from './utils.ts'
 
 const fetcher = makeLocalFileFetch()
 const threshold = 1
@@ -70,11 +69,11 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 				//replace part of plaintext with email
 				plaintext.set(new Uint8Array(Buffer.from(email)), pos)
 
-				const { keySizeBytes } = CONFIG[algorithm]
+				const { keySizeBytes, encrypt } = CONFIG[algorithm]
 				const key = new Uint8Array(Array.from(Array(keySizeBytes).keys()))
 				const iv = new Uint8Array(Array.from(Array(12).keys()))
 
-				const ciphertext = encryptData(algorithm, plaintext, key, iv)
+				const ciphertext = await encrypt({ in: plaintext, key, iv })
 
 				const toprf: ZKTOPRFPublicSignals = {
 					pos: pos, //pos in plaintext

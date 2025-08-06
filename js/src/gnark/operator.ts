@@ -1,6 +1,6 @@
 import { Base64 } from 'js-base64'
 import { CONFIG } from '../config.ts'
-import type { EncryptionAlgorithm, Logger, MakeZKOperatorOpts, ZKOperator } from '../types.ts'
+import type { EncryptionAlgorithm, FileFetch, Logger, MakeZKOperatorOpts, ZKOperator } from '../types.ts'
 import { serialiseNumberTo4Bytes } from '../utils.ts'
 import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils.ts'
 
@@ -21,7 +21,7 @@ export function makeGnarkZkOperator({
 			return serialiseGnarkWitness(algorithm, input)
 		},
 		async groth16Prove(witness, logger) {
-			const lib = await initGnark(logger)
+			const lib = await initGnark(algorithm, fetcher, logger)
 			const {
 				proof,
 				publicSignals
@@ -32,7 +32,7 @@ export function makeGnarkZkOperator({
 			}
 		},
 		async groth16Verify(publicSignals, proof, logger) {
-			const lib = await initGnark(logger)
+			const lib = await initGnark(algorithm, fetcher, logger)
 			const pubSignals = Base64.fromUint8Array(new Uint8Array([
 				...publicSignals.out,
 				...publicSignals.nonce,
@@ -50,10 +50,14 @@ export function makeGnarkZkOperator({
 			return executeGnarkFn(lib.verify, verifyParams) === 1
 		},
 	}
+}
 
-	async function initGnark(logger?: Logger) {
-		const { ext } = ALGS_MAP[algorithm]
-		const { index: id } = CONFIG[algorithm]
-		return initGnarkAlgorithm(id, ext, fetcher, logger)
-	}
+export async function initGnark(
+	algorithm: EncryptionAlgorithm,
+	fetcher: FileFetch,
+	logger?: Logger
+) {
+	const { ext } = ALGS_MAP[algorithm]
+	const { index: id } = CONFIG[algorithm]
+	return initGnarkAlgorithm(id, ext, fetcher, logger)
 }

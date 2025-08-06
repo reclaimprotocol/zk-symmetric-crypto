@@ -1,6 +1,6 @@
 import { exec } from 'child_process'
 import { rename, rm } from 'fs/promises'
-import { dirname, join, resolve } from 'path'
+import { dirname, join } from 'path'
 import { promisify } from 'util'
 import { GIT_COMMIT_HASH } from '../config.ts'
 import { Logger } from '../types.ts'
@@ -16,7 +16,8 @@ const CLONE_CMD = [
 	`git reset ${GIT_COMMIT_HASH} --hard`
 ].join(' && ')
 
-const BASE_DIR = join(resolve(dirname('')), '../../')
+const __dirname = dirname(import.meta.url.replace('file://', ''))
+const BASE_DIR = join(__dirname, '../../')
 const DIRS_TO_COPY = [
 	'resources',
 	'bin'

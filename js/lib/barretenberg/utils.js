@@ -9,8 +9,61 @@ const config_1 = require("../config");
  */
 function convertToNoirWitness(algorithm, input) {
     if (algorithm === 'chacha20') {
-        // ChaCha20 is not implemented in Noir yet
-        throw new Error('ChaCha20 is not implemented in Noir circuits');
+        // ChaCha20 Noir circuit expects:
+        // - key: [u32; 8] (32 bytes as 8 u32 words)
+        // - nonce: [u32; 3] (12 bytes as 3 u32 words)
+        // - counter: u32
+        // - plaintext: [u32; 32] (128 bytes as 32 u32 words)
+        // - ciphertext: [u32; 32] (128 bytes as 32 u32 words)
+        const { bitsToUint8Array, uint8ArrayToBits } = config_1.CONFIG[algorithm];
+        // Convert key from 32 bytes to 8 u32 words (little-endian)
+        const keyWords = [];
+        for (let i = 0; i < 32; i += 4) {
+            const word = (input.key[i]) |
+                (input.key[i + 1] << 8) |
+                (input.key[i + 2] << 16) |
+                (input.key[i + 3] << 24);
+            keyWords.push(word >>> 0); // Ensure unsigned 32-bit
+        }
+        // Convert nonce from 12 bytes to 3 u32 words (little-endian)
+        const nonceWords = [];
+        for (let i = 0; i < 12; i += 4) {
+            const word = (input.nonce[i]) |
+                (input.nonce[i + 1] << 8) |
+                (input.nonce[i + 2] << 16) |
+                (input.nonce[i + 3] << 24);
+            nonceWords.push(word >>> 0); // Ensure unsigned 32-bit
+        }
+        // Convert plaintext from bytes to u32 words (little-endian)
+        const plaintextWords = [];
+        for (let i = 0; i < input.in.length; i += 4) {
+            const word = (input.in[i] || 0) |
+                ((input.in[i + 1] || 0) << 8) |
+                ((input.in[i + 2] || 0) << 16) |
+                ((input.in[i + 3] || 0) << 24);
+            plaintextWords.push(word >>> 0); // Ensure unsigned 32-bit
+        }
+        // Convert ciphertext from bytes to u32 words (little-endian)
+        const ciphertextWords = [];
+        for (let i = 0; i < input.out.length; i += 4) {
+            const word = (input.out[i] || 0) |
+                ((input.out[i + 1] || 0) << 8) |
+                ((input.out[i + 2] || 0) << 16) |
+                ((input.out[i + 3] || 0) << 24);
+            ciphertextWords.push(word >>> 0); // Ensure unsigned 32-bit
+        }
+        // Pad arrays to expected sizes
+        while (plaintextWords.length < 32)
+            plaintextWords.push(0);
+        while (ciphertextWords.length < 32)
+            ciphertextWords.push(0);
+        return {
+            key: keyWords,
+            nonce: nonceWords,
+            counter: input.counter,
+            plaintext: plaintextWords,
+            ciphertext: ciphertextWords
+        };
     }
     const { chunkSize, bitsPerWord } = config_1.CONFIG[algorithm];
     const expectedSizeBytes = (chunkSize * bitsPerWord) / 8;
@@ -70,7 +123,7 @@ function getCircuitFilename(algorithm) {
         case 'aes-256-ctr':
             return 'aes_256_ctr.json';
         case 'chacha20':
-            throw new Error('ChaCha20 is not implemented in Noir circuits');
+            return 'chacha20.json';
         default:
             throw new Error(`Unknown algorithm: ${algorithm}`);
     }

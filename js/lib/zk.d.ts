@@ -21,6 +21,6 @@ export declare function verifyProof(opts: VerifyProofOpts): Promise<void>;
  */
 export declare function generateZkWitness({ algorithm, privateInput: { key }, publicInput: { ciphertext, iv, offsetBytes }, }: GenerateWitnessOpts): Promise<{
     witness: ZKProofInput;
-    plaintextArray: Uint8Array<ArrayBuffer>;
+    plaintextArray: Uint8Array;
 }>;
 export declare function getPublicSignals({ proof: { algorithm, plaintext }, publicInput: { ciphertext, iv, offsetBytes }, }: GetPublicSignalsOpts): ZKProofPublicSignals;

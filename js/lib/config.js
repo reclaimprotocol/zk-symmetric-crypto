@@ -6,7 +6,7 @@ const utils_1 = require("./utils");
 const webcrypto_1 = require("./webcrypto");
 const { subtle } = webcrypto_1.webcrypto;
 // commit hash for this repo
-exports.GIT_COMMIT_HASH = '2fcb282deb2b994a3ea4dd9039630ce2f94df8bf';
+exports.GIT_COMMIT_HASH = '9ab94804a1d7400e74fe91412f4a0d238c15320f';
 exports.CONFIG = {
     'chacha20': {
         index: 0,

@@ -13,7 +13,7 @@ const ALL_ALGOS = [
 const SUPPORTED_ALGO_MAP = {
     // TODO: impl more algos for barretenberg
     // barretenberg: ['aes-256-ctr', 'aes-128-ctr'],
-    barretenberg: ['aes-128-ctr'],
+    barretenberg: ['aes-128-ctr', 'chacha20'],
     expander: ['chacha20'],
     gnark: ALL_ALGOS,
     snarkjs: ALL_ALGOS,

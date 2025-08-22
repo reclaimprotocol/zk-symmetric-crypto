@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
+	"gnark-symmetric-crypto/circuits/chachaV3"
 	"sync"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -140,29 +142,65 @@ func InitAlgorithm(algorithmID uint8, provingKey []byte, r1csData []byte) (res b
 }
 
 func Prove(params []byte) []byte {
-	var inputParams *InputParams
-	err := json.Unmarshal(params, &inputParams)
+	// First check if this contains "toprf" field to determine type
+	var rawMap map[string]interface{}
+	err := json.Unmarshal(params, &rawMap)
 	if err != nil {
 		panic(err)
 	}
-	if prover, ok := provers[inputParams.Cipher]; ok {
 
-		if !prover.initDone {
-			panic(fmt.Sprintf("proving params are not initialized for cipher: %s", inputParams.Cipher))
+	if _, hasToprf := rawMap["toprf"]; hasToprf {
+		// This is an OPRF proof - parse as InputOPRFParams
+		var oprfParams *InputOPRFParams
+		err = json.Unmarshal(params, &oprfParams)
+		if err != nil {
+			panic(err)
 		}
-		proof, ciphertext := prover.Prove(inputParams)
 
-		res, er := json.Marshal(&OutputParams{
-			Proof:         proof,
-			PublicSignals: ciphertext,
-		})
-		if er != nil {
-			panic(er)
+		// Convert to internal format
+		internalParams := convertOPRFToInternalParams(oprfParams)
+		if prover, ok := provers[oprfParams.Cipher]; ok {
+			if !prover.initDone {
+				panic(fmt.Sprintf("proving params are not initialized for cipher: %s", oprfParams.Cipher))
+			}
+			proof, ciphertext := prover.Prove(internalParams)
+			res, er := json.Marshal(&OutputParams{
+				Proof:         proof,
+				PublicSignals: ciphertext,
+			})
+			if er != nil {
+				panic(er)
+			}
+			return res
+		} else {
+			panic("could not find prover for" + oprfParams.Cipher)
 		}
-		return res
-
 	} else {
-		panic("could not find prover for" + inputParams.Cipher)
+		// This is a non-OPRF proof - parse as InputParams
+		var inputParams *InputParams
+		err = json.Unmarshal(params, &inputParams)
+		if err != nil {
+			panic(err)
+		}
+
+		// Convert to internal format
+		internalParams := convertToInternalParams(inputParams)
+		if prover, ok := provers[inputParams.Cipher]; ok {
+			if !prover.initDone {
+				panic(fmt.Sprintf("proving params are not initialized for cipher: %s", inputParams.Cipher))
+			}
+			proof, ciphertext := prover.Prove(internalParams)
+			res, er := json.Marshal(&OutputParams{
+				Proof:         proof,
+				PublicSignals: ciphertext,
+			})
+			if er != nil {
+				panic(er)
+			}
+			return res
+		} else {
+			panic("could not find prover for" + inputParams.Cipher)
+		}
 	}
 }
 
@@ -172,4 +210,172 @@ func mustHex(s string) []byte {
 		panic(err)
 	}
 	return b
+}
+
+// Wrapper functions for backward compatibility with single nonce/counter API
+// These functions internally create arrays for the circuit requirements
+
+// Internal structure for provers (unchanged from original)
+type internalInputParams struct {
+	Cipher   string       `json:"cipher"`
+	Key      []uint8      `json:"key"`
+	Nonces   [][]uint8    `json:"nonces"`   // Array of nonces, one per block
+	Counters []uint32     `json:"counters"` // Array of counters, one per block
+	Input    []uint8      `json:"input"`    // usually it's redacted ciphertext
+	TOPRF    *TOPRFParams `json:"toprf,omitempty"`
+}
+
+// Convert InputParams to internal format
+func convertToInternalParams(params *InputParams) *internalInputParams {
+	var numBlocks int
+	switch params.Cipher {
+	case "chacha20":
+		numBlocks = chachaV3.Blocks
+	case "aes-128-ctr", "aes-256-ctr":
+		numBlocks = aes_v2.BLOCKS
+	default:
+		panic("unknown cipher: " + params.Cipher)
+	}
+
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, numBlocks)
+	counters := make([]uint32, numBlocks)
+	for b := 0; b < numBlocks; b++ {
+		nonces[b] = params.Nonce
+		counters[b] = params.Counter + uint32(b)
+	}
+
+	return &internalInputParams{
+		Cipher:   params.Cipher,
+		Key:      params.Key,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    params.Input,
+	}
+}
+
+// Convert InputOPRFParams to internal format
+func convertOPRFToInternalParams(params *InputOPRFParams) *internalInputParams {
+	return &internalInputParams{
+		Cipher:   params.Cipher,
+		Key:      params.Key,
+		Nonces:   params.Nonces,
+		Counters: params.Counters,
+		Input:    params.Input,
+		TOPRF:    params.TOPRF,
+	}
+}
+
+// ProveChaCha20 proves ChaCha20 encryption with a single nonce and counter
+// It internally duplicates the nonce and increments the counter for each block
+func ProveChaCha20(key []byte, nonce []byte, counter uint32, input []byte) []byte {
+	inputParams := &InputParams{
+		Cipher:  "chacha20",
+		Key:     key,
+		Nonce:   nonce,
+		Counter: counter,
+		Input:   input,
+	}
+
+	buf, err := json.Marshal(inputParams)
+	if err != nil {
+		panic(err)
+	}
+
+	return Prove(buf)
+}
+
+// ProveAES128 proves AES-128-CTR encryption with a single nonce and counter
+// It internally duplicates the nonce and increments the counter for each block
+func ProveAES128(key []byte, nonce []byte, counter uint32, input []byte) []byte {
+	inputParams := &InputParams{
+		Cipher:  "aes-128-ctr",
+		Key:     key,
+		Nonce:   nonce,
+		Counter: counter,
+		Input:   input,
+	}
+
+	buf, err := json.Marshal(inputParams)
+	if err != nil {
+		panic(err)
+	}
+
+	return Prove(buf)
+}
+
+// ProveAES256 proves AES-256-CTR encryption with a single nonce and counter
+// It internally duplicates the nonce and increments the counter for each block
+func ProveAES256(key []byte, nonce []byte, counter uint32, input []byte) []byte {
+	inputParams := &InputParams{
+		Cipher:  "aes-256-ctr",
+		Key:     key,
+		Nonce:   nonce,
+		Counter: counter,
+		Input:   input,
+	}
+
+	buf, err := json.Marshal(inputParams)
+	if err != nil {
+		panic(err)
+	}
+
+	return Prove(buf)
+}
+
+// ProveChaCha20OPRF proves ChaCha20 encryption with TOPRF using arrays of nonces and counters
+func ProveChaCha20OPRF(key []byte, nonces [][]uint8, counters []uint32, input []byte, toprf *TOPRFParams) []byte {
+	inputParams := &InputOPRFParams{
+		Cipher:   "chacha20-toprf",
+		Key:      key,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    input,
+		TOPRF:    toprf,
+	}
+
+	buf, err := json.Marshal(inputParams)
+	if err != nil {
+		panic(err)
+	}
+
+	return Prove(buf)
+}
+
+// ProveAES128OPRF proves AES-128-CTR encryption with TOPRF using arrays of nonces and counters
+func ProveAES128OPRF(key []byte, nonces [][]uint8, counters []uint32, input []byte, toprf *TOPRFParams) []byte {
+	inputParams := &InputOPRFParams{
+		Cipher:   "aes-128-ctr-toprf",
+		Key:      key,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    input,
+		TOPRF:    toprf,
+	}
+
+	buf, err := json.Marshal(inputParams)
+	if err != nil {
+		panic(err)
+	}
+
+	return Prove(buf)
+}
+
+// ProveAES256OPRF proves AES-256-CTR encryption with TOPRF using arrays of nonces and counters
+func ProveAES256OPRF(key []byte, nonces [][]uint8, counters []uint32, input []byte, toprf *TOPRFParams) []byte {
+	inputParams := &InputOPRFParams{
+		Cipher:   "aes-256-ctr-toprf",
+		Key:      key,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    input,
+		TOPRF:    toprf,
+	}
+
+	buf, err := json.Marshal(inputParams)
+	if err != nil {
+		panic(err)
+	}
+
+	return Prove(buf)
 }

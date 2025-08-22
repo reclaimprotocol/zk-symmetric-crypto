@@ -44,18 +44,28 @@ type TOPRFParams struct {
 	Responses       []*TOPRFResponse `json:"responses"`
 }
 
+// InputParams for non-OPRF proofs with single nonce and counter
 type InputParams struct {
+	Cipher  string  `json:"cipher"`
+	Key     []uint8 `json:"key"`
+	Nonce   []uint8 `json:"nonce"`   // Single nonce for all blocks
+	Counter uint32  `json:"counter"` // Single counter, incremented per block
+	Input   []uint8 `json:"input"`   // usually it's redacted ciphertext
+}
+
+// InputOPRFParams for OPRF proofs with arrays of nonces and counters
+type InputOPRFParams struct {
 	Cipher   string       `json:"cipher"`
 	Key      []uint8      `json:"key"`
 	Nonces   [][]uint8    `json:"nonces"`   // Array of nonces, one per block
 	Counters []uint32     `json:"counters"` // Array of counters, one per block
 	Input    []uint8      `json:"input"`    // usually it's redacted ciphertext
-	TOPRF    *TOPRFParams `json:"toprf,omitempty"`
+	TOPRF    *TOPRFParams `json:"toprf"`
 }
 
 type Prover interface {
 	SetParams(r1cs constraint.ConstraintSystem, pk groth16.ProvingKey)
-	Prove(params *InputParams) (proof []byte, output []uint8)
+	Prove(params *internalInputParams) (proof []byte, output []uint8)
 }
 
 type baseProver struct {
@@ -71,7 +81,7 @@ func (cp *ChaChaProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.P
 	cp.r1cs = r1cs
 	cp.pk = pk
 }
-func (cp *ChaChaProver) Prove(params *InputParams) (proof []byte, output []uint8) {
+func (cp *ChaChaProver) Prove(params *internalInputParams) (proof []byte, output []uint8) {
 
 	key, nonces, counters, input := params.Key, params.Nonces, params.Counters, params.Input
 
@@ -157,7 +167,7 @@ func (ap *AESProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.Prov
 	ap.r1cs = r1cs
 	ap.pk = pk
 }
-func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
+func (ap *AESProver) Prove(params *internalInputParams) (proof []byte, output []uint8) {
 
 	key, nonces, counters, input := params.Key, params.Nonces, params.Counters, params.Input
 
@@ -251,7 +261,7 @@ func (cp *ChaChaOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth
 	cp.r1cs = r1cs
 	cp.pk = pk
 }
-func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
+func (cp *ChaChaOPRFProver) Prove(params *internalInputParams) (proof []byte, output []uint8) {
 
 	key, nonces, counters, input, oprf := params.Key, params.Nonces, params.Counters, params.Input, params.TOPRF
 
@@ -371,7 +381,7 @@ func (ap *AESOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.
 	ap.r1cs = r1cs
 	ap.pk = pk
 }
-func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
+func (ap *AESOPRFProver) Prove(params *internalInputParams) (proof []byte, output []uint8) {
 
 	key, nonces, counters, input, oprf := params.Key, params.Nonces, params.Counters, params.Input, params.TOPRF
 

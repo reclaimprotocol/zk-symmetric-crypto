@@ -19,9 +19,9 @@ type AESBaseCircuit struct {
 
 type AESGadget struct {
 	api            frontend.API
-	sbox           *logderivlookup.Table
+	sbox           logderivlookup.Table
 	RCon           [11]frontend.Variable
-	t0, t1, t2, t3 *logderivlookup.Table
+	t0, t1, t2, t3 logderivlookup.Table
 	keySize        int
 }
 
@@ -134,7 +134,7 @@ func (aes *AESGadget) ShiftSub(state [16]frontend.Variable) []frontend.Variable 
 }
 
 // substitute word with naive lookup of sbox
-func (aes *AESGadget) Subws(sbox *logderivlookup.Table, a ...frontend.Variable) []frontend.Variable {
+func (aes *AESGadget) Subws(sbox logderivlookup.Table, a ...frontend.Variable) []frontend.Variable {
 	return sbox.Lookup(a...)
 }
 

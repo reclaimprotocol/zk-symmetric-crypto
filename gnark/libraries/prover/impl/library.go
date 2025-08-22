@@ -38,33 +38,33 @@ var algorithmNames = map[uint8]string{
 
 var provers = map[string]*ProverParams{
 	"chacha20": {
-		KeyHash:     "f269ac58118b4a79954f32c8e6d58c68d5c72d0dce36e6dd46a4848e65c9b386",
-		CircuitHash: "c11b7336ffeb26092608276d0c6ae7942a5c20f6c67ef70eb89a33b12f068977",
+		KeyHash:     "e74dbfb793af8e3b62f8be035fa20764e1076ac415057204dbc1336e3079d12f",
+		CircuitHash: "517cdf7642c84dcb165a29f0accea413178fc11b21d8998461156a1acce6ebbd",
 		Prover:      &ChaChaProver{},
 	},
 	"aes-128-ctr": {
-		KeyHash:     "a0e04ecf49fc6037e8352a390200bd0b40ae51068b9808c37f80037775dd7e7f",
-		CircuitHash: "7cf164301b5a617c486bbf2df092d6fe1abfd47beccfa98a8c4c43560c055308",
+		KeyHash:     "91c509d3324b7c0c8eaf7cba9b0910a4d880533d1e613d37b48b8747c8f2412b",
+		CircuitHash: "8ef58f13706568eed44f9aa40b97da7c2f2a7f1bce47b7bfe52f7df860a049fb",
 		Prover:      &AESProver{},
 	},
 	"aes-256-ctr": {
-		KeyHash:     "0dfec654916b2500ccec395728bed9fe286ab9a243ff18502f4fab9a5315eff6",
-		CircuitHash: "ddf3af7839f9d3817fbf78f015849550246988c0801cafe77f7cb5b991e512e9",
+		KeyHash:     "bc8277d9f9a3e06b411210a5b78fc05146529971ef93e7a58d48cd7c24e17586",
+		CircuitHash: "7f589a6d1a24efa6d01f663c11b671e0abef196c15cadb93d2c6b226df7bf0dd",
 		Prover:      &AESProver{},
 	},
 	"chacha20-toprf": {
-		KeyHash:     "c25584633c828816e2307e7aa3eac042f478080ae3a0017e11b1f56b0ead0ca9",
-		CircuitHash: "b2c3af85c96df80e7c51cd6a98ebdcfc107c9d30a2c8994638bd9b4ec2c2e9cb",
+		KeyHash:     "94890204952ab6ed567c89bfd2fdbaae641a2053209782ab3e76b62e5b36263e",
+		CircuitHash: "c89d658071cfa79df85264ff5dc729bd0867456fe7dc320240a23d4621e89c73",
 		Prover:      &ChaChaOPRFProver{},
 	},
 	"aes-128-ctr-toprf": {
-		KeyHash:     "b4c7814af836253481bef13cc6fce271b2db2beb6fc93931cbae50dfd51efbd4",
-		CircuitHash: "64a97900f132caa63bf3e97653e1d47e0df7a4026dcd201df3075c609e184d13",
+		KeyHash:     "38dcc4bef71b85a8d02ef628d73259c67879f04c2b0e6cc359212c088cc7c736",
+		CircuitHash: "827d5a963f8fba81c1c46f42a3925270e8cf06a69144b948af369d8c52054ad4",
 		Prover:      &AESOPRFProver{},
 	},
 	"aes-256-ctr-toprf": {
-		KeyHash:     "fc39b43894ca9ea3a6c28e5e9ade0b9b4b855e39004a7757fdc7e3bf8452a694",
-		CircuitHash: "608d42ea0b3d4e840d0bfd86ca4a335885d097b7f8b8eba6788f20f260c06d0f",
+		KeyHash:     "50f9c857888dcc28b992036e458ae022079c2fc9be39284d581ea39636011b8f",
+		CircuitHash: "26e6f063071523531e10787f0303703c9b165f16fadead2ac629d1d98d15ac8d",
 		Prover:      &AESOPRFProver{},
 	},
 }

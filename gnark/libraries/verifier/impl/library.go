@@ -36,10 +36,10 @@ type TOPRFParams struct {
 }
 
 type InputTOPRFParams struct {
-	Nonce   []uint8      `json:"nonce"`
-	Counter uint32       `json:"counter"`
-	Input   []uint8      `json:"input"` // usually it's redacted ciphertext
-	TOPRF   *TOPRFParams `json:"toprf"`
+	Nonces   [][]uint8    `json:"nonces"`   // Array of nonces, one per block
+	Counters []uint32     `json:"counters"` // Array of counters, one per block
+	Input    []uint8      `json:"input"`    // usually it's redacted ciphertext
+	TOPRF    *TOPRFParams `json:"toprf"`
 }
 
 var verifiers = make(map[string]Verifier)

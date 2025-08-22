@@ -23,14 +23,28 @@ func TestAES256(t *testing.T) {
 	Nonce := "00FAAC24C1585EF15A43D875"
 	Counter := 1
 
-	// calculate ciphertext ourselves
+	// calculate ciphertext ourselves for each block
 	block, err := aes.NewCipher(mustHex(key))
 	if err != nil {
 		panic(err)
 	}
-	ctr := cipher.NewCTR(block, append(mustHex(Nonce), binary.BigEndian.AppendUint32(nil, uint32(Counter))...))
-	ciphertext := make([]byte, len(mustHex(plaintext)))
-	ctr.XORKeyStream(ciphertext, mustHex(plaintext))
+	plaintextBytes := mustHex(plaintext)
+	ciphertext := make([]byte, len(plaintextBytes))
+
+	// Process each block with its own counter
+	blockSize := 16
+	for b := 0; b < BLOCKS; b++ {
+		start := b * blockSize
+		end := start + blockSize
+		if end > len(plaintextBytes) {
+			end = len(plaintextBytes)
+		}
+
+		// Create CTR mode with the counter for this block
+		iv := append(mustHex(Nonce), binary.BigEndian.AppendUint32(nil, uint32(Counter+b))...)
+		ctr := cipher.NewCTR(block, iv)
+		ctr.XORKeyStream(ciphertext[start:end], plaintextBytes[start:end])
+	}
 
 	keyAssign := StrToIntSlice(key, true)
 	ptAssign := StrToIntSlice(plaintext, true)
@@ -41,8 +55,8 @@ func TestAES256(t *testing.T) {
 	assignment := AESCircuit{
 		AESBaseCircuit: AESBaseCircuit{
 			Key:     make([]frontend.Variable, 32),
-			Counter: Counter,
-			Nonce:   [12]frontend.Variable{},
+			Counter: [BLOCKS]frontend.Variable{},
+			Nonce:   [BLOCKS][12]frontend.Variable{},
 			In:      [BLOCKS * 16]frontend.Variable{},
 		},
 		Out: [BLOCKS * 16]frontend.Variable{},
@@ -59,15 +73,20 @@ func TestAES256(t *testing.T) {
 		assignment.Out[i] = ciphertext[i]
 	}
 
-	for i := 0; i < len(nonceAssign); i++ {
-		assignment.Nonce[i] = nonceAssign[i]
+	// Set the same nonce for all blocks in this test
+	for b := 0; b < BLOCKS; b++ {
+		for i := 0; i < len(nonceAssign); i++ {
+			assignment.Nonce[b][i] = nonceAssign[i]
+		}
+		// Set counter for each block (incrementing)
+		assignment.Counter[b] = Counter + b
 	}
 
 	assert.CheckCircuit(&AESCircuit{
 		AESBaseCircuit: AESBaseCircuit{
 			Key:     make([]frontend.Variable, 32),
-			Counter: Counter,
-			Nonce:   [12]frontend.Variable{},
+			Counter: [BLOCKS]frontend.Variable{},
+			Nonce:   [BLOCKS][12]frontend.Variable{},
 			In:      [BLOCKS * 16]frontend.Variable{},
 		},
 		Out: [BLOCKS * 16]frontend.Variable{},

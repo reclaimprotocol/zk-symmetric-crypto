@@ -45,12 +45,12 @@ type TOPRFParams struct {
 }
 
 type InputParams struct {
-	Cipher  string       `json:"cipher"`
-	Key     []uint8      `json:"key"`
-	Nonce   []uint8      `json:"nonce"`
-	Counter uint32       `json:"counter"`
-	Input   []uint8      `json:"input"` // usually it's redacted ciphertext
-	TOPRF   *TOPRFParams `json:"toprf,omitempty"`
+	Cipher   string       `json:"cipher"`
+	Key      []uint8      `json:"key"`
+	Nonces   [][]uint8    `json:"nonces"`   // Array of nonces, one per block
+	Counters []uint32     `json:"counters"` // Array of counters, one per block
+	Input    []uint8      `json:"input"`    // usually it's redacted ciphertext
+	TOPRF    *TOPRFParams `json:"toprf,omitempty"`
 }
 
 type Prover interface {
@@ -73,29 +73,42 @@ func (cp *ChaChaProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.P
 }
 func (cp *ChaChaProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonce, counter, input := params.Key, params.Nonce, params.Counter, params.Input
+	key, nonces, counters, input := params.Key, params.Nonces, params.Counters, params.Input
 
 	if len(key) != 32 {
 		log.Panicf("key length must be 32: %d", len(key))
 	}
-	if len(nonce) != 12 {
-		log.Panicf("nonce length must be 12: %d", len(nonce))
+	if len(nonces) != chachaV3.Blocks {
+		log.Panicf("nonce array length must be %d: %d", chachaV3.Blocks, len(nonces))
+	}
+	if len(counters) != chachaV3.Blocks {
+		log.Panicf("counter array length must be %d: %d", chachaV3.Blocks, len(counters))
+	}
+	for i, nonce := range nonces {
+		if len(nonce) != 12 {
+			log.Panicf("nonce[%d] length must be 12: %d", i, len(nonce))
+		}
 	}
 	if len(input) != 64*chachaV3.Blocks {
 		log.Panicf("input length must be %d: %d", 64*chachaV3.Blocks, len(input))
 	}
 
-	// calculate output ourselves
-
+	// calculate output ourselves for each block
 	output = make([]byte, len(input))
+	blockSize := 64 // ChaCha20 has 64-byte blocks
 
-	ctr, err := chacha20.NewUnauthenticatedCipher(key, nonce)
-	if err != nil {
-		panic(err)
+	for b := 0; b < chachaV3.Blocks; b++ {
+		start := b * blockSize
+		end := start + blockSize
+
+		ctr, err := chacha20.NewUnauthenticatedCipher(key, nonces[b])
+		if err != nil {
+			panic(err)
+		}
+
+		ctr.SetCounter(counters[b])
+		ctr.XORKeyStream(output[start:end], input[start:end])
 	}
-
-	ctr.SetCounter(counter)
-	ctr.XORKeyStream(output, input)
 
 	// convert input values to bits preserving byte order
 
@@ -105,14 +118,18 @@ func (cp *ChaChaProver) Prove(params *InputParams) (proof []byte, output []uint8
 
 	// everything else in LE order
 	bKey := utils.BytesToUint32LEBits(key)
-	bNonce := utils.BytesToUint32LEBits(nonce)
-	bCounter := utils.Uint32ToBits(counter)
 
 	witness := &chachaV3.ChaChaCircuit{}
 
 	copy(witness.Key[:], bKey)
-	copy(witness.Nonce[:], bNonce)
-	witness.Counter = bCounter
+
+	// Set per-block nonce and counter from arrays
+	for b := 0; b < chachaV3.Blocks; b++ {
+		bNonce := utils.BytesToUint32LEBits(nonces[b])
+		copy(witness.Nonce[b][:], bNonce)
+		witness.Counter[b] = utils.Uint32ToBits(counters[b])
+	}
+
 	copy(witness.In[:], bInput)
 	copy(witness.Out[:], bOutput)
 
@@ -142,13 +159,21 @@ func (ap *AESProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.Prov
 }
 func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonce, counter, input := params.Key, params.Nonce, params.Counter, params.Input
+	key, nonces, counters, input := params.Key, params.Nonces, params.Counters, params.Input
 
 	if len(key) != 32 && len(key) != 16 {
 		log.Panicf("key length must be 16 or 32: %d", len(key))
 	}
-	if len(nonce) != 12 {
-		log.Panicf("nonce length must be 12: %d", len(nonce))
+	if len(nonces) != aes_v2.BLOCKS {
+		log.Panicf("nonce array length must be %d: %d", aes_v2.BLOCKS, len(nonces))
+	}
+	if len(counters) != aes_v2.BLOCKS {
+		log.Panicf("counter array length must be %d: %d", aes_v2.BLOCKS, len(counters))
+	}
+	for i, nonce := range nonces {
+		if len(nonce) != 12 {
+			log.Panicf("nonce[%d] length must be 12: %d", i, len(nonce))
+		}
 	}
 	if len(input) != aes_v2.BLOCKS*16 {
 		log.Panicf("input length must be %d: %d", aes_v2.BLOCKS*16, len(input))
@@ -160,9 +185,21 @@ func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 	}
 
 	output = make([]byte, len(input))
+	blockSize := 16 // AES has 16-byte blocks
 
-	ctr := cipher.NewCTR(block, append(nonce, binary.BigEndian.AppendUint32(nil, counter)...))
-	ctr.XORKeyStream(output, input)
+	// Process each block with its own nonce and counter
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		start := b * blockSize
+		end := start + blockSize
+		if end > len(input) {
+			end = len(input)
+		}
+
+		// Create CTR mode with the nonce and counter for this block
+		iv := append(nonces[b], binary.BigEndian.AppendUint32(nil, counters[b])...)
+		ctr := cipher.NewCTR(block, iv)
+		ctr.XORKeyStream(output[start:end], input[start:end])
+	}
 
 	circuit := &aes_v2.AESCircuit{
 		AESBaseCircuit: aes_v2.AESBaseCircuit{
@@ -170,14 +207,18 @@ func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 		},
 	}
 
-	circuit.Counter = counter
-
 	for i := 0; i < len(key); i++ {
 		circuit.Key[i] = key[i]
 	}
-	for i := 0; i < len(nonce); i++ {
-		circuit.Nonce[i] = nonce[i]
+
+	// Set per-block nonce and counter from arrays
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		for i := 0; i < len(nonces[b]); i++ {
+			circuit.Nonce[b][i] = nonces[b][i]
+		}
+		circuit.Counter[b] = counters[b]
 	}
+
 	for i := 0; i < len(input); i++ {
 		circuit.In[i] = input[i]
 	}
@@ -212,29 +253,42 @@ func (cp *ChaChaOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth
 }
 func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonce, counter, input, oprf := params.Key, params.Nonce, params.Counter, params.Input, params.TOPRF
+	key, nonces, counters, input, oprf := params.Key, params.Nonces, params.Counters, params.Input, params.TOPRF
 
 	if len(key) != 32 {
 		log.Panicf("key length must be 32: %d", len(key))
 	}
-	if len(nonce) != 12 {
-		log.Panicf("nonce length must be 12: %d", len(nonce))
+	if len(nonces) != chachaV3.Blocks {
+		log.Panicf("nonce array length must be %d: %d", chachaV3.Blocks, len(nonces))
+	}
+	if len(counters) != chachaV3.Blocks {
+		log.Panicf("counter array length must be %d: %d", chachaV3.Blocks, len(counters))
+	}
+	for i, nonce := range nonces {
+		if len(nonce) != 12 {
+			log.Panicf("nonce[%d] length must be 12: %d", i, len(nonce))
+		}
 	}
 	if len(input) != chachaV3.Blocks*64 {
 		log.Panicf("input length must be %d: %d", chachaV3.Blocks*64, len(input))
 	}
 
-	// calculate ciphertext ourselves
-
+	// calculate ciphertext ourselves for each block
 	output = make([]byte, len(input))
+	blockSize := 64 // ChaCha20 has 64-byte blocks
 
-	ctr, err := chacha20.NewUnauthenticatedCipher(key, nonce)
-	if err != nil {
-		panic(err)
+	for b := 0; b < chachaV3.Blocks; b++ {
+		start := b * blockSize
+		end := start + blockSize
+
+		ctr, err := chacha20.NewUnauthenticatedCipher(key, nonces[b])
+		if err != nil {
+			panic(err)
+		}
+
+		ctr.SetCounter(counters[b])
+		ctr.XORKeyStream(output[start:end], input[start:end])
 	}
-
-	ctr.SetCounter(counter)
-	ctr.XORKeyStream(output, input)
 
 	// convert input values to bits preserving byte order
 
@@ -244,8 +298,6 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 
 	// everything else in LE order
 	bKey := utils.BytesToUint32LEBits(key)
-	bNonce := utils.BytesToUint32LEBits(nonce)
-	bCounter := utils.Uint32ToBits(counter)
 
 	var resps [toprf.Threshold]twistededwards.Point
 	var coeffs [toprf.Threshold]frontend.Variable
@@ -280,8 +332,14 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	}
 
 	copy(witness.Key[:], bKey)
-	copy(witness.Nonce[:], bNonce)
-	witness.Counter = bCounter
+
+	// Set per-block nonce and counter from arrays
+	for b := 0; b < chachaV3.Blocks; b++ {
+		bNonce := utils.BytesToUint32LEBits(nonces[b])
+		copy(witness.Nonce[b][:], bNonce)
+		witness.Counter[b] = utils.Uint32ToBits(counters[b])
+	}
+
 	copy(witness.In[:], bInput)
 	copy(witness.Out[:], bOutput)
 
@@ -315,13 +373,21 @@ func (ap *AESOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.
 }
 func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonce, counter, input, oprf := params.Key, params.Nonce, params.Counter, params.Input, params.TOPRF
+	key, nonces, counters, input, oprf := params.Key, params.Nonces, params.Counters, params.Input, params.TOPRF
 
 	if len(key) != 32 && len(key) != 16 {
 		log.Panicf("key length must be 16 or 32: %d", len(key))
 	}
-	if len(nonce) != 12 {
-		log.Panicf("nonce length must be 12: %d", len(nonce))
+	if len(nonces) != aes_v2.BLOCKS {
+		log.Panicf("nonce array length must be %d: %d", aes_v2.BLOCKS, len(nonces))
+	}
+	if len(counters) != aes_v2.BLOCKS {
+		log.Panicf("counter array length must be %d: %d", aes_v2.BLOCKS, len(counters))
+	}
+	for i, nonce := range nonces {
+		if len(nonce) != 12 {
+			log.Panicf("nonce[%d] length must be 12: %d", i, len(nonce))
+		}
 	}
 	if len(input) != aes_v2.BLOCKS*16 {
 		log.Panicf("input length must be %d: %d", aes_v2.BLOCKS*16, len(input))
@@ -333,9 +399,21 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	}
 
 	output = make([]byte, len(input))
+	blockSize := 16 // AES has 16-byte blocks
 
-	ctr := cipher.NewCTR(block, append(nonce, binary.BigEndian.AppendUint32(nil, counter)...))
-	ctr.XORKeyStream(output, input)
+	// Process each block with its own nonce and counter
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		start := b * blockSize
+		end := start + blockSize
+		if end > len(input) {
+			end = len(input)
+		}
+
+		// Create CTR mode with the nonce and counter for this block
+		iv := append(nonces[b], binary.BigEndian.AppendUint32(nil, counters[b])...)
+		ctr := cipher.NewCTR(block, iv)
+		ctr.XORKeyStream(output[start:end], input[start:end])
+	}
 
 	var resps [toprf.Threshold]twistededwards.Point
 	var coeffs [toprf.Threshold]frontend.Variable
@@ -373,13 +451,16 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	utils.SetBitmask(circuit.Bitmask[:], oprf.Pos, oprf.Len)
 	circuit.Len = oprf.Len
 
-	circuit.Counter = counter
-
 	for i := 0; i < len(key); i++ {
 		circuit.Key[i] = key[i]
 	}
-	for i := 0; i < len(nonce); i++ {
-		circuit.Nonce[i] = nonce[i]
+
+	// Set per-block nonce and counter from arrays
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		for i := 0; i < len(nonces[b]); i++ {
+			circuit.Nonce[b][i] = nonces[b][i]
+		}
+		circuit.Counter[b] = counters[b]
 	}
 	for i := 0; i < len(input); i++ {
 		circuit.In[i] = input[i]

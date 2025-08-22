@@ -12,8 +12,8 @@ const NB = 4
 
 type AESBaseCircuit struct {
 	Key     []frontend.Variable
-	Nonce   [12]frontend.Variable          `gnark:",public"`
-	Counter frontend.Variable              `gnark:",public"`
+	Nonce   [BLOCKS][12]frontend.Variable  `gnark:",public"`
+	Counter [BLOCKS]frontend.Variable      `gnark:",public"`
 	In      [BLOCKS * 16]frontend.Variable `gnark:",public"`
 }
 
@@ -53,25 +53,24 @@ func (aes *AESBaseCircuit) Define(api frontend.API, out [BLOCKS * 16]frontend.Va
 		return errors.New("key size must be 16 or 32")
 	}
 
-	counter := aes.Counter
 	var counterBlock [16]frontend.Variable
 
 	gAes := NewAESGadget(api, keySize)
 
-	for i := 0; i < 12; i++ {
-		counterBlock[i] = aes.Nonce[i]
-	}
 	for b := 0; b < BLOCKS; b++ {
-		gAes.createIV(counter, counterBlock[:])
+		// Use per-block nonce
+		for i := 0; i < 12; i++ {
+			counterBlock[i] = aes.Nonce[b][i]
+		}
+		// Use per-block counter
+		gAes.createIV(aes.Counter[b], counterBlock[:])
 		// encrypt counter under key
 		keystream := gAes.Encrypt(aes.Key, counterBlock)
 
 		for i := 0; i < 16; i++ {
 			api.AssertIsEqual(out[b*16+i], gAes.VariableXor(keystream[i], aes.In[b*16+i], 8))
 		}
-		counter = api.Add(counter, 1)
 	}
-	api.AssertIsEqual(counter, api.Add(aes.Counter, BLOCKS))
 
 	return nil
 }

@@ -113,12 +113,20 @@ func TestFullChaCha20(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bIn)
 
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, CHACHA20_BLOCKS)
+	counters := make([]uint32, CHACHA20_BLOCKS)
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "chacha20",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bIn,
+		Cipher:   "chacha20",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bIn,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -129,10 +137,16 @@ func TestFullChaCha20(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	signals = append(signals, bNonce...)
-	bCounter := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bCounter, counter)
-	signals = append(signals, bCounter...)
+	// Append nonces for each block
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		signals = append(signals, bNonce...)
+	}
+	// Append counters for each block
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		bCounter := make([]byte, 4)
+		binary.LittleEndian.PutUint32(bCounter, counter+uint32(b))
+		signals = append(signals, bCounter...)
+	}
 	signals = append(signals, bIn...)
 
 	inParams := &verifier.InputVerifyParams{
@@ -158,12 +172,20 @@ func TestFullAES256(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bPt)
 
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "aes-256-ctr",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bPt,
+		Cipher:   "aes-256-ctr",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -174,10 +196,16 @@ func TestFullAES256(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	signals = append(signals, bNonce...)
-	bCounter := make([]byte, 4)
-	binary.BigEndian.PutUint32(bCounter, counter)
-	signals = append(signals, bCounter...)
+	// Append nonces for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		signals = append(signals, bNonce...)
+	}
+	// Append counters for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		bCounter := make([]byte, 4)
+		binary.BigEndian.PutUint32(bCounter, counter+uint32(b))
+		signals = append(signals, bCounter...)
+	}
 	signals = append(signals, bPt...)
 
 	inParams := &verifier.InputVerifyParams{
@@ -202,12 +230,20 @@ func TestFullAES128(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bPt)
 
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "aes-128-ctr",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bPt,
+		Cipher:   "aes-128-ctr",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -218,10 +254,16 @@ func TestFullAES128(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	signals = append(signals, bNonce...)
-	bCounter := make([]byte, 4)
-	binary.BigEndian.PutUint32(bCounter, counter)
-	signals = append(signals, bCounter...)
+	// Append nonces for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		signals = append(signals, bNonce...)
+	}
+	// Append counters for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		bCounter := make([]byte, 4)
+		binary.BigEndian.PutUint32(bCounter, counter+uint32(b))
+		signals = append(signals, bCounter...)
+	}
 	signals = append(signals, bPt...)
 
 	inParams := &verifier.InputVerifyParams{
@@ -333,12 +375,20 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	err = json.Unmarshal(finResp, &out)
 	assert.NoError(err)
 
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, CHACHA20_BLOCKS)
+	counters := make([]uint32, CHACHA20_BLOCKS)
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "chacha20-toprf",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bInput,
+		Cipher:   "chacha20-toprf",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bInput,
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -370,9 +420,9 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		}
 	}
 	oprfParams := &verifier.InputTOPRFParams{
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bInput,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bInput,
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -474,12 +524,20 @@ func TestFullAES128OPRF(t *testing.T) {
 	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "aes-128-ctr-toprf",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bInput,
+		Cipher:   "aes-128-ctr-toprf",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bInput,
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -511,9 +569,9 @@ func TestFullAES128OPRF(t *testing.T) {
 		}
 	}
 	oprfParams := &verifier.InputTOPRFParams{
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bInput,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bInput,
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -614,12 +672,20 @@ func TestFullAES256OPRF(t *testing.T) {
 	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "aes-256-ctr-toprf",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bInput,
+		Cipher:   "aes-256-ctr-toprf",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bInput,
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -651,9 +717,9 @@ func TestFullAES256OPRF(t *testing.T) {
 		}
 	}
 	oprfParams := &verifier.InputTOPRFParams{
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bInput,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bInput,
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -678,7 +744,9 @@ func TestFullAES256OPRF(t *testing.T) {
 func Benchmark_ProveAES128(b *testing.B) {
 	prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs)
 	b.ResetTimer()
-	params := `{"cipher":"aes-128-ctr","key":"Ilqk8vMs/lrdrt9bEpM3qQ==","nonce":"/T8j2un1mcMh0Lt4","counter":298071680,"input":"mBiZrxJnp1ALlddPWenBt12YsVzSMFudhjbMC9rZtx//D0LMi5R8+/bzkKZgTaoxy3N0Gdgf5//U7kObAKBNE3votSHtiNhZUUZsoUvD5fw="}`
+	// AES has 5 blocks, each needs its own nonce and counter
+	// Input is 5*16 = 80 bytes
+	params := `{"cipher":"aes-128-ctr","key":"Ilqk8vMs/lrdrt9bEpM3qQ==","nonces":["/T8j2un1mcMh0Lt4","/T8j2un1mcMh0Lt4","/T8j2un1mcMh0Lt4","/T8j2un1mcMh0Lt4","/T8j2un1mcMh0Lt4"],"counters":[298071680,298071681,298071682,298071683,298071684],"input":"mBiZrxJnp1ALlddPWenBt12YsVzSMFudhjbMC9rZtx//D0LMi5R8+/bzkKZgTaoxy3N0Gdgf5//U7kObAKBNE3votSHtiNhZUUZsoUvD5fw="}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -688,7 +756,9 @@ func Benchmark_ProveAES128(b *testing.B) {
 func Benchmark_ProveAES256(b *testing.B) {
 	prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs)
 	b.ResetTimer()
-	params := `{"cipher":"aes-256-ctr","key":"D90Byc5KBESfgf52T5T+VbKIR56UCldsfD/k3QRq1FU=","nonce":"xaPdohzb+eNGkzhl","counter":2841725616,"input":"l4nng90p9WsrHCVYqIB0UoBPEOnZxigJ7qSGTRMU5nEgrXO7CpqmQov0p4eZ4bKJI3SvpgQ2jxqu+FJDjzINA9aI72YcXf4AYGtI8+sl/Ig="}`
+	// AES has 5 blocks, each needs its own nonce and counter
+	// Input is 5*16 = 80 bytes
+	params := `{"cipher":"aes-256-ctr","key":"D90Byc5KBESfgf52T5T+VbKIR56UCldsfD/k3QRq1FU=","nonces":["xaPdohzb+eNGkzhl","xaPdohzb+eNGkzhl","xaPdohzb+eNGkzhl","xaPdohzb+eNGkzhl","xaPdohzb+eNGkzhl"],"counters":[2841725616,2841725617,2841725618,2841725619,2841725620],"input":"l4nng90p9WsrHCVYqIB0UoBPEOnZxigJ7qSGTRMU5nEgrXO7CpqmQov0p4eZ4bKJI3SvpgQ2jxqu+FJDjzINA9aI72YcXf4AYGtI8+sl/Ig="}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -698,7 +768,9 @@ func Benchmark_ProveAES256(b *testing.B) {
 func Benchmark_ProveChacha(b *testing.B) {
 	prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS)
 	b.ResetTimer()
-	params := `{"cipher":"chacha20","key":"DAKfm7e+mFt0cCGacGmnDm5fVZ7UWyv7O53J27yePbs=","nonce":"I3zQZE9P8e7lXG6a","counter":1757507854,"input":"ShLAJduinXP+uOyxYoFNcUzR4c59QbcFed8YlIBPD3yRJhrVwB06tAIfP0TC2AUMztD7q60vAsK/at+WI9U0+fsgNDLhqI912HvyE1oUFm5XHpTC5VtVg1p0N4/ZjXaa7Wd9sWc2ty5eP8lEjGVzyRX6Goi+vygtkwh/1qJRc/I="}`
+	// ChaCha has 2 blocks, each needs its own nonce and counter
+	// Input is 2*64 = 128 bytes
+	params := `{"cipher":"chacha20","key":"DAKfm7e+mFt0cCGacGmnDm5fVZ7UWyv7O53J27yePbs=","nonces":["I3zQZE9P8e7lXG6a","I3zQZE9P8e7lXG6a"],"counters":[1757507854,1757507855],"input":"ShLAJduinXP+uOyxYoFNcUzR4c59QbcFed8YlIBPD3yRJhrVwB06tAIfP0TC2AUMztD7q60vAsK/at+WI9U0+fsgNDLhqI912HvyE1oUFm5XHpTC5VtVg1p0N4/ZjXaa7Wd9sWc2ty5eP8lEjGVzyRX6Goi+vygtkwh/1qJRc/I="}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -708,7 +780,8 @@ func Benchmark_ProveChacha(b *testing.B) {
 func Benchmark_ProveAES128OPRF(b *testing.B) {
 	prover.InitAlgorithm(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs)
 	b.ResetTimer()
-	params := `{"cipher":"aes-128-ctr-toprf","key":"ZAWxNb2AdgO39yzI14XsZA==","nonce":"LBsTWdRfQ2J7unF2","counter":2260824246,"input":"UTnKUAkCBrEYiC2tPMnGliYTdcbVFXrFhFRH3m3N5zl5XUhfljrNTdquVVeL2PleSc3w5m2ZI6kVePRaC/OWC8tQjwk4n7WpB8D4IpqQHSU=","toprf":{"pos":12,"len":14,"mask":"A1BXFdPv8/KMIWHKi5ayD+Ngj2x8CEqPIXaS94kBNxg=","domainSeparator":"cmVjbGFpbQ==","output":"IShCRuW+UON6xy/va104/4qxauCxbF/boK4SjbExTMM=","responses":[{"index":0,"publicKeyShare":"n/wRU9Jw6bMF/f+IwhF3SJmBQ9IevOCcNu6HOGV7NQg=","evaluated":"KhzfVQOJZfu7tacCPV82IzgmZsl9m4g931kTPvmg16Q=","c":"LeUBWWxMeLTK201i0QcyFEguuBwHOIkgWyebJHb4KuY=","r":"ATMhm3RUePybiYqj+dGM8OssXZPpkGXVeiNdoxKHhLY="}]}}`
+	// AES has 5 blocks, each needs its own nonce and counter
+	params := `{"cipher":"aes-128-ctr-toprf","key":"ZAWxNb2AdgO39yzI14XsZA==","nonces":["LBsTWdRfQ2J7unF2","LBsTWdRfQ2J7unF2","LBsTWdRfQ2J7unF2","LBsTWdRfQ2J7unF2","LBsTWdRfQ2J7unF2"],"counters":[2260824246,2260824247,2260824248,2260824249,2260824250],"input":"UTnKUAkCBrEYiC2tPMnGliYTdcbVFXrFhFRH3m3N5zl5XUhfljrNTdquVVeL2PleSc3w5m2ZI6kVePRaC/OWC8tQjwk4n7WpB8D4IpqQHSU=","toprf":{"pos":12,"len":14,"mask":"A1BXFdPv8/KMIWHKi5ayD+Ngj2x8CEqPIXaS94kBNxg=","domainSeparator":"cmVjbGFpbQ==","output":"IShCRuW+UON6xy/va104/4qxauCxbF/boK4SjbExTMM=","responses":[{"index":0,"publicKeyShare":"n/wRU9Jw6bMF/f+IwhF3SJmBQ9IevOCcNu6HOGV7NQg=","evaluated":"KhzfVQOJZfu7tacCPV82IzgmZsl9m4g931kTPvmg16Q=","c":"LeUBWWxMeLTK201i0QcyFEguuBwHOIkgWyebJHb4KuY=","r":"ATMhm3RUePybiYqj+dGM8OssXZPpkGXVeiNdoxKHhLY="}]}}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -718,7 +791,8 @@ func Benchmark_ProveAES128OPRF(b *testing.B) {
 func Benchmark_ProveAES256OPRF(b *testing.B) {
 	prover.InitAlgorithm(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs)
 	b.ResetTimer()
-	params := `{"cipher":"aes-256-ctr-toprf","key":"4IpME0BPXBIlVL7TdbRPktZVqqxQ+cUZaZN1ZQH+HXI=","nonce":"mMrCGydl9N4uwKxN","counter":4148389242,"input":"6DOHCarJBb8OdKf3cWakFKgn9BV/eVPQPaBlNwSRHA7GoGs6ijTygZwuBsYGbIw35q3U+OHyhD5M181U7Mx25uaFlZzbMr6xPp0LYk4YWuM=","toprf":{"pos":12,"len":14,"mask":"jiWalfzXdcn7geSk8UmfvaIzHiBo9AlhIm4mJT6qhg==","domainSeparator":"cmVjbGFpbQ==","output":"L0io3LqaeEdNSnZBJzAM46zlxZH30wxNf38cEvYWhhw=","responses":[{"index":1,"publicKeyShare":"y1wKCxI/i+OF8Nfjc9DyXmz67DtfWxk9fWnlFqTnlxs=","evaluated":"UApaFttzi54ShGcrXcpMKapa4emphZbdI3MNsKBjMpw=","c":"GWQKZ7Q54L2TjDvLtywRuD6AXt+8uvrQ+jGHuKIIpY4=","r":"A4RxrU5gOa0LMgLKhHVp4SfknOvYIIOLcWVPBwJ7zj4="}]}}`
+	// AES has 5 blocks, each needs its own nonce and counter
+	params := `{"cipher":"aes-256-ctr-toprf","key":"4IpME0BPXBIlVL7TdbRPktZVqqxQ+cUZaZN1ZQH+HXI=","nonces":["mMrCGydl9N4uwKxN","mMrCGydl9N4uwKxN","mMrCGydl9N4uwKxN","mMrCGydl9N4uwKxN","mMrCGydl9N4uwKxN"],"counters":[4148389242,4148389243,4148389244,4148389245,4148389246],"input":"6DOHCarJBb8OdKf3cWakFKgn9BV/eVPQPaBlNwSRHA7GoGs6ijTygZwuBsYGbIw35q3U+OHyhD5M181U7Mx25uaFlZzbMr6xPp0LYk4YWuM=","toprf":{"pos":12,"len":14,"mask":"jiWalfzXdcn7geSk8UmfvaIzHiBo9AlhIm4mJT6qhg==","domainSeparator":"cmVjbGFpbQ==","output":"L0io3LqaeEdNSnZBJzAM46zlxZH30wxNf38cEvYWhhw=","responses":[{"index":1,"publicKeyShare":"y1wKCxI/i+OF8Nfjc9DyXmz67DtfWxk9fWnlFqTnlxs=","evaluated":"UApaFttzi54ShGcrXcpMKapa4emphZbdI3MNsKBjMpw=","c":"GWQKZ7Q54L2TjDvLtywRuD6AXt+8uvrQ+jGHuKIIpY4=","r":"A4RxrU5gOa0LMgLKhHVp4SfknOvYIIOLcWVPBwJ7zj4="}]}}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -728,7 +802,8 @@ func Benchmark_ProveAES256OPRF(b *testing.B) {
 func Benchmark_ProveChachaOPRF(b *testing.B) {
 	prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs)
 	b.ResetTimer()
-	params := `{"cipher":"chacha20-toprf","key":"Ka3Qs7LgwGaRQwIXYSQKYF1bpKX7BntH1+gbgiMHyYM=","nonce":"yLApW3mIK0mM3uE9","counter":4168221410,"input":"zDdyXezLpcexVGYoZoyuFIDjpXZCV+YSVbDd5SfRHge7HEril7C0gnqR7dPbMwj/2t9g5mU4x/2bvl+grkeyUT33HCyRvebvAEfDkGENP5aO2MC71P7ynYGIAV7/4QbkflQRA9pdKOHfqCSEzd4GqNaaIKzF1/A6AHXuaeOOg5U=","toprf":{"pos":59,"len":14,"mask":"BIvVtZdOIiZSDWb1/sLKqoEXhx4mc4Kmv580KPbll3Q=","domainSeparator":"cmVjbGFpbQ==","output":"CUcueErhemKezndgP7vjGImvG8ua9104RJe8QhNcuOc=","responses":[{"index":0,"publicKeyShare":"0W07hZxwL42VhLULWKIkYDAuukzGBuCafqZVPTWPrq8=","evaluated":"JxObYdh6IlUR4+GV6Z1oBcWr5wEnWzuWUHX07gGQ+So=","c":"FUBwJawrBPQe3OJs6zLj4vpz2SEG4AU1Q6ucXIZrCyM=","r":"A8NG/ewWaCAef6Mowvq4XTgVtRRcRvaD6edkrsirUOw="}]}}`
+	// ChaCha has 2 blocks, each needs its own nonce and counter
+	params := `{"cipher":"chacha20-toprf","key":"Ka3Qs7LgwGaRQwIXYSQKYF1bpKX7BntH1+gbgiMHyYM=","nonces":["yLApW3mIK0mM3uE9","yLApW3mIK0mM3uE9"],"counters":[4168221410,4168221411],"input":"zDdyXezLpcexVGYoZoyuFIDjpXZCV+YSVbDd5SfRHge7HEril7C0gnqR7dPbMwj/2t9g5mU4x/2bvl+grkeyUT33HCyRvebvAEfDkGENP5aO2MC71P7ynYGIAV7/4QbkflQRA9pdKOHfqCSEzd4GqNaaIKzF1/A6AHXuaeOOg5U=","toprf":{"pos":59,"len":14,"mask":"BIvVtZdOIiZSDWb1/sLKqoEXhx4mc4Kmv580KPbll3Q=","domainSeparator":"cmVjbGFpbQ==","output":"CUcueErhemKezndgP7vjGImvG8ua9104RJe8QhNcuOc=","responses":[{"index":0,"publicKeyShare":"0W07hZxwL42VhLULWKIkYDAuukzGBuCafqZVPTWPrq8=","evaluated":"JxObYdh6IlUR4+GV6Z1oBcWr5wEnWzuWUHX07gGQ+So=","c":"FUBwJawrBPQe3OJs6zLj4vpz2SEG4AU1Q6ucXIZrCyM=","r":"A8NG/ewWaCAef6Mowvq4XTgVtRRcRvaD6edkrsirUOw="}]}}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -742,6 +817,175 @@ func BenchmarkTOPRFFinalize(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		oprf2.TOPRFFinalize(params)
 	}
+}
+
+func TestChaCha20RandomNoncesCounters(t *testing.T) {
+	assert := test.NewAssert(t)
+	assert.True(prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS))
+	bKey := make([]byte, 32)
+	bIn := make([]byte, 64*CHACHA20_BLOCKS)
+
+	rand.Read(bKey)
+	rand.Read(bIn)
+
+	// Create truly random nonces and counters for each block
+	nonces := make([][]uint8, CHACHA20_BLOCKS)
+	counters := make([]uint32, CHACHA20_BLOCKS)
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		nonces[b] = make([]byte, 12)
+		rand.Read(nonces[b])
+		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
+		counters[b] = uint32(tmp.Uint64())
+	}
+
+	inputParams := &prover.InputParams{
+		Cipher:   "chacha20",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bIn,
+	}
+
+	buf, _ := json.Marshal(inputParams)
+
+	res := prover.Prove(buf)
+	assert.True(len(res) > 0)
+	var outParams *prover.OutputParams
+	json.Unmarshal(res, &outParams)
+
+	signals := outParams.PublicSignals
+	// Append nonces for each block
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		signals = append(signals, nonces[b]...)
+	}
+	// Append counters for each block
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		bCounter := make([]byte, 4)
+		binary.LittleEndian.PutUint32(bCounter, counters[b])
+		signals = append(signals, bCounter...)
+	}
+	signals = append(signals, bIn...)
+
+	inParams := &verifier.InputVerifyParams{
+		Cipher:        inputParams.Cipher,
+		Proof:         outParams.Proof,
+		PublicSignals: signals,
+	}
+	inBuf, err := json.Marshal(inParams)
+	assert.NoError(err)
+	assert.True(verifier.Verify(inBuf))
+}
+
+func TestAES128RandomNoncesCounters(t *testing.T) {
+	assert := test.NewAssert(t)
+	assert.True(prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs))
+	bKey := make([]byte, 16)
+	bPt := make([]byte, aes_v2.BLOCKS*16)
+
+	rand.Read(bKey)
+	rand.Read(bPt)
+
+	// Create truly random nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = make([]byte, 12)
+		rand.Read(nonces[b])
+		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
+		counters[b] = uint32(tmp.Uint64())
+	}
+
+	inputParams := &prover.InputParams{
+		Cipher:   "aes-128-ctr",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bPt,
+	}
+
+	buf, _ := json.Marshal(inputParams)
+
+	res := prover.Prove(buf)
+	assert.True(len(res) > 0)
+	var outParams *prover.OutputParams
+	json.Unmarshal(res, &outParams)
+
+	signals := outParams.PublicSignals
+	// Append nonces for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		signals = append(signals, nonces[b]...)
+	}
+	// Append counters for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		bCounter := make([]byte, 4)
+		binary.BigEndian.PutUint32(bCounter, counters[b])
+		signals = append(signals, bCounter...)
+	}
+	signals = append(signals, bPt...)
+
+	inParams := &verifier.InputVerifyParams{
+		Cipher:        inputParams.Cipher,
+		Proof:         outParams.Proof,
+		PublicSignals: signals,
+	}
+	inBuf, _ := json.Marshal(inParams)
+	assert.True(verifier.Verify(inBuf))
+}
+
+func TestAES256RandomNoncesCounters(t *testing.T) {
+	assert := test.NewAssert(t)
+	assert.True(prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs))
+	bKey := make([]byte, 32)
+	bPt := make([]byte, aes_v2.BLOCKS*16)
+
+	rand.Read(bKey)
+	rand.Read(bPt)
+
+	// Create truly random nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = make([]byte, 12)
+		rand.Read(nonces[b])
+		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
+		counters[b] = uint32(tmp.Uint64())
+	}
+
+	inputParams := &prover.InputParams{
+		Cipher:   "aes-256-ctr",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bPt,
+	}
+
+	buf, _ := json.Marshal(inputParams)
+
+	res := prover.Prove(buf)
+	assert.True(len(res) > 0)
+	var outParams *prover.OutputParams
+	json.Unmarshal(res, &outParams)
+
+	signals := outParams.PublicSignals
+	// Append nonces for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		signals = append(signals, nonces[b]...)
+	}
+	// Append counters for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		bCounter := make([]byte, 4)
+		binary.BigEndian.PutUint32(bCounter, counters[b])
+		signals = append(signals, bCounter...)
+	}
+	signals = append(signals, bPt...)
+
+	inParams := &verifier.InputVerifyParams{
+		Cipher:        inputParams.Cipher,
+		Proof:         outParams.Proof,
+		PublicSignals: signals,
+	}
+	inBuf, _ := json.Marshal(inParams)
+	assert.True(verifier.Verify(inBuf))
 }
 
 func fetchFile(keyName string) ([]byte, error) {

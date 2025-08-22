@@ -29,28 +29,41 @@ type ChachaVerifier struct {
 
 func (cv *ChachaVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 	chunkLen := 64 * chachaV3.Blocks
-	pubLen := chunkLen*2 + 12 + 4     // in & out, nonce, counter
-	if len(publicSignals) != pubLen { // in, nonce, counter, out
+	// Updated to handle per-block nonce and counter: in & out, nonces (12 bytes * blocks), counters (4 bytes * blocks)
+	pubLen := chunkLen*2 + 12*chachaV3.Blocks + 4*chachaV3.Blocks
+	if len(publicSignals) != pubLen {
 		fmt.Printf("public signals must be %d bytes, not %d\n", pubLen, len(publicSignals))
 		return false
 	}
 
 	witness := &chachaV3.ChaChaCircuit{}
 
-	bOut := publicSignals[:chunkLen]
-	bIn := publicSignals[chunkLen+12+4:]
-	bNonce := publicSignals[chunkLen : chunkLen+12]
-	bCounter := publicSignals[chunkLen+12 : chunkLen+12+4]
+	offset := 0
+	bOut := publicSignals[offset:chunkLen]
+	offset += chunkLen
+
+	// Extract per-block nonces and counters
+	for b := 0; b < chachaV3.Blocks; b++ {
+		bNonce := publicSignals[offset : offset+12]
+		offset += 12
+		nonce := utils.BytesToUint32LEBits(bNonce)
+		copy(witness.Nonce[b][:], nonce)
+	}
+
+	for b := 0; b < chachaV3.Blocks; b++ {
+		bCounter := publicSignals[offset : offset+4]
+		offset += 4
+		counter := utils.BytesToUint32LEBits(bCounter)
+		witness.Counter[b] = counter[0]
+	}
+
+	bIn := publicSignals[offset:]
 
 	out := utils.BytesToUint32BEBits(bOut)
 	in := utils.BytesToUint32BEBits(bIn)
-	nonce := utils.BytesToUint32LEBits(bNonce)
-	counter := utils.BytesToUint32LEBits(bCounter)
 
 	copy(witness.In[:], in)
 	copy(witness.Out[:], out)
-	copy(witness.Nonce[:], nonce)
-	witness.Counter = counter[0]
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {
@@ -78,30 +91,43 @@ type AESVerifier struct {
 func (av *AESVerifier) Verify(bProof []byte, publicSignals []uint8) bool {
 
 	bytesPerInput := aes_v2.BLOCKS * 16
+	// Updated to handle per-block nonce and counter: ciphertext, nonces (12 bytes * blocks), counters (4 bytes * blocks), plaintext
+	expectedLen := bytesPerInput*2 + 12*aes_v2.BLOCKS + 4*aes_v2.BLOCKS
 
-	if len(publicSignals) != bytesPerInput*2+12+4 { // plaintext, nonce, counter, ciphertext
+	if len(publicSignals) != expectedLen {
+		fmt.Printf("public signals must be %d bytes, not %d\n", expectedLen, len(publicSignals))
 		return false
 	}
-
-	ciphertext := publicSignals[:bytesPerInput]
-	plaintext := publicSignals[bytesPerInput+12+4:]
-	nonce := publicSignals[bytesPerInput : bytesPerInput+12]
-	bCounter := publicSignals[bytesPerInput+12 : bytesPerInput+12+4]
 
 	witness := &aes_v2.AESCircuit{
 		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, 1)}, // avoid warnings
 	}
 
+	offset := 0
+	ciphertext := publicSignals[offset : offset+bytesPerInput]
+	offset += bytesPerInput
+
+	// Extract per-block nonces and counters
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonce := publicSignals[offset : offset+12]
+		offset += 12
+		for i := 0; i < 12; i++ {
+			witness.Nonce[b][i] = nonce[i]
+		}
+	}
+
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		bCounter := publicSignals[offset : offset+4]
+		offset += 4
+		witness.Counter[b] = binary.BigEndian.Uint32(bCounter)
+	}
+
+	plaintext := publicSignals[offset:]
+
 	for i := 0; i < len(plaintext); i++ {
 		witness.In[i] = plaintext[i]
 		witness.Out[i] = ciphertext[i]
 	}
-
-	for i := 0; i < len(nonce); i++ {
-		witness.Nonce[i] = nonce[i]
-	}
-
-	witness.Counter = binary.BigEndian.Uint32(bCounter)
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {
@@ -180,12 +206,18 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		},
 	}
 
-	nonce := utils.BytesToUint32LEBits(iParams.Nonce)
-	counter := utils.Uint32ToBits(iParams.Counter)
+	// Set per-block nonce and counter from arrays
+	for b := 0; b < chachaV3.Blocks; b++ {
+		if b >= len(iParams.Nonces) || b >= len(iParams.Counters) {
+			fmt.Printf("Invalid nonce/counter arrays length\n")
+			return false
+		}
+		nonce := utils.BytesToUint32LEBits(iParams.Nonces[b])
+		copy(witness.Nonce[b][:], nonce)
+		witness.Counter[b] = utils.Uint32ToBits(iParams.Counters[b])
+	}
 
 	copy(witness.In[:], utils.BytesToUint32BEBits(iParams.Input))
-	copy(witness.Nonce[:], nonce)
-	witness.Counter = counter
 
 	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
 	witness.Len = oprf.Len
@@ -266,14 +298,21 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		},
 	}
 
-	for i := 0; i < len(iParams.Nonce); i++ {
-		witness.Nonce[i] = iParams.Nonce[i]
+	// Set per-block nonce and counter from arrays
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		if b >= len(iParams.Nonces) || b >= len(iParams.Counters) {
+			fmt.Printf("Invalid nonce/counter arrays length\n")
+			return false
+		}
+		for i := 0; i < len(iParams.Nonces[b]); i++ {
+			witness.Nonce[b][i] = iParams.Nonces[b][i]
+		}
+		witness.Counter[b] = iParams.Counters[b]
 	}
+
 	for i := 0; i < len(iParams.Input); i++ {
 		witness.In[i] = iParams.Input[i]
 	}
-
-	witness.Counter = iParams.Counter
 
 	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
 	witness.Len = oprf.Len

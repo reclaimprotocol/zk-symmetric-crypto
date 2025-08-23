@@ -113,13 +113,20 @@ func TestFullChaCha20(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bIn)
 
-	// Create single nonce/counter params for non-OPRF
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, CHACHA20_BLOCKS)
+	counters := make([]uint32, CHACHA20_BLOCKS)
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "chacha20",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bIn,
+		Cipher:   "chacha20",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bIn,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -130,11 +137,11 @@ func TestFullChaCha20(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	// Append nonces for each block (duplicated from single nonce) (duplicated from single nonce)
+	// Append nonces for each block
 	for b := 0; b < CHACHA20_BLOCKS; b++ {
 		signals = append(signals, bNonce...)
 	}
-	// Append counters for each block (incremented from single counter) (incremented from single counter)
+	// Append counters for each block
 	for b := 0; b < CHACHA20_BLOCKS; b++ {
 		bCounter := make([]byte, 4)
 		binary.LittleEndian.PutUint32(bCounter, counter+uint32(b))
@@ -165,13 +172,20 @@ func TestFullAES256(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bPt)
 
-	// Create single nonce/counter params for non-OPRF
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "aes-256-ctr",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bPt,
+		Cipher:   "aes-256-ctr",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -182,11 +196,11 @@ func TestFullAES256(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	// Append nonces for each block (duplicated from single nonce)
+	// Append nonces for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		signals = append(signals, bNonce...)
 	}
-	// Append counters for each block (incremented from single counter)
+	// Append counters for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		bCounter := make([]byte, 4)
 		binary.BigEndian.PutUint32(bCounter, counter+uint32(b))
@@ -216,13 +230,20 @@ func TestFullAES128(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bPt)
 
-	// Create single nonce/counter params for non-OPRF
+	// Create arrays of nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = bNonce
+		counters[b] = counter + uint32(b)
+	}
+
 	inputParams := &prover.InputParams{
-		Cipher:  "aes-128-ctr",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bPt,
+		Cipher:   "aes-128-ctr",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -233,11 +254,11 @@ func TestFullAES128(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	// Append nonces for each block (duplicated from single nonce)
+	// Append nonces for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		signals = append(signals, bNonce...)
 	}
-	// Append counters for each block (incremented from single counter)
+	// Append counters for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		bCounter := make([]byte, 4)
 		binary.BigEndian.PutUint32(bCounter, counter+uint32(b))
@@ -362,8 +383,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		counters[b] = counter + uint32(b)
 	}
 
-	// Create OPRF params with arrays
-	inputParams := &prover.InputOPRFParams{
+	inputParams := &prover.InputParams{
 		Cipher:   "chacha20-toprf",
 		Key:      bKey,
 		Nonces:   nonces,
@@ -512,8 +532,7 @@ func TestFullAES128OPRF(t *testing.T) {
 		counters[b] = counter + uint32(b)
 	}
 
-	// Create OPRF params with arrays
-	inputParams := &prover.InputOPRFParams{
+	inputParams := &prover.InputParams{
 		Cipher:   "aes-128-ctr-toprf",
 		Key:      bKey,
 		Nonces:   nonces,
@@ -661,8 +680,7 @@ func TestFullAES256OPRF(t *testing.T) {
 		counters[b] = counter + uint32(b)
 	}
 
-	// Create OPRF params with arrays
-	inputParams := &prover.InputOPRFParams{
+	inputParams := &prover.InputParams{
 		Cipher:   "aes-256-ctr-toprf",
 		Key:      bKey,
 		Nonces:   nonces,
@@ -726,9 +744,9 @@ func TestFullAES256OPRF(t *testing.T) {
 func Benchmark_ProveAES128(b *testing.B) {
 	prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs)
 	b.ResetTimer()
-	// AES has 5 blocks, single nonce and counter incremented internally
+	// AES has 5 blocks, each needs its own nonce and counter
 	// Input is 5*16 = 80 bytes
-	params := `{"cipher":"aes-128-ctr","key":"Ilqk8vMs/lrdrt9bEpM3qQ==","nonce":"/T8j2un1mcMh0Lt4","counter":298071680,"input":"mBiZrxJnp1ALlddPWenBt12YsVzSMFudhjbMC9rZtx//D0LMi5R8+/bzkKZgTaoxy3N0Gdgf5//U7kObAKBNE3votSHtiNhZUUZsoUvD5fw="}`
+	params := `{"cipher":"aes-128-ctr","key":"Ilqk8vMs/lrdrt9bEpM3qQ==","nonces":["/T8j2un1mcMh0Lt4","/T8j2un1mcMh0Lt4","/T8j2un1mcMh0Lt4","/T8j2un1mcMh0Lt4","/T8j2un1mcMh0Lt4"],"counters":[298071680,298071681,298071682,298071683,298071684],"input":"mBiZrxJnp1ALlddPWenBt12YsVzSMFudhjbMC9rZtx//D0LMi5R8+/bzkKZgTaoxy3N0Gdgf5//U7kObAKBNE3votSHtiNhZUUZsoUvD5fw="}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -738,9 +756,9 @@ func Benchmark_ProveAES128(b *testing.B) {
 func Benchmark_ProveAES256(b *testing.B) {
 	prover.InitAlgorithm(prover.AES_256, aes256Key, aes256r1cs)
 	b.ResetTimer()
-	// AES has 5 blocks, single nonce and counter incremented internally
+	// AES has 5 blocks, each needs its own nonce and counter
 	// Input is 5*16 = 80 bytes
-	params := `{"cipher":"aes-256-ctr","key":"D90Byc5KBESfgf52T5T+VbKIR56UCldsfD/k3QRq1FU=","nonce":"xaPdohzb+eNGkzhl","counter":2841725616,"input":"l4nng90p9WsrHCVYqIB0UoBPEOnZxigJ7qSGTRMU5nEgrXO7CpqmQov0p4eZ4bKJI3SvpgQ2jxqu+FJDjzINA9aI72YcXf4AYGtI8+sl/Ig="}`
+	params := `{"cipher":"aes-256-ctr","key":"D90Byc5KBESfgf52T5T+VbKIR56UCldsfD/k3QRq1FU=","nonces":["xaPdohzb+eNGkzhl","xaPdohzb+eNGkzhl","xaPdohzb+eNGkzhl","xaPdohzb+eNGkzhl","xaPdohzb+eNGkzhl"],"counters":[2841725616,2841725617,2841725618,2841725619,2841725620],"input":"l4nng90p9WsrHCVYqIB0UoBPEOnZxigJ7qSGTRMU5nEgrXO7CpqmQov0p4eZ4bKJI3SvpgQ2jxqu+FJDjzINA9aI72YcXf4AYGtI8+sl/Ig="}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -750,9 +768,9 @@ func Benchmark_ProveAES256(b *testing.B) {
 func Benchmark_ProveChacha(b *testing.B) {
 	prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS)
 	b.ResetTimer()
-	// ChaCha has 2 blocks, single nonce and counter incremented internally
+	// ChaCha has 2 blocks, each needs its own nonce and counter
 	// Input is 2*64 = 128 bytes
-	params := `{"cipher":"chacha20","key":"DAKfm7e+mFt0cCGacGmnDm5fVZ7UWyv7O53J27yePbs=","nonce":"I3zQZE9P8e7lXG6a","counter":1757507854,"input":"ShLAJduinXP+uOyxYoFNcUzR4c59QbcFed8YlIBPD3yRJhrVwB06tAIfP0TC2AUMztD7q60vAsK/at+WI9U0+fsgNDLhqI912HvyE1oUFm5XHpTC5VtVg1p0N4/ZjXaa7Wd9sWc2ty5eP8lEjGVzyRX6Goi+vygtkwh/1qJRc/I="}`
+	params := `{"cipher":"chacha20","key":"DAKfm7e+mFt0cCGacGmnDm5fVZ7UWyv7O53J27yePbs=","nonces":["I3zQZE9P8e7lXG6a","I3zQZE9P8e7lXG6a"],"counters":[1757507854,1757507855],"input":"ShLAJduinXP+uOyxYoFNcUzR4c59QbcFed8YlIBPD3yRJhrVwB06tAIfP0TC2AUMztD7q60vAsK/at+WI9U0+fsgNDLhqI912HvyE1oUFm5XHpTC5VtVg1p0N4/ZjXaa7Wd9sWc2ty5eP8lEjGVzyRX6Goi+vygtkwh/1qJRc/I="}`
 	for i := 0; i < b.N; i++ {
 		prover.Prove([]byte(params))
 	}
@@ -810,18 +828,22 @@ func TestChaCha20RandomNoncesCounters(t *testing.T) {
 	rand.Read(bKey)
 	rand.Read(bIn)
 
-	// Create random single nonce and counter
-	bNonce := make([]byte, 12)
-	rand.Read(bNonce)
-	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-	counter := uint32(tmp.Uint64())
+	// Create truly random nonces and counters for each block
+	nonces := make([][]uint8, CHACHA20_BLOCKS)
+	counters := make([]uint32, CHACHA20_BLOCKS)
+	for b := 0; b < CHACHA20_BLOCKS; b++ {
+		nonces[b] = make([]byte, 12)
+		rand.Read(nonces[b])
+		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
+		counters[b] = uint32(tmp.Uint64())
+	}
 
 	inputParams := &prover.InputParams{
-		Cipher:  "chacha20",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bIn,
+		Cipher:   "chacha20",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bIn,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -832,14 +854,14 @@ func TestChaCha20RandomNoncesCounters(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	// Append nonces for each block (duplicated from single nonce)
+	// Append nonces for each block
 	for b := 0; b < CHACHA20_BLOCKS; b++ {
-		signals = append(signals, bNonce...)
+		signals = append(signals, nonces[b]...)
 	}
-	// Append counters for each block (incremented from single counter)
+	// Append counters for each block
 	for b := 0; b < CHACHA20_BLOCKS; b++ {
 		bCounter := make([]byte, 4)
-		binary.LittleEndian.PutUint32(bCounter, counter+uint32(b))
+		binary.LittleEndian.PutUint32(bCounter, counters[b])
 		signals = append(signals, bCounter...)
 	}
 	signals = append(signals, bIn...)
@@ -863,18 +885,22 @@ func TestAES128RandomNoncesCounters(t *testing.T) {
 	rand.Read(bKey)
 	rand.Read(bPt)
 
-	// Create random single nonce and counter
-	bNonce := make([]byte, 12)
-	rand.Read(bNonce)
-	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-	counter := uint32(tmp.Uint64())
+	// Create truly random nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = make([]byte, 12)
+		rand.Read(nonces[b])
+		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
+		counters[b] = uint32(tmp.Uint64())
+	}
 
 	inputParams := &prover.InputParams{
-		Cipher:  "aes-128-ctr",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bPt,
+		Cipher:   "aes-128-ctr",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -885,14 +911,14 @@ func TestAES128RandomNoncesCounters(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	// Append nonces for each block (duplicated from single nonce)
+	// Append nonces for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		signals = append(signals, bNonce...)
+		signals = append(signals, nonces[b]...)
 	}
-	// Append counters for each block (incremented from single counter)
+	// Append counters for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		bCounter := make([]byte, 4)
-		binary.BigEndian.PutUint32(bCounter, counter+uint32(b))
+		binary.BigEndian.PutUint32(bCounter, counters[b])
 		signals = append(signals, bCounter...)
 	}
 	signals = append(signals, bPt...)
@@ -915,18 +941,22 @@ func TestAES256RandomNoncesCounters(t *testing.T) {
 	rand.Read(bKey)
 	rand.Read(bPt)
 
-	// Create random single nonce and counter
-	bNonce := make([]byte, 12)
-	rand.Read(bNonce)
-	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-	counter := uint32(tmp.Uint64())
+	// Create truly random nonces and counters for each block
+	nonces := make([][]uint8, aes_v2.BLOCKS)
+	counters := make([]uint32, aes_v2.BLOCKS)
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		nonces[b] = make([]byte, 12)
+		rand.Read(nonces[b])
+		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
+		counters[b] = uint32(tmp.Uint64())
+	}
 
 	inputParams := &prover.InputParams{
-		Cipher:  "aes-256-ctr",
-		Key:     bKey,
-		Nonce:   bNonce,
-		Counter: counter,
-		Input:   bPt,
+		Cipher:   "aes-256-ctr",
+		Key:      bKey,
+		Nonces:   nonces,
+		Counters: counters,
+		Input:    bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -937,14 +967,14 @@ func TestAES256RandomNoncesCounters(t *testing.T) {
 	json.Unmarshal(res, &outParams)
 
 	signals := outParams.PublicSignals
-	// Append nonces for each block (duplicated from single nonce)
+	// Append nonces for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		signals = append(signals, bNonce...)
+		signals = append(signals, nonces[b]...)
 	}
-	// Append counters for each block (incremented from single counter)
+	// Append counters for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		bCounter := make([]byte, 4)
-		binary.BigEndian.PutUint32(bCounter, counter+uint32(b))
+		binary.BigEndian.PutUint32(bCounter, counters[b])
 		signals = append(signals, bCounter...)
 	}
 	signals = append(signals, bPt...)

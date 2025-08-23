@@ -68,8 +68,8 @@ var provers = map[string]*ProverParams{
 }
 
 type OutputParams struct {
-	Proof         []uint8 `json:"proof"`
-	PublicSignals []uint8 `json:"publicSignals"`
+	Proof      []uint8 `json:"proof"`
+	Ciphertext []uint8 `json:"ciphertext"`
 }
 
 type ProverParams struct {
@@ -153,8 +153,8 @@ func Prove(params []byte) []byte {
 		proof, ciphertext := prover.Prove(inputParams)
 
 		res, er := json.Marshal(&OutputParams{
-			Proof:         proof,
-			PublicSignals: ciphertext,
+			Proof:      proof,
+			Ciphertext: ciphertext,
 		})
 		if er != nil {
 			panic(er)

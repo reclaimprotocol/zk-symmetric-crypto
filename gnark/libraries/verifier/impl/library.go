@@ -12,10 +12,17 @@ import (
 	"github.com/consensys/gnark/logger"
 )
 
+type PublicSignalsJSON struct {
+	Ciphertext []uint8   `json:"ciphertext"`
+	Nonces     [][]uint8 `json:"nonces"`          // Array of nonces, one per block
+	Counters   []uint32  `json:"counters"`        // Array of counters, one per block
+	Input      []uint8   `json:"input,omitempty"` // Optional: plaintext/input for non-OPRF circuits
+}
+
 type InputVerifyParams struct {
-	Cipher        string  `json:"cipher"`
-	Proof         []uint8 `json:"proof"`
-	PublicSignals []uint8 `json:"publicSignals"`
+	Cipher        string          `json:"cipher"`
+	Proof         []uint8         `json:"proof"`
+	PublicSignals json.RawMessage `json:"publicSignals"`
 }
 
 type TOPRFResponse struct {

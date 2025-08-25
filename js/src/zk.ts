@@ -1,6 +1,6 @@
 import { concatenateUint8Arrays } from '@reclaimprotocol/tls'
 import { CONFIG } from './config.ts'
-import type { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
+import type { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, RawPublicInput, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
 import { getBlockSizeBytes, getCounterForByteOffset, splitCiphertextToBlocks } from './utils.ts'
 
 /**
@@ -97,18 +97,15 @@ export async function getPublicSignals(
 	const plaintextBlocks: Uint8Array[] = []
 	const noncesAndCounters: { nonce: Uint8Array, counter: number }[] = []
 	const blockSize = getBlockSizeBytes(algorithm)
+	const expSize = getExpectedChunkSizeBytes(algorithm)
 
 	if(!Array.isArray(publicInput)) {
-		const { iv, ciphertext, offsetBytes = 0 } = publicInput
-		if(iv.length !== ivSizeBytes) {
-			throw new Error(`iv must be ${ivSizeBytes} bytes`)
-		}
-
-		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-		const ciphertextArray
-			= padCiphertextToChunkSize(algorithm, ciphertext)
-		await addCiphertext(ciphertextArray, iv, startCounter, offsetBytes)
+		await addCiphertext({
+			...publicInput,
+			ciphertext:padCiphertextToChunkSize(algorithm, publicInput.ciphertext)
+		})
 	} else if(publicInput.length) {
+		let bytesDone = 0
 		publicInput = publicInput.flatMap(input => (
 			splitCiphertextToBlocks(algorithm, input.ciphertext, input.iv)
 				.map(item => {
@@ -116,14 +113,16 @@ export async function getPublicSignals(
 					return item
 				})
 		))
-		for(const { ciphertext, iv, offsetBytes = 0 } of publicInput) {
-			if(iv.length !== ivSizeBytes) {
-				throw new Error(`iv must be ${ivSizeBytes} bytes`)
-			}
 
-			const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-			const ciphertextArray = padCiphertextToSize(ciphertext, blockSize)
-			await addCiphertext(ciphertextArray, iv, startCounter, offsetBytes)
+		for(
+			const [i, inpt] of publicInput.entries()
+		) {
+			inpt.ciphertext = i === publicInput.length - 1
+				? padCiphertextToSize(inpt.ciphertext, expSize - bytesDone)
+				: inpt.ciphertext
+			bytesDone += inpt.ciphertext.length
+
+			await addCiphertext(inpt)
 		}
 	} else {
 		throw new Error('at least one public input is required')
@@ -137,7 +136,6 @@ export async function getPublicSignals(
 			: concatenateUint8Arrays(plaintextBlocks),
 	}
 
-	const expSize = getExpectedChunkSizeBytes(algorithm)
 	if(pubSigs.in.length !== getExpectedChunkSizeBytes(algorithm)) {
 		throw new Error(
 			`Ciphertext must be exactly ${expSize}b, got ${pubSigs.in.length}b`
@@ -147,17 +145,18 @@ export async function getPublicSignals(
 	return pubSigs
 
 	async function addCiphertext(
-		ciphertextArray: Uint8Array,
-		iv: Uint8Array,
-		startCounter: number,
-		offsetBytes: number
+		{ ciphertext, iv, offsetBytes = 0 }: RawPublicInput
 	) {
-		ciphertextBlocks.push(ciphertextArray)
-
-		const blocksInCiphertext = Math.ceil(ciphertextArray.length / blockSize)
-		for(let i = 0; i < blocksInCiphertext; i++) {
-			noncesAndCounters.push({ nonce: iv, counter: startCounter + i })
+		if(iv.length !== ivSizeBytes) {
+			throw new Error(`iv must be ${ivSizeBytes} bytes`)
 		}
+
+		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
+
+		ciphertextBlocks.push(ciphertext)
+
+		console.log(ciphertext.length, blockSize)
+		noncesAndCounters.push({ nonce: iv, counter: startCounter })
 
 		if('key' in opts) {
 			const plaintextArray = await decryptCiphertext({
@@ -165,7 +164,7 @@ export async function getPublicSignals(
 				key: opts.key,
 				iv,
 				startOffset: offsetBytes,
-				ciphertext: ciphertextArray,
+				ciphertext: ciphertext,
 			})
 			plaintextBlocks.push(plaintextArray)
 		}

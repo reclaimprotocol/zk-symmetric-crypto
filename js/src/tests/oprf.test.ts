@@ -103,7 +103,7 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 			})
 		}
 
-		it('should prove OPRF spread across blocks with multi nonces', async() => {
+		it.only('should prove OPRF spread across blocks with multi nonces', async() => {
 			const email = 'test@email.com'
 			const domainSeparator = 'reclaim'
 
@@ -130,12 +130,16 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 				.finaliseOPRF(keys.publicKey, req, resps)
 			const len = email.length
 
-			const plaintext = new Uint8Array(Buffer.alloc(80))
+			const plaintext1 = new Uint8Array(Buffer.alloc(50))
 			// replace part of plaintext with email, such that the first
 			// 64 bytes contain part of the email and the rest is in the
 			// next block
-			const pos = 56
-			plaintext.set(Buffer.from(email), pos)
+			const pos = 45
+			const emailInFirstBlock = email.slice(0, plaintext1.length - pos)
+			plaintext1.set(Buffer.from(emailInFirstBlock), pos)
+
+			const plaintext2 = new Uint8Array(email.length)
+			plaintext2.set(Buffer.from(email.slice(emailInFirstBlock.length)))
 
 			const { keySizeBytes, encrypt } = CONFIG[algorithm]
 			const key = new Uint8Array(Array.from(Array(keySizeBytes).keys()))
@@ -144,9 +148,9 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 				= new Uint8Array(Array.from(Array(12).keys()).map(i => i + 1))
 
 			const ciphertext1
-				= await encrypt({ in: plaintext.slice(0, 64), key, iv: iv1 })
+				= await encrypt({ in: plaintext1, key, iv: iv1 })
 			const ciphertext2
-				= await encrypt({ in: plaintext.slice(64), key, iv: iv2 })
+				= await encrypt({ in: plaintext2, key, iv: iv2 })
 
 			const toprf: ZKTOPRFPublicSignals = {
 				pos: pos, //pos in plaintext

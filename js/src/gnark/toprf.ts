@@ -24,10 +24,14 @@ export function makeGnarkOPRFOperator({
 		},
 		async groth16Prove(witness, logger) {
 			const lib = await initGnark(logger)
-			const {
-				proof
-			} = await executeGnarkFnAndGetJson(lib.prove, witness)
-			return { proof: Base64.toUint8Array(proof) }
+			const rslt = await executeGnarkFnAndGetJson(lib.prove, witness)
+			if(!('proof' in rslt) || !rslt.proof) {
+				throw new Error(
+					`Failed to create gnark proof: ${JSON.stringify(rslt)}`
+				)
+			}
+
+			return { proof: Base64.toUint8Array(rslt.proof) }
 		},
 		async groth16Verify(publicSignals, proof, logger) {
 			const lib = await initGnark(logger)

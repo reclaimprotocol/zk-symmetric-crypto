@@ -1,7 +1,7 @@
 import { Base64, fromUint8Array, toUint8Array } from 'js-base64'
 import koffi from 'koffi'
 import type { EncryptionAlgorithm, KeyShare, Logger, MakeZKOperatorOpts, OPRFOperator } from '../types.ts'
-import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils.ts'
+import { executeGnarkFn, executeGnarkFnAndGetJson, generateGnarkWitness, initGnarkAlgorithm, serialiseGnarkWitness } from './utils.ts'
 
 const ALGS_MAP: {
 	[key in EncryptionAlgorithm]: {
@@ -31,14 +31,14 @@ export function makeGnarkOPRFOperator({
 		},
 		async groth16Verify(publicSignals, proof, logger) {
 			const lib = await initGnark(logger)
-			const pubSignals = serialiseGnarkWitness(algorithm, publicSignals)
+			const pubSignals = generateGnarkWitness(algorithm, publicSignals)
 
 			const verifyParams = JSON.stringify({
 				cipher: `${algorithm}-toprf`,
 				proof: typeof proof === 'string'
 					? proof
 					: Base64.fromUint8Array(proof),
-				publicSignals: Base64.fromUint8Array(pubSignals),
+				publicSignals: pubSignals
 			})
 			return executeGnarkFn(lib.verify, verifyParams) === 1
 		},

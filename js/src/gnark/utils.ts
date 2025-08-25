@@ -18,6 +18,9 @@ export type GnarkLib = {
 	koffi: typeof import('koffi')
 }
 
+type GnarkWitnessInput = ZKProofInput | ZKProofInputOPRF
+	| ZKProofPublicSignals | ZKProofPublicSignalsOPRF
+
 // golang uses different arch names
 // for some archs -- so this map corrects the name
 const ARCH_MAP: { [A in NodeJS.Architecture]?: string } = {
@@ -136,26 +139,27 @@ export function strToUint8Array(str: string) {
 }
 
 export function serialiseGnarkWitness(
-	cipher: EncryptionAlgorithm,
-	input: ZKProofInput | ZKProofInputOPRF | ZKProofPublicSignals | ZKProofPublicSignalsOPRF
+	cipher: EncryptionAlgorithm, input: GnarkWitnessInput
 ) {
 	const json = generateGnarkWitness(cipher, input)
 	return strToUint8Array(JSON.stringify(json))
 }
 
 export function generateGnarkWitness(
-	cipher: EncryptionAlgorithm,
-	input: ZKProofInput | ZKProofInputOPRF
-		| ZKProofPublicSignals | ZKProofPublicSignalsOPRF
+	cipher: EncryptionAlgorithm, input: GnarkWitnessInput
 ) {
-	//input is bits, we convert them back to bytes
+	// input is bits, we convert them back to bytes
 	return {
 		cipher: cipher + ('toprf' in input ? '-toprf' : ''),
 		key: 'key' in input
 			? Base64.fromUint8Array(input.key)
 			: undefined,
-		nonce: Base64.fromUint8Array(input.nonce),
-		counter: input.counter,
+		ciphertext: 'out' in input
+			? Base64.fromUint8Array(input.out)
+			: undefined,
+		nonces: input.noncesAndCounters
+			.map(n => Base64.fromUint8Array(n.nonce)),
+		counters: input.noncesAndCounters.map(n => n.counter),
 		input: Base64.fromUint8Array(input.in),
 		toprf: generateTOPRFParams()
 	}

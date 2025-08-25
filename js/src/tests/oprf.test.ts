@@ -3,7 +3,8 @@ import { CONFIG } from '../config.ts'
 import { makeLocalFileFetch } from '../file-fetch.ts'
 import { makeGnarkOPRFOperator } from '../gnark/toprf.ts'
 import { strToUint8Array } from '../gnark/utils.ts'
-import type { EncryptionAlgorithm, OPRFOperator, OPRFResponseData, ZKEngine, ZKTOPRFPublicSignals } from '../types.ts'
+import type { EncryptionAlgorithm, OPRFOperator, OPRFResponseData, RawPublicInput, ZKEngine, ZKTOPRFPublicSignals } from '../types.ts'
+import { getBlockSizeBytes } from '../utils.ts'
 import { generateProof, verifyProof } from '../zk.ts'
 
 const fetcher = makeLocalFileFetch()
@@ -102,5 +103,86 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 				})
 			})
 		}
+
+		it.only('should prove OPRF spread across blocks with unique counters', async() => {
+			const email = 'test@email.com'
+			const domainSeparator = 'reclaim'
+
+			const keys = await operator.generateThresholdKeys(5, threshold)
+			const req = await operator
+				.generateOPRFRequestData(strToUint8Array(email), domainSeparator)
+
+			const resps: OPRFResponseData[] = []
+			for(let i = 0; i < threshold; i++) {
+				const evalResult = await operator.evaluateOPRF(
+					keys.shares[i].privateKey,
+					req.maskedData
+				)
+
+				resps.push({
+					publicKeyShare: keys.shares[i].publicKey,
+					evaluated: evalResult.evaluated,
+					c: evalResult.c,
+					r: evalResult.r,
+				})
+			}
+
+			const nullifier = await operator
+				.finaliseOPRF(keys.publicKey, req, resps)
+			const len = email.length
+
+			const plaintext = new Uint8Array(Buffer.alloc(80))
+			// replace part of plaintext with email, such that the first
+			// 64 bytes contain part of the email and the rest is in the
+			// next block
+			const pos = 56
+			plaintext.set(Buffer.from(email), pos)
+
+			const { keySizeBytes, encrypt } = CONFIG[algorithm]
+			const key = new Uint8Array(Array.from(Array(keySizeBytes).keys()))
+			const iv1 = new Uint8Array(Array.from(Array(12).keys()))
+			const iv2
+				= new Uint8Array(Array.from(Array(12).keys()).map(i => i + 1))
+
+			const ciphertext1
+				= await encrypt({ in: plaintext.slice(0, 64), key, iv: iv1 })
+			const ciphertext2
+				= await encrypt({ in: plaintext.slice(64), key, iv: iv2 })
+
+			const toprf: ZKTOPRFPublicSignals = {
+				pos: pos, //pos in plaintext
+				len: len, // length of data to "hash"
+				domainSeparator,
+				output: nullifier,
+				responses: resps
+			}
+
+			const publicInput = [
+				...splitCiphertextToBlocks(ciphertext1, iv1),
+				...splitCiphertextToBlocks(ciphertext2, iv2),
+			]
+			const proof = await generateProof({
+				algorithm,
+				privateInput: { key },
+				publicInput,
+				operator,
+				mask: req.mask,
+				toprf,
+			})
+
+			await verifyProof({ proof, publicInput, toprf, operator })
+		})
 	})
+
+	function splitCiphertextToBlocks(ciphertext: Uint8Array, iv: Uint8Array) {
+		const blockSize = getBlockSizeBytes(algorithm)
+		const inputs: RawPublicInput[] = []
+		for(let i = 0; i < ciphertext.length; i += blockSize) {
+			inputs.push(
+				{ iv, ciphertext: ciphertext.slice(i, i + blockSize), offsetBytes: i }
+			)
+		}
+
+		return inputs
+	}
 }

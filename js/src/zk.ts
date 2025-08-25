@@ -91,18 +91,15 @@ export async function generateZkWitness({
 export async function getPublicSignals(
 	{ publicInput, algorithm, ...opts }: GetPublicSignalsOpts
 ) {
-	publicInput = Array.isArray(publicInput) ? publicInput : [publicInput]
-	if(!publicInput.length) {
-		throw new Error('at least one public input is required')
-	}
-
 	const { ivSizeBytes } = CONFIG[algorithm]
+
 	const ciphertextBlocks: Uint8Array[] = []
 	const plaintextBlocks: Uint8Array[] = []
 	const noncesAndCounters: { nonce: Uint8Array, counter: number }[] = []
 	const blockSize = getBlockSizeBytes(algorithm)
 
-	for(const { ciphertext, iv, offsetBytes = 0 } of publicInput) {
+	if(!Array.isArray(publicInput)) {
+		const { iv, ciphertext, offsetBytes = 0 } = publicInput
 		if(iv.length !== ivSizeBytes) {
 			throw new Error(`iv must be ${ivSizeBytes} bytes`)
 		}
@@ -110,23 +107,19 @@ export async function getPublicSignals(
 		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
 		const ciphertextArray
 			= padCiphertextToChunkSize(algorithm, ciphertext)
+		await addCiphertext(ciphertextArray, iv, startCounter, offsetBytes)
+	} else if(publicInput.length) {
+		for(const { ciphertext, iv, offsetBytes = 0 } of publicInput) {
+			if(iv.length !== ivSizeBytes) {
+				throw new Error(`iv must be ${ivSizeBytes} bytes`)
+			}
 
-		const blocksInCiphertext = Math.ceil(ciphertextArray.length / blockSize)
-		for(let i = 0; i < blocksInCiphertext; i++) {
-			noncesAndCounters.push({ nonce: iv, counter: startCounter + i })
+			const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
+			const ciphertextArray = padCiphertextToSize(ciphertext, blockSize)
+			await addCiphertext(ciphertextArray, iv, startCounter, offsetBytes)
 		}
-
-		ciphertextBlocks.push(ciphertextArray)
-		if('key' in opts) {
-			const plaintextArray = await decryptCiphertext({
-				algorithm,
-				key: opts.key,
-				iv,
-				startOffset: offsetBytes,
-				ciphertext: ciphertextArray,
-			})
-			plaintextBlocks.push(plaintextArray)
-		}
+	} else {
+		throw new Error('at least one public input is required')
 	}
 
 	const pubSigs: ZKProofPublicSignals = {
@@ -145,6 +138,31 @@ export async function getPublicSignals(
 	}
 
 	return pubSigs
+
+	async function addCiphertext(
+		ciphertextArray: Uint8Array,
+		iv: Uint8Array,
+		startCounter: number,
+		offsetBytes: number
+	) {
+		ciphertextBlocks.push(ciphertextArray)
+
+		const blocksInCiphertext = Math.ceil(ciphertextArray.length / blockSize)
+		for(let i = 0; i < blocksInCiphertext; i++) {
+			noncesAndCounters.push({ nonce: iv, counter: startCounter + i })
+		}
+
+		if('key' in opts) {
+			const plaintextArray = await decryptCiphertext({
+				algorithm,
+				key: opts.key,
+				iv,
+				startOffset: offsetBytes,
+				ciphertext: ciphertextArray,
+			})
+			plaintextBlocks.push(plaintextArray)
+		}
+	}
 }
 
 function padCiphertextToChunkSize(
@@ -152,16 +170,18 @@ function padCiphertextToChunkSize(
 	ciphertext: Uint8Array
 ) {
 	const { chunkSize, bitsPerWord } = CONFIG[alg]
-
 	const expectedSizeBytes = (chunkSize * bitsPerWord) / 8
-	if(ciphertext.length > expectedSizeBytes) {
-		throw new Error(`ciphertext must be <= ${expectedSizeBytes}b`)
+	return padCiphertextToSize(ciphertext, expectedSizeBytes)
+}
+
+function padCiphertextToSize(ciphertext: Uint8Array, size: number) {
+	if(ciphertext.length > size) {
+		throw new Error(`ciphertext must be <= ${size}b`)
 	}
 
-	if(ciphertext.length < expectedSizeBytes) {
-		const arr = new Uint8Array(expectedSizeBytes)
+	if(ciphertext.length < size) {
+		const arr = new Uint8Array(size)
 		arr.set(ciphertext)
-
 		ciphertext = arr
 	}
 

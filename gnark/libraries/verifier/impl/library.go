@@ -12,11 +12,46 @@ import (
 	"github.com/consensys/gnark/logger"
 )
 
+type Block struct {
+	Nonce    []uint8 `json:"nonce"`
+	Counter  uint32  `json:"counter"`
+	Boundary *uint32 `json:"boundary,omitempty"`
+}
+
 type PublicSignalsJSON struct {
-	Ciphertext []uint8   `json:"ciphertext"`
-	Nonces     [][]uint8 `json:"nonces"`          // Array of nonces, one per block
-	Counters   []uint32  `json:"counters"`        // Array of counters, one per block
-	Input      []uint8   `json:"input,omitempty"` // Optional: plaintext/input for non-OPRF circuits
+	Ciphertext []uint8 `json:"ciphertext"`
+	Blocks     []Block `json:"blocks"`          // Array of blocks with nonce, counter, and optional boundary
+	Input      []uint8 `json:"input,omitempty"` // Optional: plaintext/input for non-OPRF circuits
+}
+
+// Helper functions for backward compatibility
+func (ps *PublicSignalsJSON) GetNonces() [][]uint8 {
+	nonces := make([][]uint8, len(ps.Blocks))
+	for i, block := range ps.Blocks {
+		nonces[i] = block.Nonce
+	}
+	return nonces
+}
+
+func (ps *PublicSignalsJSON) GetCounters() []uint32 {
+	counters := make([]uint32, len(ps.Blocks))
+	for i, block := range ps.Blocks {
+		counters[i] = block.Counter
+	}
+	return counters
+}
+
+func (ps *PublicSignalsJSON) GetBoundaries() []uint32 {
+	boundaries := make([]uint32, len(ps.Blocks))
+	for i, block := range ps.Blocks {
+		if block.Boundary != nil {
+			boundaries[i] = *block.Boundary
+		} else {
+			// Default to full block size - defaults to AES, can be adjusted based on cipher type
+			boundaries[i] = 16 // AES block size as default
+		}
+	}
+	return boundaries
 }
 
 type InputVerifyParams struct {
@@ -43,10 +78,9 @@ type TOPRFParams struct {
 }
 
 type InputTOPRFParams struct {
-	Nonces   [][]uint8    `json:"nonces"`   // Array of nonces, one per block
-	Counters []uint32     `json:"counters"` // Array of counters, one per block
-	Input    []uint8      `json:"input"`    // usually it's redacted ciphertext
-	TOPRF    *TOPRFParams `json:"toprf"`
+	Blocks []Block      `json:"blocks"` // Array of blocks with nonce, counter, and optional boundary
+	Input  []uint8      `json:"input"`  // usually it's redacted ciphertext
+	TOPRF  *TOPRFParams `json:"toprf"`
 }
 
 var verifiers = make(map[string]Verifier)
@@ -122,13 +156,6 @@ func init() {
 }
 
 func Verify(params []byte) (res bool) {
-
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Println(err)
-			res = false
-		}
-	}()
 
 	var inputParams *InputVerifyParams
 	err := json.Unmarshal(params, &inputParams)

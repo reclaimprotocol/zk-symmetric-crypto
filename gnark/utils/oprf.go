@@ -177,6 +177,47 @@ func SetBitmask(bits []frontend.Variable, pos, length uint32) {
 	}
 }
 
+// SetBitmaskWithBoundaries sets bitmask accounting for block boundaries
+// boundaries slice contains the actual data bytes used in each block
+// blockSize is the size of each block in bytes (16 for AES, 64 for ChaCha)
+func SetBitmaskWithBoundaries(bits []frontend.Variable, pos, length uint32, boundaries []uint32, blockSize uint32) {
+	bitsPerBlock := blockSize * 8
+	totalProcessed := uint32(0)
+
+	// Initialize all bits to 0
+	for i := range bits {
+		bits[i] = 0
+	}
+
+	// Set bits based on boundaries and target length
+	for blockIdx, boundary := range boundaries {
+		if totalProcessed >= length {
+			break
+		}
+
+		// Process actual data bits in this block up to the boundary or remaining length
+		bytesToProcess := boundary
+		if totalProcessed+bytesToProcess > length {
+			bytesToProcess = length - totalProcessed
+		}
+
+		// Set bits for actual data within boundary
+		for byteInBlock := uint32(0); byteInBlock < bytesToProcess && totalProcessed < length; byteInBlock++ {
+			for bit := uint32(0); bit < 8; bit++ {
+				globalBitIndex := uint32(blockIdx)*bitsPerBlock + byteInBlock*8 + bit
+				if globalBitIndex >= pos*8 && globalBitIndex < (pos+length)*8 && globalBitIndex < uint32(len(bits)) {
+					bits[globalBitIndex] = 1
+				}
+			}
+			totalProcessed++
+		}
+	}
+
+	if totalProcessed < length {
+		panic(fmt.Sprintf("insufficient data in boundaries: got %d bytes, need %d", totalProcessed, length))
+	}
+}
+
 func BEtoLE(b []byte) []byte {
 	for i := 0; i < len(b)/2; i++ {
 		b[i], b[len(b)-1-i] = b[len(b)-1-i], b[i]

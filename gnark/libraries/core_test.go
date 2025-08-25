@@ -113,20 +113,20 @@ func TestFullChaCha20(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bIn)
 
-	// Create arrays of nonces and counters for each block
-	nonces := make([][]uint8, CHACHA20_BLOCKS)
-	counters := make([]uint32, CHACHA20_BLOCKS)
+	// Create blocks with nonces and counters
+	blocks := make([]prover.Block, CHACHA20_BLOCKS)
 	for b := 0; b < CHACHA20_BLOCKS; b++ {
-		nonces[b] = bNonce
-		counters[b] = counter + uint32(b)
+		blocks[b] = prover.Block{
+			Nonce:   bNonce,
+			Counter: counter + uint32(b),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "chacha20",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bIn,
+		Cipher: "chacha20",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bIn,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -136,11 +136,27 @@ func TestFullChaCha20(t *testing.T) {
 	var outParams *prover.OutputParams
 	json.Unmarshal(res, &outParams)
 
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
+
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
+
 	// Create the new JSON structure for public signals
 	publicSignals := &verifier.PublicSignalsJSON{
 		Ciphertext: outParams.Ciphertext,
-		Nonces:     nonces,
-		Counters:   counters,
+		Blocks:     verifierBlocks,
 		Input:      bIn,
 	}
 
@@ -170,20 +186,20 @@ func TestFullAES256(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bPt)
 
-	// Create arrays of nonces and counters for each block
-	nonces := make([][]uint8, aes_v2.BLOCKS)
-	counters := make([]uint32, aes_v2.BLOCKS)
+	// Create blocks with nonces and counters
+	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		nonces[b] = bNonce
-		counters[b] = counter + uint32(b)
+		blocks[b] = prover.Block{
+			Nonce:   bNonce,
+			Counter: counter + uint32(b),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "aes-256-ctr",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bPt,
+		Cipher: "aes-256-ctr",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -193,11 +209,20 @@ func TestFullAES256(t *testing.T) {
 	var outParams *prover.OutputParams
 	json.Unmarshal(res, &outParams)
 
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
+
 	// Create the new JSON structure for public signals
 	publicSignals := &verifier.PublicSignalsJSON{
 		Ciphertext: outParams.Ciphertext,
-		Nonces:     nonces,
-		Counters:   counters,
+		Blocks:     verifierBlocks,
 		Input:      bPt,
 	}
 
@@ -227,20 +252,20 @@ func TestFullAES128(t *testing.T) {
 	rand.Read(bNonce)
 	rand.Read(bPt)
 
-	// Create arrays of nonces and counters for each block
-	nonces := make([][]uint8, aes_v2.BLOCKS)
-	counters := make([]uint32, aes_v2.BLOCKS)
+	// Create blocks with nonces and counters
+	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		nonces[b] = bNonce
-		counters[b] = counter + uint32(b)
+		blocks[b] = prover.Block{
+			Nonce:   bNonce,
+			Counter: counter + uint32(b),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "aes-128-ctr",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bPt,
+		Cipher: "aes-128-ctr",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -250,11 +275,20 @@ func TestFullAES128(t *testing.T) {
 	var outParams *prover.OutputParams
 	json.Unmarshal(res, &outParams)
 
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
+
 	// Create the new JSON structure for public signals
 	publicSignals := &verifier.PublicSignalsJSON{
 		Ciphertext: outParams.Ciphertext,
-		Nonces:     nonces,
-		Counters:   counters,
+		Blocks:     verifierBlocks,
 		Input:      bPt,
 	}
 
@@ -370,20 +404,20 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	err = json.Unmarshal(finResp, &out)
 	assert.NoError(err)
 
-	// Create arrays of nonces and counters for each block
-	nonces := make([][]uint8, CHACHA20_BLOCKS)
-	counters := make([]uint32, CHACHA20_BLOCKS)
+	// Create blocks with nonces and counters
+	blocks := make([]prover.Block, CHACHA20_BLOCKS)
 	for b := 0; b < CHACHA20_BLOCKS; b++ {
-		nonces[b] = bNonce
-		counters[b] = counter + uint32(b)
+		blocks[b] = prover.Block{
+			Nonce:   bNonce,
+			Counter: counter + uint32(b),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "chacha20-toprf",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bInput,
+		Cipher: "chacha20-toprf",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bInput,
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -401,6 +435,15 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	assert.True(len(res) > 0)
 	var outParams *prover.OutputParams
 	err = json.Unmarshal(res, &outParams)
+
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
 	assert.NoError(err)
 
 	verifyResponses := make([]*verifier.TOPRFResponse, threshold)
@@ -415,9 +458,8 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		}
 	}
 	oprfParams := &verifier.InputTOPRFParams{
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bInput,
+		Blocks: verifierBlocks,
+		Input:  bInput,
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -519,20 +561,20 @@ func TestFullAES128OPRF(t *testing.T) {
 	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
-	// Create arrays of nonces and counters for each block
-	nonces := make([][]uint8, aes_v2.BLOCKS)
-	counters := make([]uint32, aes_v2.BLOCKS)
+	// Create blocks array with nonces and counters for each block
+	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		nonces[b] = bNonce
-		counters[b] = counter + uint32(b)
+		blocks[b] = prover.Block{
+			Nonce:   bNonce,
+			Counter: counter + uint32(b),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "aes-128-ctr-toprf",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bInput,
+		Cipher: "aes-128-ctr-toprf",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bInput,
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -550,6 +592,15 @@ func TestFullAES128OPRF(t *testing.T) {
 	assert.True(len(res) > 0)
 	var outParams *prover.OutputParams
 	err = json.Unmarshal(res, &outParams)
+
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
 	assert.NoError(err)
 
 	verifyResponses := make([]*verifier.TOPRFResponse, threshold)
@@ -564,9 +615,8 @@ func TestFullAES128OPRF(t *testing.T) {
 		}
 	}
 	oprfParams := &verifier.InputTOPRFParams{
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bInput,
+		Blocks: verifierBlocks,
+		Input:  bInput,
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -667,20 +717,20 @@ func TestFullAES256OPRF(t *testing.T) {
 	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
-	// Create arrays of nonces and counters for each block
-	nonces := make([][]uint8, aes_v2.BLOCKS)
-	counters := make([]uint32, aes_v2.BLOCKS)
+	// Create blocks array with nonces and counters for each block
+	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		nonces[b] = bNonce
-		counters[b] = counter + uint32(b)
+		blocks[b] = prover.Block{
+			Nonce:   bNonce,
+			Counter: counter + uint32(b),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "aes-256-ctr-toprf",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bInput,
+		Cipher: "aes-256-ctr-toprf",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bInput,
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -698,6 +748,15 @@ func TestFullAES256OPRF(t *testing.T) {
 	assert.True(len(res) > 0)
 	var outParams *prover.OutputParams
 	err = json.Unmarshal(res, &outParams)
+
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
 	assert.NoError(err)
 
 	verifyResponses := make([]*verifier.TOPRFResponse, threshold)
@@ -712,9 +771,8 @@ func TestFullAES256OPRF(t *testing.T) {
 		}
 	}
 	oprfParams := &verifier.InputTOPRFParams{
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bInput,
+		Blocks: verifierBlocks,
+		Input:  bInput,
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len([]byte(email))),
@@ -747,19 +805,19 @@ func Benchmark_ProveAES128(b *testing.B) {
 	rand.Read(bNonce)
 	rand.Read(bPt)
 
-	nonces := make([][]uint8, aes_v2.BLOCKS)
-	counters := make([]uint32, aes_v2.BLOCKS)
+	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for i := 0; i < aes_v2.BLOCKS; i++ {
-		nonces[i] = bNonce
-		counters[i] = uint32(298071680 + i)
+		blocks[i] = prover.Block{
+			Nonce:   bNonce,
+			Counter: uint32(298071680 + i),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "aes-128-ctr",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bPt,
+		Cipher: "aes-128-ctr",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bPt,
 	}
 
 	params, _ := json.Marshal(inputParams)
@@ -782,19 +840,19 @@ func Benchmark_ProveAES256(b *testing.B) {
 	rand.Read(bNonce)
 	rand.Read(bPt)
 
-	nonces := make([][]uint8, aes_v2.BLOCKS)
-	counters := make([]uint32, aes_v2.BLOCKS)
+	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for i := 0; i < aes_v2.BLOCKS; i++ {
-		nonces[i] = bNonce
-		counters[i] = uint32(2841725616 + i)
+		blocks[i] = prover.Block{
+			Nonce:   bNonce,
+			Counter: uint32(2841725616 + i),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "aes-256-ctr",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bPt,
+		Cipher: "aes-256-ctr",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bPt,
 	}
 
 	params, _ := json.Marshal(inputParams)
@@ -817,19 +875,19 @@ func Benchmark_ProveChacha(b *testing.B) {
 	rand.Read(bNonce)
 	rand.Read(bIn)
 
-	nonces := make([][]uint8, CHACHA20_BLOCKS)
-	counters := make([]uint32, CHACHA20_BLOCKS)
+	blocks := make([]prover.Block, CHACHA20_BLOCKS)
 	for i := 0; i < CHACHA20_BLOCKS; i++ {
-		nonces[i] = bNonce
-		counters[i] = uint32(1757507854 + i)
+		blocks[i] = prover.Block{
+			Nonce:   bNonce,
+			Counter: uint32(1757507854 + i),
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "chacha20",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bIn,
+		Cipher: "chacha20",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bIn,
 	}
 
 	params, _ := json.Marshal(inputParams)
@@ -902,21 +960,23 @@ func TestChaCha20RandomNoncesCounters(t *testing.T) {
 	rand.Read(bIn)
 
 	// Create truly random nonces and counters for each block
-	nonces := make([][]uint8, CHACHA20_BLOCKS)
-	counters := make([]uint32, CHACHA20_BLOCKS)
+	blocks := make([]prover.Block, CHACHA20_BLOCKS)
 	for b := 0; b < CHACHA20_BLOCKS; b++ {
-		nonces[b] = make([]byte, 12)
-		rand.Read(nonces[b])
+		nonce := make([]byte, 12)
+		rand.Read(nonce)
 		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-		counters[b] = uint32(tmp.Uint64())
+		counter := uint32(tmp.Uint64())
+		blocks[b] = prover.Block{
+			Nonce:   nonce,
+			Counter: counter,
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "chacha20",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bIn,
+		Cipher: "chacha20",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bIn,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -926,11 +986,20 @@ func TestChaCha20RandomNoncesCounters(t *testing.T) {
 	var outParams *prover.OutputParams
 	json.Unmarshal(res, &outParams)
 
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
+
 	// Create the new JSON structure for public signals
 	publicSignals := &verifier.PublicSignalsJSON{
 		Ciphertext: outParams.Ciphertext,
-		Nonces:     nonces,
-		Counters:   counters,
+		Blocks:     verifierBlocks,
 		Input:      bIn,
 	}
 
@@ -957,21 +1026,23 @@ func TestAES128RandomNoncesCounters(t *testing.T) {
 	rand.Read(bPt)
 
 	// Create truly random nonces and counters for each block
-	nonces := make([][]uint8, aes_v2.BLOCKS)
-	counters := make([]uint32, aes_v2.BLOCKS)
+	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		nonces[b] = make([]byte, 12)
-		rand.Read(nonces[b])
+		nonce := make([]byte, 12)
+		rand.Read(nonce)
 		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-		counters[b] = uint32(tmp.Uint64())
+		counter := uint32(tmp.Uint64())
+		blocks[b] = prover.Block{
+			Nonce:   nonce,
+			Counter: counter,
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "aes-128-ctr",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bPt,
+		Cipher: "aes-128-ctr",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -981,11 +1052,20 @@ func TestAES128RandomNoncesCounters(t *testing.T) {
 	var outParams *prover.OutputParams
 	json.Unmarshal(res, &outParams)
 
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
+
 	// Create the new JSON structure for public signals
 	publicSignals := &verifier.PublicSignalsJSON{
 		Ciphertext: outParams.Ciphertext,
-		Nonces:     nonces,
-		Counters:   counters,
+		Blocks:     verifierBlocks,
 		Input:      bPt,
 	}
 
@@ -997,7 +1077,8 @@ func TestAES128RandomNoncesCounters(t *testing.T) {
 		Proof:         outParams.Proof,
 		PublicSignals: publicSignalsJSON,
 	}
-	inBuf, _ := json.Marshal(inParams)
+	inBuf, err := json.Marshal(inParams)
+	assert.NoError(err)
 	assert.True(verifier.Verify(inBuf))
 }
 
@@ -1011,21 +1092,23 @@ func TestAES256RandomNoncesCounters(t *testing.T) {
 	rand.Read(bPt)
 
 	// Create truly random nonces and counters for each block
-	nonces := make([][]uint8, aes_v2.BLOCKS)
-	counters := make([]uint32, aes_v2.BLOCKS)
+	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		nonces[b] = make([]byte, 12)
-		rand.Read(nonces[b])
+		nonce := make([]byte, 12)
+		rand.Read(nonce)
 		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-		counters[b] = uint32(tmp.Uint64())
+		counter := uint32(tmp.Uint64())
+		blocks[b] = prover.Block{
+			Nonce:   nonce,
+			Counter: counter,
+		}
 	}
 
 	inputParams := &prover.InputParams{
-		Cipher:   "aes-256-ctr",
-		Key:      bKey,
-		Nonces:   nonces,
-		Counters: counters,
-		Input:    bPt,
+		Cipher: "aes-256-ctr",
+		Key:    bKey,
+		Blocks: blocks,
+		Input:  bPt,
 	}
 
 	buf, _ := json.Marshal(inputParams)
@@ -1035,11 +1118,20 @@ func TestAES256RandomNoncesCounters(t *testing.T) {
 	var outParams *prover.OutputParams
 	json.Unmarshal(res, &outParams)
 
+	// Create verifier blocks
+	verifierBlocks := make([]verifier.Block, len(blocks))
+
+	for i, b := range blocks {
+		verifierBlocks[i] = verifier.Block{
+			Nonce:   b.Nonce,
+			Counter: b.Counter,
+		}
+	}
+
 	// Create the new JSON structure for public signals
 	publicSignals := &verifier.PublicSignalsJSON{
 		Ciphertext: outParams.Ciphertext,
-		Nonces:     nonces,
-		Counters:   counters,
+		Blocks:     verifierBlocks,
 		Input:      bPt,
 	}
 
@@ -1051,7 +1143,8 @@ func TestAES256RandomNoncesCounters(t *testing.T) {
 		Proof:         outParams.Proof,
 		PublicSignals: publicSignalsJSON,
 	}
-	inBuf, _ := json.Marshal(inParams)
+	inBuf, err := json.Marshal(inParams)
+	assert.NoError(err)
 	assert.True(verifier.Verify(inBuf))
 }
 

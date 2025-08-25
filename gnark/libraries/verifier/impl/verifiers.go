@@ -45,12 +45,8 @@ func (cv *ChachaVerifier) Verify(proof []byte, publicSignals json.RawMessage) bo
 		fmt.Printf("input must be %d bytes, not %d\n", chunkLen, len(signals.Input))
 		return false
 	}
-	if len(signals.Nonces) != chachaV3.Blocks {
-		fmt.Printf("nonces array must have %d elements, not %d\n", chachaV3.Blocks, len(signals.Nonces))
-		return false
-	}
-	if len(signals.Counters) != chachaV3.Blocks {
-		fmt.Printf("counters array must have %d elements, not %d\n", chachaV3.Blocks, len(signals.Counters))
+	if len(signals.Blocks) != chachaV3.Blocks {
+		fmt.Printf("blocks array must have %d elements, not %d\n", chachaV3.Blocks, len(signals.Blocks))
 		return false
 	}
 
@@ -58,13 +54,13 @@ func (cv *ChachaVerifier) Verify(proof []byte, publicSignals json.RawMessage) bo
 
 	// Set nonces and counters for each block
 	for b := 0; b < chachaV3.Blocks; b++ {
-		if len(signals.Nonces[b]) != 12 {
-			fmt.Printf("nonce[%d] must be 12 bytes, not %d\n", b, len(signals.Nonces[b]))
+		if len(signals.Blocks[b].Nonce) != 12 {
+			fmt.Printf("block[%d] nonce must be 12 bytes, not %d\n", b, len(signals.Blocks[b].Nonce))
 			return false
 		}
-		nonce := utils.BytesToUint32LEBits(signals.Nonces[b])
+		nonce := utils.BytesToUint32LEBits(signals.Blocks[b].Nonce)
 		copy(witness.Nonce[b][:], nonce)
-		witness.Counter[b] = utils.Uint32ToBits(signals.Counters[b])
+		witness.Counter[b] = utils.Uint32ToBits(signals.Blocks[b].Counter)
 	}
 
 	// Set input and output (ciphertext)
@@ -116,12 +112,8 @@ func (av *AESVerifier) Verify(bProof []byte, publicSignals json.RawMessage) bool
 		fmt.Printf("input must be %d bytes, not %d\n", bytesPerInput, len(signals.Input))
 		return false
 	}
-	if len(signals.Nonces) != aes_v2.BLOCKS {
-		fmt.Printf("nonces array must have %d elements, not %d\n", aes_v2.BLOCKS, len(signals.Nonces))
-		return false
-	}
-	if len(signals.Counters) != aes_v2.BLOCKS {
-		fmt.Printf("counters array must have %d elements, not %d\n", aes_v2.BLOCKS, len(signals.Counters))
+	if len(signals.Blocks) != aes_v2.BLOCKS {
+		fmt.Printf("blocks array must have %d elements, not %d\n", aes_v2.BLOCKS, len(signals.Blocks))
 		return false
 	}
 
@@ -131,14 +123,14 @@ func (av *AESVerifier) Verify(bProof []byte, publicSignals json.RawMessage) bool
 
 	// Set nonces and counters for each block
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		if len(signals.Nonces[b]) != 12 {
-			fmt.Printf("nonce[%d] must be 12 bytes, not %d\n", b, len(signals.Nonces[b]))
+		if len(signals.Blocks[b].Nonce) != 12 {
+			fmt.Printf("block[%d] nonce must be 12 bytes, not %d\n", b, len(signals.Blocks[b].Nonce))
 			return false
 		}
 		for i := 0; i < 12; i++ {
-			witness.Nonce[b][i] = signals.Nonces[b][i]
+			witness.Nonce[b][i] = signals.Blocks[b].Nonce[i]
 		}
-		witness.Counter[b] = signals.Counters[b]
+		witness.Counter[b] = signals.Blocks[b].Counter
 	}
 
 	// Set input (plaintext) and output (ciphertext)
@@ -226,13 +218,13 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage
 
 	// Set per-block nonce and counter from arrays
 	for b := 0; b < chachaV3.Blocks; b++ {
-		if b >= len(iParams.Nonces) || b >= len(iParams.Counters) {
-			fmt.Printf("Invalid nonce/counter arrays length\n")
+		if b >= len(iParams.Blocks) {
+			fmt.Printf("Invalid blocks array length\n")
 			return false
 		}
-		nonce := utils.BytesToUint32LEBits(iParams.Nonces[b])
+		nonce := utils.BytesToUint32LEBits(iParams.Blocks[b].Nonce)
 		copy(witness.Nonce[b][:], nonce)
-		witness.Counter[b] = utils.Uint32ToBits(iParams.Counters[b])
+		witness.Counter[b] = utils.Uint32ToBits(iParams.Blocks[b].Counter)
 	}
 
 	copy(witness.In[:], utils.BytesToUint32BEBits(iParams.Input))
@@ -318,14 +310,14 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage) b
 
 	// Set per-block nonce and counter from arrays
 	for b := 0; b < aes_v2.BLOCKS; b++ {
-		if b >= len(iParams.Nonces) || b >= len(iParams.Counters) {
-			fmt.Printf("Invalid nonce/counter arrays length\n")
+		if b >= len(iParams.Blocks) {
+			fmt.Printf("Invalid blocks array length\n")
 			return false
 		}
-		for i := 0; i < len(iParams.Nonces[b]); i++ {
-			witness.Nonce[b][i] = iParams.Nonces[b][i]
+		for i := 0; i < len(iParams.Blocks[b].Nonce); i++ {
+			witness.Nonce[b][i] = iParams.Blocks[b].Nonce[i]
 		}
-		witness.Counter[b] = iParams.Counters[b]
+		witness.Counter[b] = iParams.Blocks[b].Counter
 	}
 
 	for i := 0; i < len(iParams.Input); i++ {

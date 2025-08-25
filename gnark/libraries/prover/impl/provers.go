@@ -44,13 +44,53 @@ type TOPRFParams struct {
 	Responses       []*TOPRFResponse `json:"responses"`
 }
 
+type Block struct {
+	Nonce    []uint8 `json:"nonce"`              // 12 bytes for both AES and ChaCha
+	Counter  uint32  `json:"counter"`            // Block counter
+	Boundary uint32  `json:"boundary,omitempty"` // Optional: actual data bytes in this block
+}
+
 type InputParams struct {
-	Cipher   string       `json:"cipher"`
-	Key      []uint8      `json:"key"`
-	Nonces   [][]uint8    `json:"nonces"`   // Array of nonces, one per block
-	Counters []uint32     `json:"counters"` // Array of counters, one per block
-	Input    []uint8      `json:"input"`    // usually it's redacted ciphertext
-	TOPRF    *TOPRFParams `json:"toprf,omitempty"`
+	Cipher string       `json:"cipher"`
+	Key    []uint8      `json:"key"`
+	Blocks []Block      `json:"blocks"` // Array of blocks with nonce, counter, and optional boundary
+	Input  []uint8      `json:"input"`  // usually it's redacted ciphertext
+	TOPRF  *TOPRFParams `json:"toprf,omitempty"`
+}
+
+// Helper functions to extract arrays for backward compatibility
+func (ip *InputParams) GetNonces() [][]uint8 {
+	nonces := make([][]uint8, len(ip.Blocks))
+	for i, block := range ip.Blocks {
+		nonces[i] = block.Nonce
+	}
+	return nonces
+}
+
+func (ip *InputParams) GetCounters() []uint32 {
+	counters := make([]uint32, len(ip.Blocks))
+	for i, block := range ip.Blocks {
+		counters[i] = block.Counter
+	}
+	return counters
+}
+
+func (ip *InputParams) GetBoundaries() []uint32 {
+	boundaries := make([]uint32, len(ip.Blocks))
+	for i, block := range ip.Blocks {
+		if block.Boundary != 0 {
+			boundaries[i] = block.Boundary
+		} else {
+			// Default to full block size
+			switch ip.Cipher {
+			case "chacha20", "chacha20-toprf":
+				boundaries[i] = 64 // ChaCha20 block size
+			case "aes-128-ctr", "aes-256-ctr", "aes-128-ctr-toprf", "aes-256-ctr-toprf":
+				boundaries[i] = 16 // AES block size
+			}
+		}
+	}
+	return boundaries
 }
 
 type Prover interface {
@@ -73,20 +113,17 @@ func (cp *ChaChaProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.P
 }
 func (cp *ChaChaProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonces, counters, input := params.Key, params.Nonces, params.Counters, params.Input
+	key, nonces, counters, input := params.Key, params.GetNonces(), params.GetCounters(), params.Input
 
 	if len(key) != 32 {
 		log.Panicf("key length must be 32: %d", len(key))
 	}
-	if len(nonces) != chachaV3.Blocks {
-		log.Panicf("nonce array length must be %d: %d", chachaV3.Blocks, len(nonces))
+	if len(params.Blocks) != chachaV3.Blocks {
+		log.Panicf("blocks array length must be %d: %d", chachaV3.Blocks, len(params.Blocks))
 	}
-	if len(counters) != chachaV3.Blocks {
-		log.Panicf("counter array length must be %d: %d", chachaV3.Blocks, len(counters))
-	}
-	for i, nonce := range nonces {
-		if len(nonce) != 12 {
-			log.Panicf("nonce[%d] length must be 12: %d", i, len(nonce))
+	for i, block := range params.Blocks {
+		if len(block.Nonce) != 12 {
+			log.Panicf("block[%d] nonce length must be 12: %d", i, len(block.Nonce))
 		}
 	}
 	if len(input) != 64*chachaV3.Blocks {
@@ -159,20 +196,17 @@ func (ap *AESProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.Prov
 }
 func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonces, counters, input := params.Key, params.Nonces, params.Counters, params.Input
+	key, nonces, counters, input := params.Key, params.GetNonces(), params.GetCounters(), params.Input
 
 	if len(key) != 32 && len(key) != 16 {
 		log.Panicf("key length must be 16 or 32: %d", len(key))
 	}
-	if len(nonces) != aes_v2.BLOCKS {
-		log.Panicf("nonce array length must be %d: %d", aes_v2.BLOCKS, len(nonces))
+	if len(params.Blocks) != aes_v2.BLOCKS {
+		log.Panicf("blocks array length must be %d: %d", aes_v2.BLOCKS, len(params.Blocks))
 	}
-	if len(counters) != aes_v2.BLOCKS {
-		log.Panicf("counter array length must be %d: %d", aes_v2.BLOCKS, len(counters))
-	}
-	for i, nonce := range nonces {
-		if len(nonce) != 12 {
-			log.Panicf("nonce[%d] length must be 12: %d", i, len(nonce))
+	for i, block := range params.Blocks {
+		if len(block.Nonce) != 12 {
+			log.Panicf("block[%d] nonce length must be 12: %d", i, len(block.Nonce))
 		}
 	}
 	if len(input) != aes_v2.BLOCKS*16 {
@@ -253,20 +287,17 @@ func (cp *ChaChaOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth
 }
 func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonces, counters, input, oprf := params.Key, params.Nonces, params.Counters, params.Input, params.TOPRF
+	key, nonces, counters, input, oprf := params.Key, params.GetNonces(), params.GetCounters(), params.Input, params.TOPRF
 
 	if len(key) != 32 {
 		log.Panicf("key length must be 32: %d", len(key))
 	}
-	if len(nonces) != chachaV3.Blocks {
-		log.Panicf("nonce array length must be %d: %d", chachaV3.Blocks, len(nonces))
+	if len(params.Blocks) != chachaV3.Blocks {
+		log.Panicf("blocks array length must be %d: %d", chachaV3.Blocks, len(params.Blocks))
 	}
-	if len(counters) != chachaV3.Blocks {
-		log.Panicf("counter array length must be %d: %d", chachaV3.Blocks, len(counters))
-	}
-	for i, nonce := range nonces {
-		if len(nonce) != 12 {
-			log.Panicf("nonce[%d] length must be 12: %d", i, len(nonce))
+	for i, block := range params.Blocks {
+		if len(block.Nonce) != 12 {
+			log.Panicf("block[%d] nonce length must be 12: %d", i, len(block.Nonce))
 		}
 	}
 	if len(input) != chachaV3.Blocks*64 {
@@ -343,7 +374,23 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	copy(witness.In[:], bInput)
 	copy(witness.Out[:], bOutput)
 
-	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	boundaries := params.GetBoundaries()
+	// Check if all boundaries are full blocks (64 bytes for ChaCha)
+	allFullBlocks := true
+	for _, boundary := range boundaries {
+		if boundary != 64 {
+			allFullBlocks = false
+			break
+		}
+	}
+
+	if allFullBlocks {
+		// Use original simple bitmask for backward compatibility
+		utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	} else {
+		// Use boundary-aware bitmask for incomplete blocks
+		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, 64) // ChaCha block size is 64 bytes
+	}
 	witness.Len = oprf.Len
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField())
@@ -373,20 +420,17 @@ func (ap *AESOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.
 }
 func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonces, counters, input, oprf := params.Key, params.Nonces, params.Counters, params.Input, params.TOPRF
+	key, nonces, counters, input, oprf := params.Key, params.GetNonces(), params.GetCounters(), params.Input, params.TOPRF
 
 	if len(key) != 32 && len(key) != 16 {
 		log.Panicf("key length must be 16 or 32: %d", len(key))
 	}
-	if len(nonces) != aes_v2.BLOCKS {
-		log.Panicf("nonce array length must be %d: %d", aes_v2.BLOCKS, len(nonces))
+	if len(params.Blocks) != aes_v2.BLOCKS {
+		log.Panicf("blocks array length must be %d: %d", aes_v2.BLOCKS, len(params.Blocks))
 	}
-	if len(counters) != aes_v2.BLOCKS {
-		log.Panicf("counter array length must be %d: %d", aes_v2.BLOCKS, len(counters))
-	}
-	for i, nonce := range nonces {
-		if len(nonce) != 12 {
-			log.Panicf("nonce[%d] length must be 12: %d", i, len(nonce))
+	for i, block := range params.Blocks {
+		if len(block.Nonce) != 12 {
+			log.Panicf("block[%d] nonce length must be 12: %d", i, len(block.Nonce))
 		}
 	}
 	if len(input) != aes_v2.BLOCKS*16 {
@@ -448,7 +492,23 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 		},
 	}
 
-	utils.SetBitmask(circuit.Bitmask[:], oprf.Pos, oprf.Len)
+	boundaries := params.GetBoundaries()
+	// Check if all boundaries are full blocks (16 bytes for AES)
+	allFullBlocks := true
+	for _, boundary := range boundaries {
+		if boundary != 16 {
+			allFullBlocks = false
+			break
+		}
+	}
+
+	if allFullBlocks {
+		// Use original simple bitmask for backward compatibility
+		utils.SetBitmask(circuit.Bitmask[:], oprf.Pos, oprf.Len)
+	} else {
+		// Use boundary-aware bitmask for incomplete blocks
+		utils.SetBitmaskWithBoundaries(circuit.Bitmask[:], oprf.Pos, oprf.Len, boundaries, 16) // AES block size is 16 bytes
+	}
 	circuit.Len = oprf.Len
 
 	for i := 0; i < len(key); i++ {

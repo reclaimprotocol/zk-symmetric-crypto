@@ -22,7 +22,7 @@ export function makeGnarkZkOperator({
 		async groth16Prove(witness, logger) {
 			const lib = await initGnark(algorithm, fetcher, logger)
 			const rslt = await executeGnarkFnAndGetJson(lib.prove, witness)
-			if(!('proof' in rslt) || !rslt.proof) {
+			if(typeof rslt !== 'object' || !('proof' in rslt) || !rslt.proof) {
 				throw new Error(
 					`Failed to create gnark proof: ${JSON.stringify(rslt)}`
 				)

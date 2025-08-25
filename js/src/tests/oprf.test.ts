@@ -104,7 +104,7 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 			})
 		}
 
-		it.only('should prove OPRF spread across blocks with unique counters', async() => {
+		it('should prove OPRF spread across blocks with unique counters', async() => {
 			const email = 'test@email.com'
 			const domainSeparator = 'reclaim'
 

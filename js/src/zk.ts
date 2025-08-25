@@ -1,7 +1,7 @@
 import { concatenateUint8Arrays } from '@reclaimprotocol/tls'
 import { CONFIG } from './config.ts'
 import type { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
-import { getBlockSizeBytes, getCounterForByteOffset } from './utils.ts'
+import { getBlockSizeBytes, getCounterForByteOffset, splitCiphertextToBlocks } from './utils.ts'
 
 /**
  * Generate ZK proof for CHACHA20-CTR encryption.
@@ -109,6 +109,13 @@ export async function getPublicSignals(
 			= padCiphertextToChunkSize(algorithm, ciphertext)
 		await addCiphertext(ciphertextArray, iv, startCounter, offsetBytes)
 	} else if(publicInput.length) {
+		publicInput = publicInput.flatMap(input => (
+			splitCiphertextToBlocks(algorithm, input.ciphertext, input.iv)
+				.map(item => {
+					item.offsetBytes = (input.offsetBytes ?? 0) + (item.offsetBytes ?? 0)
+					return item
+				})
+		))
 		for(const { ciphertext, iv, offsetBytes = 0 } of publicInput) {
 			if(iv.length !== ivSizeBytes) {
 				throw new Error(`iv must be ${ivSizeBytes} bytes`)

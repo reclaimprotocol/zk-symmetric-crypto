@@ -3,8 +3,7 @@ import { CONFIG } from '../config.ts'
 import { makeLocalFileFetch } from '../file-fetch.ts'
 import { makeGnarkOPRFOperator } from '../gnark/toprf.ts'
 import { strToUint8Array } from '../gnark/utils.ts'
-import type { EncryptionAlgorithm, OPRFOperator, OPRFResponseData, RawPublicInput, ZKEngine, ZKTOPRFPublicSignals } from '../types.ts'
-import { getBlockSizeBytes } from '../utils.ts'
+import type { EncryptionAlgorithm, OPRFOperator, OPRFResponseData, ZKEngine, ZKTOPRFPublicSignals } from '../types.ts'
 import { generateProof, verifyProof } from '../zk.ts'
 
 const fetcher = makeLocalFileFetch()
@@ -104,7 +103,7 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 			})
 		}
 
-		it('should prove OPRF spread across blocks with unique counters', async() => {
+		it('should prove OPRF spread across blocks with multi nonces', async() => {
 			const email = 'test@email.com'
 			const domainSeparator = 'reclaim'
 
@@ -158,8 +157,8 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 			}
 
 			const publicInput = [
-				...splitCiphertextToBlocks(ciphertext1, iv1),
-				...splitCiphertextToBlocks(ciphertext2, iv2),
+				{ iv: iv1, ciphertext: ciphertext1 },
+				{ iv: iv2, ciphertext: ciphertext2 }
 			]
 			const proof = await generateProof({
 				algorithm,
@@ -173,16 +172,4 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 			await verifyProof({ proof, publicInput, toprf, operator })
 		})
 	})
-
-	function splitCiphertextToBlocks(ciphertext: Uint8Array, iv: Uint8Array) {
-		const blockSize = getBlockSizeBytes(algorithm)
-		const inputs: RawPublicInput[] = []
-		for(let i = 0; i < ciphertext.length; i += blockSize) {
-			inputs.push(
-				{ iv, ciphertext: ciphertext.slice(i, i + blockSize), offsetBytes: i }
-			)
-		}
-
-		return inputs
-	}
 }

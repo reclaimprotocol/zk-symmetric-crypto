@@ -178,44 +178,68 @@ func SetBitmask(bits []frontend.Variable, pos, length uint32) {
 }
 
 // SetBitmaskWithBoundaries sets bitmask accounting for block boundaries
+// When data spans multiple blocks with boundaries, it maps logical positions to physical positions
 // boundaries slice contains the actual data bytes used in each block
 // blockSize is the size of each block in bytes (16 for AES, 64 for ChaCha)
+// pos is the byte position where target data starts in the logical data stream
+// length is the length of target data in bytes
 func SetBitmaskWithBoundaries(bits []frontend.Variable, pos, length uint32, boundaries []uint32, blockSize uint32) {
-	bitsPerBlock := blockSize * 8
-	totalProcessed := uint32(0)
-
 	// Initialize all bits to 0
 	for i := range bits {
 		bits[i] = 0
 	}
 
-	// Set bits based on boundaries and target length
+	// Track the current logical position in the data stream
+	logicalPos := uint32(0)
+	targetEnd := pos + length
+
+	// Process each block
 	for blockIdx, boundary := range boundaries {
-		if totalProcessed >= length {
-			break
-		}
+		// Physical start position of this block
+		blockPhysicalStart := uint32(blockIdx) * blockSize
 
-		// Process actual data bits in this block up to the boundary or remaining length
-		bytesToProcess := boundary
-		if totalProcessed+bytesToProcess > length {
-			bytesToProcess = length - totalProcessed
-		}
+		// Logical range for this block: [logicalPos, logicalPos + boundary)
+		logicalBlockEnd := logicalPos + boundary
 
-		// Set bits for actual data within boundary
-		for byteInBlock := uint32(0); byteInBlock < bytesToProcess && totalProcessed < length; byteInBlock++ {
-			for bit := uint32(0); bit < 8; bit++ {
-				globalBitIndex := uint32(blockIdx)*bitsPerBlock + byteInBlock*8 + bit
-				if globalBitIndex >= pos*8 && globalBitIndex < (pos+length)*8 && globalBitIndex < uint32(len(bits)) {
-					bits[globalBitIndex] = 1
+		// Find intersection of target data [pos, targetEnd) with this block's logical range
+		intersectStart := max(pos, logicalPos)
+		intersectEnd := min(targetEnd, logicalBlockEnd)
+
+		// If there's an intersection, set the bits
+		if intersectStart < intersectEnd {
+			// Map logical positions to physical positions in this block
+			for logicalByte := intersectStart; logicalByte < intersectEnd; logicalByte++ {
+				// Physical position = block start + offset within block
+				physicalByte := blockPhysicalStart + (logicalByte - logicalPos)
+
+				// Set 8 bits for this byte
+				for bit := uint32(0); bit < 8; bit++ {
+					bitIndex := physicalByte*8 + bit
+					if bitIndex < uint32(len(bits)) {
+						bits[bitIndex] = 1
+					}
 				}
 			}
-			totalProcessed++
 		}
-	}
 
-	if totalProcessed < length {
-		panic(fmt.Sprintf("insufficient data in boundaries: got %d bytes, need %d", totalProcessed, length))
+		// Move to next block's logical position
+		logicalPos = logicalBlockEnd
 	}
+}
+
+// Helper functions for min/max
+func min(a, b uint32) uint32 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b uint32) uint32 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func BEtoLE(b []byte) []byte {

@@ -229,7 +229,25 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage
 
 	copy(witness.In[:], utils.BytesToUint32BEBits(iParams.Input))
 
-	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	// Check if we have boundaries and use the appropriate bitmask function
+	boundaries := make([]uint32, len(iParams.Blocks))
+	hasCustomBoundaries := false
+	for i, block := range iParams.Blocks {
+		if block.Boundary != nil {
+			boundaries[i] = *block.Boundary
+			if *block.Boundary != 64 { // ChaCha block size
+				hasCustomBoundaries = true
+			}
+		} else {
+			boundaries[i] = 64 // Default to full block
+		}
+	}
+
+	if hasCustomBoundaries {
+		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, 64)
+	} else {
+		utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	}
 	witness.Len = oprf.Len
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
@@ -324,7 +342,25 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage) b
 		witness.In[i] = iParams.Input[i]
 	}
 
-	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	// Check if we have boundaries and use the appropriate bitmask function
+	boundaries := make([]uint32, len(iParams.Blocks))
+	hasCustomBoundaries := false
+	for i, block := range iParams.Blocks {
+		if block.Boundary != nil {
+			boundaries[i] = *block.Boundary
+			if *block.Boundary != 16 { // AES block size
+				hasCustomBoundaries = true
+			}
+		} else {
+			boundaries[i] = 16 // Default to full block
+		}
+	}
+
+	if hasCustomBoundaries {
+		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, 16)
+	} else {
+		utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	}
 	witness.Len = oprf.Len
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())

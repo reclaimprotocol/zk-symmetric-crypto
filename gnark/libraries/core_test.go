@@ -308,29 +308,69 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	assert := test.NewAssert(t)
 	assert.True(prover.InitAlgorithm(prover.CHACHA20_OPRF, chachaOprfKey, chachaOprfr1cs))
 	bKey := make([]byte, 32)
-	bNonce := make([]byte, 12)
-	bOutput := make([]byte, 128) // circuit output is plaintext
-	bInput := make([]byte, 128)
-	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-	counter := uint32(tmp.Uint64())
-
 	rand.Read(bKey)
-	rand.Read(bNonce)
-	rand.Read(bOutput)
 
+	// Step 1: Create a 74-byte plaintext slice
+	plaintext := make([]byte, 74)
+	rand.Read(plaintext) // Initialize with random data
+
+	// Place 14-byte email at position 2 (0-based)
 	email := "test@email.com"
-	domainSeparator := "reclaim"
-
 	emailBytes := []byte(email)
+	copy(plaintext[2:], emailBytes) // Email at positions 2-15
 
-	pos := uint32(59)
-	copy(bOutput[pos:], email)
+	// Step 2: Encrypt first 10 bytes with one nonce/counter
+	bNonce1 := make([]byte, 12)
+	rand.Read(bNonce1)
+	counter1 := uint32(10) // Counter 10 as specified
 
-	cipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
+	cipher1, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce1)
 	assert.NoError(err)
+	cipher1.SetCounter(counter1)
 
-	cipher.SetCounter(counter)
-	cipher.XORKeyStream(bInput, bOutput)
+	ciphertext1 := make([]byte, 10)
+	cipher1.XORKeyStream(ciphertext1, plaintext[:10])
+
+	// Step 3: Encrypt last 64 bytes with different nonce/counter
+	bNonce2 := make([]byte, 12)
+	rand.Read(bNonce2)
+	counter2 := uint32(0) // Counter 0 as specified
+
+	cipher2, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce2)
+	assert.NoError(err)
+	cipher2.SetCounter(counter2)
+
+	ciphertext2 := make([]byte, 64)
+	cipher2.XORKeyStream(ciphertext2, plaintext[10:])
+
+	// Now we have:
+	// - plaintext: 74 bytes total with email at positions 2-15
+	// - ciphertext1: first 10 bytes encrypted (contains email bytes 2-9)
+	// - ciphertext2: last 64 bytes encrypted (contains email bytes 10-15 at start)
+
+	// For the circuit, we need 128 bytes total (2 blocks of 64 bytes each)
+	// Block 0: 10 bytes of actual data + 54 bytes padding
+	// Block 1: 64 bytes of actual data
+	bInput := make([]byte, 128)
+	bOutput := make([]byte, 128)
+
+	// Copy ciphertext to input (what circuit receives)
+	copy(bInput[:10], ciphertext1)
+	copy(bInput[64:], ciphertext2)
+
+	// Copy plaintext to output (what circuit should produce)
+	copy(bOutput[:10], plaintext[:10])
+	copy(bOutput[64:], plaintext[10:])
+
+	// Debug: Print where email actually is
+	t.Logf("Email in plaintext at positions 2-15: %s", plaintext[2:16])
+	t.Logf("Email part 1 (pos 2-9 in block 0): %s", bOutput[2:10])
+	t.Logf("Email part 2 (pos 0-5 in block 1): %s", bOutput[64:70])
+
+	// Test the bitmask function to see what it's setting
+	// We'll check this after the test runs to avoid import issues
+
+	domainSeparator := "reclaim"
 
 	// TOPRF setup
 
@@ -404,13 +444,21 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	err = json.Unmarshal(finResp, &out)
 	assert.NoError(err)
 
-	// Create blocks with nonces and counters
+	// Create blocks with nonces, counters, and boundaries for incomplete block handling
 	blocks := make([]prover.Block, CHACHA20_BLOCKS)
-	for b := 0; b < CHACHA20_BLOCKS; b++ {
-		blocks[b] = prover.Block{
-			Nonce:   bNonce,
-			Counter: counter + uint32(b),
-		}
+
+	// Block 0: uses bNonce1 and counter1, has 10 bytes of actual data
+	blocks[0] = prover.Block{
+		Nonce:    bNonce1,
+		Counter:  counter1,
+		Boundary: 10, // First block has only 10 bytes of actual data
+	}
+
+	// Block 1: uses bNonce2 and counter2, has full 64 bytes
+	blocks[1] = prover.Block{
+		Nonce:   bNonce2,
+		Counter: counter2,
+		// No boundary means full block (64 bytes)
 	}
 
 	inputParams := &prover.InputParams{
@@ -419,8 +467,8 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		Blocks: blocks,
 		Input:  bInput,
 		TOPRF: &prover.TOPRFParams{
-			Pos:             pos,
-			Len:             uint32(len([]byte(email))),
+			Pos:             2, // Email starts at logical position 2
+			Len:             uint32(len(emailBytes)),
 			Mask:            req.Mask.Bytes(),
 			DomainSeparator: []byte(domainSeparator),
 			Output:          out.Output,
@@ -443,6 +491,11 @@ func TestFullChaCha20OPRF(t *testing.T) {
 			Nonce:   b.Nonce,
 			Counter: b.Counter,
 		}
+		// Copy boundary information if it exists
+		if b.Boundary != 0 {
+			boundary := b.Boundary
+			verifierBlocks[i].Boundary = &boundary
+		}
 	}
 	assert.NoError(err)
 
@@ -461,8 +514,8 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		Blocks: verifierBlocks,
 		Input:  bInput,
 		TOPRF: &verifier.TOPRFParams{
-			Pos:             pos,
-			Len:             uint32(len([]byte(email))),
+			Pos:             2, // Email starts at logical position 2
+			Len:             uint32(len(emailBytes)),
 			DomainSeparator: []byte(domainSeparator),
 			Output:          out.Output,
 			Responses:       verifyResponses,

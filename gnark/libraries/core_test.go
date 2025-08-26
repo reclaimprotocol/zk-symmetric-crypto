@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
 	"gnark-symmetric-crypto/circuits/toprf"
 	prover "gnark-symmetric-crypto/libraries/prover/impl"
@@ -538,30 +539,82 @@ func TestFullAES128OPRF(t *testing.T) {
 	assert := test.NewAssert(t)
 	assert.True(prover.InitAlgorithm(prover.AES_128_OPRF, aes128OprfKey, aes128Oprfr1cs))
 	bKey := make([]byte, 16)
-	bNonce := make([]byte, 12)
-	bOutput := make([]byte, aes_v2.BLOCKS*16) // circuit output is plaintext
-	bInput := make([]byte, aes_v2.BLOCKS*16)
-	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-	counter := uint32(tmp.Uint64())
-
 	rand.Read(bKey)
-	rand.Read(bNonce)
-	rand.Read(bOutput)
+
+	// Create a realistic scenario with incomplete blocks
+	// Block 0: 16 bytes (full)
+	// Block 1: 16 bytes (full)
+	// Block 2: 10 bytes (incomplete)
+	// Block 3: 16 bytes (full)
+	// Block 4: 16 bytes (full)
+	// Total logical data: 16 + 16 + 10 + 16 + 16 = 74 bytes
+
+	plaintext := make([]byte, 74)
+	rand.Read(plaintext)
 
 	email := "test@email.com"
+	emailBytes := []byte(email)
 	domainSeparator := "reclaim"
 
-	emailBytes := []byte(email)
+	// Place email at position 30 (will span blocks 1, 2, and 3)
+	// Block 1: bytes 16-31 (positions 30-31 contain first 2 bytes of email)
+	// Block 2: bytes 32-41 (positions 32-41 contain next 10 bytes of email)
+	// Block 3: bytes 42-57 (positions 42-43 contain last 2 bytes of email)
+	pos := uint32(30)
+	copy(plaintext[pos:], emailBytes)
 
-	pos := uint32(12)
-	copy(bOutput[pos:], email)
-
-	block, err := aes.NewCipher(bKey)
-	if err != nil {
-		panic(err)
+	// Create 5 different nonces and counters for each block
+	nonces := make([][]byte, 5)
+	counters := make([]uint32, 5)
+	for i := 0; i < 5; i++ {
+		nonces[i] = make([]byte, 12)
+		rand.Read(nonces[i])
+		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
+		counters[i] = uint32(tmp.Uint64())
 	}
-	ctr := cipher.NewCTR(block, append(bNonce, binary.BigEndian.AppendUint32(nil, counter)...))
-	ctr.XORKeyStream(bInput, bOutput)
+
+	// Encrypt each block with its own nonce/counter
+	ciphertexts := make([][]byte, 5)
+	boundaries := []uint32{16, 16, 10, 16, 16}
+	logicalPos := uint32(0)
+
+	for i := 0; i < 5; i++ {
+		blockSize := boundaries[i]
+		blockPlaintext := plaintext[logicalPos : logicalPos+blockSize]
+
+		block, err := aes.NewCipher(bKey)
+		assert.NoError(err)
+		ctr := cipher.NewCTR(block, append(nonces[i], binary.BigEndian.AppendUint32(nil, counters[i])...))
+
+		ciphertexts[i] = make([]byte, blockSize)
+		ctr.XORKeyStream(ciphertexts[i], blockPlaintext)
+
+		logicalPos += blockSize
+	}
+
+	// Prepare circuit inputs (80 bytes total with padding)
+	bInput := make([]byte, aes_v2.BLOCKS*16)
+	bOutput := make([]byte, aes_v2.BLOCKS*16)
+
+	// Copy ciphertexts to circuit input
+	copy(bInput[0:16], ciphertexts[0])  // Block 0
+	copy(bInput[16:32], ciphertexts[1]) // Block 1
+	copy(bInput[32:42], ciphertexts[2]) // Block 2 (only 10 bytes)
+	copy(bInput[48:64], ciphertexts[3]) // Block 3
+	copy(bInput[64:80], ciphertexts[4]) // Block 4
+
+	// Copy plaintexts to expected output
+	copy(bOutput[0:16], plaintext[0:16])   // Block 0
+	copy(bOutput[16:32], plaintext[16:32]) // Block 1
+	copy(bOutput[32:42], plaintext[32:42]) // Block 2 (only 10 bytes)
+	copy(bOutput[48:64], plaintext[42:58]) // Block 3
+	copy(bOutput[64:80], plaintext[58:74]) // Block 4
+
+	// Debug output
+	t.Logf("Email at logical positions %d-%d: %s", pos, pos+14, string(plaintext[pos:pos+14]))
+	t.Logf("Block 1 contains: %s", string(bOutput[30:32]))
+	t.Logf("Block 2 contains: %s", string(bOutput[32:42]))
+	t.Logf("Block 3 contains: %s", string(bOutput[48:50]))
 
 	// TOPRF setup
 
@@ -614,12 +667,16 @@ func TestFullAES128OPRF(t *testing.T) {
 	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
-	// Create blocks array with nonces and counters for each block
+	// Create blocks array with nonces, counters, and boundaries for each block
 	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		blocks[b] = prover.Block{
-			Nonce:   bNonce,
-			Counter: counter + uint32(b),
+			Nonce:   nonces[b],
+			Counter: counters[b],
+		}
+		// Set boundaries for incomplete blocks
+		if boundaries[b] != 16 {
+			blocks[b].Boundary = boundaries[b]
 		}
 	}
 
@@ -630,7 +687,7 @@ func TestFullAES128OPRF(t *testing.T) {
 		Input:  bInput,
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
-			Len:             uint32(len([]byte(email))),
+			Len:             uint32(len(emailBytes)),
 			Mask:            req.Mask.Bytes(),
 			DomainSeparator: []byte(domainSeparator),
 			Output:          out.Bytes(),
@@ -646,12 +703,17 @@ func TestFullAES128OPRF(t *testing.T) {
 	var outParams *prover.OutputParams
 	err = json.Unmarshal(res, &outParams)
 
-	// Create verifier blocks
+	// Create verifier blocks with boundaries
 	verifierBlocks := make([]verifier.Block, len(blocks))
 	for i, b := range blocks {
 		verifierBlocks[i] = verifier.Block{
 			Nonce:   b.Nonce,
 			Counter: b.Counter,
+		}
+		// Copy boundary if it exists
+		if b.Boundary != 0 {
+			boundary := b.Boundary
+			verifierBlocks[i].Boundary = &boundary
 		}
 	}
 	assert.NoError(err)
@@ -672,7 +734,7 @@ func TestFullAES128OPRF(t *testing.T) {
 		Input:  bInput,
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
-			Len:             uint32(len([]byte(email))),
+			Len:             uint32(len(emailBytes)),
 			DomainSeparator: []byte(domainSeparator),
 			Output:          out.Bytes(),
 			Responses:       verifyResponses,
@@ -694,30 +756,82 @@ func TestFullAES256OPRF(t *testing.T) {
 	assert := test.NewAssert(t)
 	assert.True(prover.InitAlgorithm(prover.AES_256_OPRF, aes256OprfKey, aes256Oprfr1cs))
 	bKey := make([]byte, 32)
-	bNonce := make([]byte, 12)
-	bOutput := make([]byte, aes_v2.BLOCKS*16) // circuit output is plaintext
-	bInput := make([]byte, aes_v2.BLOCKS*16)
-	tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-	counter := uint32(tmp.Uint64())
-
 	rand.Read(bKey)
-	rand.Read(bNonce)
-	rand.Read(bOutput)
+
+	// Create a realistic scenario with incomplete blocks
+	// Block 0: 16 bytes (full)
+	// Block 1: 16 bytes (full)
+	// Block 2: 10 bytes (incomplete)
+	// Block 3: 16 bytes (full)
+	// Block 4: 16 bytes (full)
+	// Total logical data: 16 + 16 + 10 + 16 + 16 = 74 bytes
+
+	plaintext := make([]byte, 74)
+	rand.Read(plaintext)
 
 	email := "test@email.com"
+	emailBytes := []byte(email)
 	domainSeparator := "reclaim"
 
-	emailBytes := []byte(email)
+	// Place email at position 30 (will span blocks 1, 2, and 3)
+	// Block 1: bytes 16-31 (positions 30-31 contain first 2 bytes of email)
+	// Block 2: bytes 32-41 (positions 32-41 contain next 10 bytes of email)
+	// Block 3: bytes 42-57 (positions 42-43 contain last 2 bytes of email)
+	pos := uint32(30)
+	copy(plaintext[pos:], emailBytes)
 
-	pos := uint32(12)
-	copy(bOutput[pos:], email)
-
-	block, err := aes.NewCipher(bKey)
-	if err != nil {
-		panic(err)
+	// Create 5 different nonces and counters for each block
+	nonces := make([][]byte, 5)
+	counters := make([]uint32, 5)
+	for i := 0; i < 5; i++ {
+		nonces[i] = make([]byte, 12)
+		rand.Read(nonces[i])
+		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
+		counters[i] = uint32(tmp.Uint64())
 	}
-	ctr := cipher.NewCTR(block, append(bNonce, binary.BigEndian.AppendUint32(nil, counter)...))
-	ctr.XORKeyStream(bInput, bOutput)
+
+	// Encrypt each block with its own nonce/counter
+	ciphertexts := make([][]byte, 5)
+	boundaries := []uint32{16, 16, 10, 16, 16}
+	logicalPos := uint32(0)
+
+	for i := 0; i < 5; i++ {
+		blockSize := boundaries[i]
+		blockPlaintext := plaintext[logicalPos : logicalPos+blockSize]
+
+		block, err := aes.NewCipher(bKey)
+		assert.NoError(err)
+		ctr := cipher.NewCTR(block, append(nonces[i], binary.BigEndian.AppendUint32(nil, counters[i])...))
+
+		ciphertexts[i] = make([]byte, blockSize)
+		ctr.XORKeyStream(ciphertexts[i], blockPlaintext)
+
+		logicalPos += blockSize
+	}
+
+	// Prepare circuit inputs (80 bytes total with padding)
+	bInput := make([]byte, aes_v2.BLOCKS*16)
+	bOutput := make([]byte, aes_v2.BLOCKS*16)
+
+	// Copy ciphertexts to circuit input
+	copy(bInput[0:16], ciphertexts[0])  // Block 0
+	copy(bInput[16:32], ciphertexts[1]) // Block 1
+	copy(bInput[32:42], ciphertexts[2]) // Block 2 (only 10 bytes)
+	copy(bInput[48:64], ciphertexts[3]) // Block 3
+	copy(bInput[64:80], ciphertexts[4]) // Block 4
+
+	// Copy plaintexts to expected output
+	copy(bOutput[0:16], plaintext[0:16])   // Block 0
+	copy(bOutput[16:32], plaintext[16:32]) // Block 1
+	copy(bOutput[32:42], plaintext[32:42]) // Block 2 (only 10 bytes)
+	copy(bOutput[48:64], plaintext[42:58]) // Block 3
+	copy(bOutput[64:80], plaintext[58:74]) // Block 4
+
+	// Debug output
+	t.Logf("Email at logical positions %d-%d: %s", pos, pos+14, string(plaintext[pos:pos+14]))
+	t.Logf("Block 1 contains: %s", string(bOutput[30:32]))
+	t.Logf("Block 2 contains: %s", string(bOutput[32:42]))
+	t.Logf("Block 3 contains: %s", string(bOutput[48:50]))
 
 	// TOPRF setup
 
@@ -770,12 +884,16 @@ func TestFullAES256OPRF(t *testing.T) {
 	out, err := utils.TOPRFFinalize(idxs, elements, req.SecretElements, req.Mask)
 	assert.NoError(err)
 
-	// Create blocks array with nonces and counters for each block
+	// Create blocks array with nonces, counters, and boundaries for each block
 	blocks := make([]prover.Block, aes_v2.BLOCKS)
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		blocks[b] = prover.Block{
-			Nonce:   bNonce,
-			Counter: counter + uint32(b),
+			Nonce:   nonces[b],
+			Counter: counters[b],
+		}
+		// Set boundaries for incomplete blocks
+		if boundaries[b] != 16 {
+			blocks[b].Boundary = boundaries[b]
 		}
 	}
 
@@ -786,7 +904,7 @@ func TestFullAES256OPRF(t *testing.T) {
 		Input:  bInput,
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
-			Len:             uint32(len([]byte(email))),
+			Len:             uint32(len(emailBytes)),
 			Mask:            req.Mask.Bytes(),
 			DomainSeparator: []byte(domainSeparator),
 			Output:          out.Bytes(),
@@ -796,18 +914,23 @@ func TestFullAES256OPRF(t *testing.T) {
 
 	buf, err := json.Marshal(inputParams)
 	assert.NoError(err)
-
+	fmt.Println(string(buf))
 	res := prover.Prove(buf)
 	assert.True(len(res) > 0)
 	var outParams *prover.OutputParams
 	err = json.Unmarshal(res, &outParams)
 
-	// Create verifier blocks
+	// Create verifier blocks with boundaries
 	verifierBlocks := make([]verifier.Block, len(blocks))
 	for i, b := range blocks {
 		verifierBlocks[i] = verifier.Block{
 			Nonce:   b.Nonce,
 			Counter: b.Counter,
+		}
+		// Copy boundary if it exists
+		if b.Boundary != 0 {
+			boundary := b.Boundary
+			verifierBlocks[i].Boundary = &boundary
 		}
 	}
 	assert.NoError(err)
@@ -828,7 +951,7 @@ func TestFullAES256OPRF(t *testing.T) {
 		Input:  bInput,
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
-			Len:             uint32(len([]byte(email))),
+			Len:             uint32(len(emailBytes)),
 			DomainSeparator: []byte(domainSeparator),
 			Output:          out.Bytes(),
 			Responses:       verifyResponses,
@@ -971,7 +1094,7 @@ func Benchmark_ProveAES256OPRF(b *testing.B) {
 
 	// Use pre-generated valid OPRF params from TestFullAES256OPRF for consistency
 	// AES has 5 blocks, each needs its own nonce and counter
-	params := `{"cipher":"aes-256-ctr-toprf","key":"4IpME0BPXBIlVL7TdbRPktZVqqxQ+cUZaZN1ZQH+HXI=","nonces":["mMrCGydl9N4uwKxN","mMrCGydl9N4uwKxN","mMrCGydl9N4uwKxN","mMrCGydl9N4uwKxN","mMrCGydl9N4uwKxN"],"counters":[4148389242,4148389243,4148389244,4148389245,4148389246],"input":"6DOHCarJBb8OdKf3cWakFKgn9BV/eVPQPaBlNwSRHA7GoGs6ijTygZwuBsYGbIw35q3U+OHyhD5M181U7Mx25uaFlZzbMr6xPp0LYk4YWuM=","toprf":{"pos":12,"len":14,"mask":"jiWalfzXdcn7geSk8UmfvaIzHiBo9AlhIm4mJT6qhg==","domainSeparator":"cmVjbGFpbQ==","output":"L0io3LqaeEdNSnZBJzAM46zlxZH30wxNf38cEvYWhhw=","responses":[{"index":1,"publicKeyShare":"y1wKCxI/i+OF8Nfjc9DyXmz67DtfWxk9fWnlFqTnlxs=","evaluated":"UApaFttzi54ShGcrXcpMKapa4emphZbdI3MNsKBjMpw=","c":"GWQKZ7Q54L2TjDvLtywRuD6AXt+8uvrQ+jGHuKIIpY4=","r":"A4RxrU5gOa0LMgLKhHVp4SfknOvYIIOLcWVPBwJ7zj4="}]}}`
+	params := `{"cipher":"aes-256-ctr-toprf","key":"ZcfBBYo05Zazg0QLFNnhuyuTs89PCyEKjSyubArwBJY=","blocks":[{"nonce":"6HkkH2CYhmEkr51J","counter":2442948417},{"nonce":"Ays3X8rBvnT8E4Lx","counter":1229436154},{"nonce":"fp6V8aOMjqbvARFH","counter":1770665406,"boundary":10},{"nonce":"ut7k4kP2B98WkyPk","counter":4151407847},{"nonce":"M2UnQwP6ZIoSSC4I","counter":2570170283}],"input":"kjndRePygzSMWiHHJO+OauJ96XSQOBaS0763gt454QWOAYbzUvUP4kVZAAAAAAAAWp0oZFUSt3dDdEmtNRbRn67k0GKiGzIE3k1l+I5VZxs=","toprf":{"pos":30,"len":14,"mask":"A3a+NorbwKAsYu/NQXXXiu4vTYL1Gz1XhTOT72rcYCk=","domainSeparator":"cmVjbGFpbQ==","output":"JwbwFcto0Ye3pldeCHCqA9jxCdHg1M7D3mysbGGFCgo=","responses":[{"index":1,"publicKeyShare":"inXkhLQjIXr50W0yKtw9qjYsZCypnpI3BNCNHUOdIiU=","evaluated":"OiPlX8Spp8QRW41VgPdsM6U5nC1njYlTsudvDCZR5SQ=","c":"JW/87LSNE1Xx4f303Wuwzjk9Mx83YSwy82OQuGfkfKc=","r":"BAr58yr/dTgMIfHXl3+Kr+D9zw8CaWwQDBs9TuNXQT0="}]}}`
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

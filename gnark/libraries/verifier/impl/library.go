@@ -157,6 +157,13 @@ func init() {
 
 func Verify(params []byte) (res bool) {
 
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println(err)
+			res = false
+		}
+	}()
+
 	var inputParams *InputVerifyParams
 	err := json.Unmarshal(params, &inputParams)
 	if err != nil {

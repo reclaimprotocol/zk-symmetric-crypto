@@ -47,7 +47,7 @@ type TOPRFParams struct {
 type Block struct {
 	Nonce    []uint8 `json:"nonce"`              // 12 bytes for both AES and ChaCha
 	Counter  uint32  `json:"counter"`            // Block counter
-	Boundary uint32  `json:"boundary,omitempty"` // Optional: actual data bytes in this block
+	Boundary *uint32 `json:"boundary,omitempty"` // Optional: actual data bytes in this block (nil=full, 0=empty)
 }
 
 type InputParams struct {
@@ -78,10 +78,11 @@ func (ip *InputParams) GetCounters() []uint32 {
 func (ip *InputParams) GetBoundaries() []uint32 {
 	boundaries := make([]uint32, len(ip.Blocks))
 	for i, block := range ip.Blocks {
-		if block.Boundary != 0 {
-			boundaries[i] = block.Boundary
+		if block.Boundary != nil {
+			// Use the explicit boundary value (could be 0 for empty block)
+			boundaries[i] = *block.Boundary
 		} else {
-			// Default to full block size
+			// nil means use default full block size
 			switch ip.Cipher {
 			case "chacha20", "chacha20-toprf":
 				boundaries[i] = 64 // ChaCha20 block size

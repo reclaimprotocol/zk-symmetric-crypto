@@ -349,24 +349,16 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	// - ciphertext1: first 10 bytes encrypted (contains email bytes 2-9)
 	// - ciphertext2: last 64 bytes encrypted (contains email bytes 10-15 at start)
 
-	// For the circuit, we need 128 bytes total (2 blocks of 64 bytes each)
-	// Block 0: 10 bytes of actual data + 54 bytes padding
-	// Block 1: 64 bytes of actual data
-	bInput := make([]byte, 128)
-	bOutput := make([]byte, 128)
-
-	// Copy ciphertext to input (what circuit receives)
-	copy(bInput[:10], ciphertext1)
-	copy(bInput[64:], ciphertext2)
-
-	// Copy plaintext to output (what circuit should produce)
-	copy(bOutput[:10], plaintext[:10])
-	copy(bOutput[64:], plaintext[10:])
+	// Create the actual ciphertext (74 bytes total, no padding)
+	// The prover should handle padding based on boundaries
+	ciphertext := make([]byte, 74)
+	copy(ciphertext[:10], ciphertext1)
+	copy(ciphertext[10:], ciphertext2)
 
 	// Debug: Print where email actually is
 	t.Logf("Email in plaintext at positions 2-15: %s", plaintext[2:16])
-	t.Logf("Email part 1 (pos 2-9 in block 0): %s", bOutput[2:10])
-	t.Logf("Email part 2 (pos 0-5 in block 1): %s", bOutput[64:70])
+	t.Logf("Email part 1 (pos 2-9): %s", plaintext[2:10])
+	t.Logf("Email part 2 (pos 10-15): %s", plaintext[10:16])
 
 	// Test the bitmask function to see what it's setting
 	// We'll check this after the test runs to avoid import issues
@@ -466,7 +458,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 		Cipher: "chacha20-toprf",
 		Key:    bKey,
 		Blocks: blocks,
-		Input:  bInput,
+		Input:  ciphertext, // Send only 74 bytes, prover should handle padding
 		TOPRF: &prover.TOPRFParams{
 			Pos:             2, // Email starts at logical position 2
 			Len:             uint32(len(emailBytes)),
@@ -479,7 +471,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 
 	buf, err := json.Marshal(inputParams)
 	assert.NoError(err)
-
+	fmt.Println(string(buf))
 	res := prover.Prove(buf)
 	assert.True(len(res) > 0)
 	var outParams *prover.OutputParams
@@ -513,7 +505,7 @@ func TestFullChaCha20OPRF(t *testing.T) {
 	}
 	oprfParams := &verifier.InputTOPRFParams{
 		Blocks: verifierBlocks,
-		Input:  bInput,
+		Input:  ciphertext, // Send only 74 bytes, verifier should handle padding
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             2, // Email starts at logical position 2
 			Len:             uint32(len(emailBytes)),
@@ -592,29 +584,20 @@ func TestFullAES128OPRF(t *testing.T) {
 		logicalPos += blockSize
 	}
 
-	// Prepare circuit inputs (80 bytes total with padding)
-	bInput := make([]byte, aes_v2.BLOCKS*16)
-	bOutput := make([]byte, aes_v2.BLOCKS*16)
-
-	// Copy ciphertexts to circuit input
-	copy(bInput[0:16], ciphertexts[0])  // Block 0
-	copy(bInput[16:32], ciphertexts[1]) // Block 1
-	copy(bInput[32:42], ciphertexts[2]) // Block 2 (only 10 bytes)
-	copy(bInput[48:64], ciphertexts[3]) // Block 3
-	copy(bInput[64:80], ciphertexts[4]) // Block 4
-
-	// Copy plaintexts to expected output
-	copy(bOutput[0:16], plaintext[0:16])   // Block 0
-	copy(bOutput[16:32], plaintext[16:32]) // Block 1
-	copy(bOutput[32:42], plaintext[32:42]) // Block 2 (only 10 bytes)
-	copy(bOutput[48:64], plaintext[42:58]) // Block 3
-	copy(bOutput[64:80], plaintext[58:74]) // Block 4
+	// Create the actual ciphertext (74 bytes total, no padding)
+	// The prover should handle padding based on boundaries
+	ciphertext := make([]byte, 74)
+	offset := uint32(0)
+	for i := 0; i < 5; i++ {
+		copy(ciphertext[offset:], ciphertexts[i])
+		offset += boundaries[i]
+	}
 
 	// Debug output
 	t.Logf("Email at logical positions %d-%d: %s", pos, pos+14, string(plaintext[pos:pos+14]))
-	t.Logf("Block 1 contains: %s", string(bOutput[30:32]))
-	t.Logf("Block 2 contains: %s", string(bOutput[32:42]))
-	t.Logf("Block 3 contains: %s", string(bOutput[48:50]))
+	t.Logf("Block 1 contains: %s", string(plaintext[30:32]))
+	t.Logf("Block 2 contains: %s", string(plaintext[32:42]))
+	t.Logf("Block 3 contains: %s", string(plaintext[42:44]))
 
 	// TOPRF setup
 
@@ -684,7 +667,7 @@ func TestFullAES128OPRF(t *testing.T) {
 		Cipher: "aes-128-ctr-toprf",
 		Key:    bKey,
 		Blocks: blocks,
-		Input:  bInput,
+		Input:  ciphertext, // Send only 74 bytes, prover/verifier should handle padding
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len(emailBytes)),
@@ -731,7 +714,7 @@ func TestFullAES128OPRF(t *testing.T) {
 	}
 	oprfParams := &verifier.InputTOPRFParams{
 		Blocks: verifierBlocks,
-		Input:  bInput,
+		Input:  ciphertext, // Send only 74 bytes, prover/verifier should handle padding
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len(emailBytes)),
@@ -809,29 +792,20 @@ func TestFullAES256OPRF(t *testing.T) {
 		logicalPos += blockSize
 	}
 
-	// Prepare circuit inputs (80 bytes total with padding)
-	bInput := make([]byte, aes_v2.BLOCKS*16)
-	bOutput := make([]byte, aes_v2.BLOCKS*16)
-
-	// Copy ciphertexts to circuit input
-	copy(bInput[0:16], ciphertexts[0])  // Block 0
-	copy(bInput[16:32], ciphertexts[1]) // Block 1
-	copy(bInput[32:42], ciphertexts[2]) // Block 2 (only 10 bytes)
-	copy(bInput[48:64], ciphertexts[3]) // Block 3
-	copy(bInput[64:80], ciphertexts[4]) // Block 4
-
-	// Copy plaintexts to expected output
-	copy(bOutput[0:16], plaintext[0:16])   // Block 0
-	copy(bOutput[16:32], plaintext[16:32]) // Block 1
-	copy(bOutput[32:42], plaintext[32:42]) // Block 2 (only 10 bytes)
-	copy(bOutput[48:64], plaintext[42:58]) // Block 3
-	copy(bOutput[64:80], plaintext[58:74]) // Block 4
+	// Create the actual ciphertext (74 bytes total, no padding)
+	// The prover should handle padding based on boundaries
+	ciphertext := make([]byte, 74)
+	offset := uint32(0)
+	for i := 0; i < 5; i++ {
+		copy(ciphertext[offset:], ciphertexts[i])
+		offset += boundaries[i]
+	}
 
 	// Debug output
 	t.Logf("Email at logical positions %d-%d: %s", pos, pos+14, string(plaintext[pos:pos+14]))
-	t.Logf("Block 1 contains: %s", string(bOutput[30:32]))
-	t.Logf("Block 2 contains: %s", string(bOutput[32:42]))
-	t.Logf("Block 3 contains: %s", string(bOutput[48:50]))
+	t.Logf("Block 1 contains: %s", string(plaintext[30:32]))
+	t.Logf("Block 2 contains: %s", string(plaintext[32:42]))
+	t.Logf("Block 3 contains: %s", string(plaintext[42:44]))
 
 	// TOPRF setup
 
@@ -901,7 +875,7 @@ func TestFullAES256OPRF(t *testing.T) {
 		Cipher: "aes-256-ctr-toprf",
 		Key:    bKey,
 		Blocks: blocks,
-		Input:  bInput,
+		Input:  ciphertext, // Send only 74 bytes, prover/verifier should handle padding
 		TOPRF: &prover.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len(emailBytes)),
@@ -948,7 +922,7 @@ func TestFullAES256OPRF(t *testing.T) {
 	}
 	oprfParams := &verifier.InputTOPRFParams{
 		Blocks: verifierBlocks,
-		Input:  bInput,
+		Input:  ciphertext, // Send only 74 bytes, prover/verifier should handle padding
 		TOPRF: &verifier.TOPRFParams{
 			Pos:             pos,
 			Len:             uint32(len(emailBytes)),

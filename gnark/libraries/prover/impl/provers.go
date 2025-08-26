@@ -287,7 +287,7 @@ func (cp *ChaChaOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth
 }
 func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonces, counters, input, oprf := params.Key, params.GetNonces(), params.GetCounters(), params.Input, params.TOPRF
+	key, nonces, counters, oprf := params.Key, params.GetNonces(), params.GetCounters(), params.TOPRF
 
 	if len(key) != 32 {
 		log.Panicf("key length must be 32: %d", len(key))
@@ -300,13 +300,45 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 			log.Panicf("block[%d] nonce length must be 12: %d", i, len(block.Nonce))
 		}
 	}
-	if len(input) != chachaV3.Blocks*64 {
-		log.Panicf("input length must be %d: %d", chachaV3.Blocks*64, len(input))
+
+	// Handle padding based on boundaries
+	boundaries := params.GetBoundaries()
+	totalExpectedSize := chachaV3.Blocks * 64
+	blockSize := 64 // ChaCha20 has 64-byte blocks
+
+	// Calculate actual data size from boundaries
+	actualDataSize := uint32(0)
+	for _, b := range boundaries {
+		actualDataSize += b
 	}
 
-	// calculate ciphertext ourselves for each block
+	// Create padded input if necessary
+	var input []byte
+	if uint32(len(params.Input)) == actualDataSize && actualDataSize < uint32(totalExpectedSize) {
+		// Input is unpadded, we need to pad it
+		input = make([]byte, totalExpectedSize)
+		srcOffset := uint32(0)
+		for b := 0; b < chachaV3.Blocks; b++ {
+			dstStart := b * blockSize
+			copyLen := boundaries[b]
+			if copyLen > 0 && srcOffset < uint32(len(params.Input)) {
+				actualCopy := copyLen
+				if srcOffset+actualCopy > uint32(len(params.Input)) {
+					actualCopy = uint32(len(params.Input)) - srcOffset
+				}
+				copy(input[dstStart:dstStart+int(actualCopy)], params.Input[srcOffset:srcOffset+actualCopy])
+				srcOffset += copyLen
+			}
+		}
+	} else if len(params.Input) == totalExpectedSize {
+		// Input is already padded
+		input = params.Input
+	} else {
+		log.Panicf("input length must be %d (padded) or %d (unpadded): %d", totalExpectedSize, actualDataSize, len(params.Input))
+	}
+
+	// calculate plaintext ourselves for each block
 	output = make([]byte, len(input))
-	blockSize := 64 // ChaCha20 has 64-byte blocks
 
 	for b := 0; b < chachaV3.Blocks; b++ {
 		start := b * blockSize
@@ -374,7 +406,6 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	copy(witness.In[:], bInput)
 	copy(witness.Out[:], bOutput)
 
-	boundaries := params.GetBoundaries()
 	// Check if all boundaries are full blocks (64 bytes for ChaCha)
 	allFullBlocks := true
 	for _, boundary := range boundaries {
@@ -420,7 +451,7 @@ func (ap *AESOPRFProver) SetParams(r1cs constraint.ConstraintSystem, pk groth16.
 }
 func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 
-	key, nonces, counters, input, oprf := params.Key, params.GetNonces(), params.GetCounters(), params.Input, params.TOPRF
+	key, nonces, counters, oprf := params.Key, params.GetNonces(), params.GetCounters(), params.TOPRF
 
 	if len(key) != 32 && len(key) != 16 {
 		log.Panicf("key length must be 16 or 32: %d", len(key))
@@ -433,8 +464,41 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 			log.Panicf("block[%d] nonce length must be 12: %d", i, len(block.Nonce))
 		}
 	}
-	if len(input) != aes_v2.BLOCKS*16 {
-		log.Panicf("input length must be %d: %d", aes_v2.BLOCKS*16, len(input))
+
+	// Handle padding based on boundaries
+	boundaries := params.GetBoundaries()
+	totalExpectedSize := aes_v2.BLOCKS * 16
+	blockSize := 16 // AES has 16-byte blocks
+
+	// Calculate actual data size from boundaries
+	actualDataSize := uint32(0)
+	for _, b := range boundaries {
+		actualDataSize += b
+	}
+
+	// Create padded input if necessary
+	var input []byte
+	if uint32(len(params.Input)) == actualDataSize && actualDataSize < uint32(totalExpectedSize) {
+		// Input is unpadded, we need to pad it
+		input = make([]byte, totalExpectedSize)
+		srcOffset := uint32(0)
+		for b := 0; b < aes_v2.BLOCKS; b++ {
+			dstStart := b * blockSize
+			copyLen := boundaries[b]
+			if copyLen > 0 && srcOffset < uint32(len(params.Input)) {
+				actualCopy := copyLen
+				if srcOffset+actualCopy > uint32(len(params.Input)) {
+					actualCopy = uint32(len(params.Input)) - srcOffset
+				}
+				copy(input[dstStart:dstStart+int(actualCopy)], params.Input[srcOffset:srcOffset+actualCopy])
+				srcOffset += copyLen
+			}
+		}
+	} else if len(params.Input) == totalExpectedSize {
+		// Input is already padded
+		input = params.Input
+	} else {
+		log.Panicf("input length must be %d (padded) or %d (unpadded): %d", totalExpectedSize, actualDataSize, len(params.Input))
 	}
 
 	block, err := aes.NewCipher(key)
@@ -443,7 +507,6 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	}
 
 	output = make([]byte, len(input))
-	blockSize := 16 // AES has 16-byte blocks
 
 	// Process each block with its own nonce and counter
 	for b := 0; b < aes_v2.BLOCKS; b++ {
@@ -492,7 +555,6 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 		},
 	}
 
-	boundaries := params.GetBoundaries()
 	// Check if all boundaries are full blocks (16 bytes for AES)
 	allFullBlocks := true
 	for _, boundary := range boundaries {

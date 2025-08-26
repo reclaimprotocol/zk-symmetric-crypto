@@ -227,24 +227,57 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage
 		witness.Counter[b] = utils.Uint32ToBits(iParams.Blocks[b].Counter)
 	}
 
-	copy(witness.In[:], utils.BytesToUint32BEBits(iParams.Input))
-
-	// Check if we have boundaries and use the appropriate bitmask function
+	// Handle padding based on boundaries
 	boundaries := make([]uint32, len(iParams.Blocks))
+	totalExpectedSize := chachaV3.Blocks * 64
+	blockSize := uint32(64) // ChaCha20 has 64-byte blocks
+
+	// Calculate actual data size and boundaries
+	actualDataSize := uint32(0)
 	hasCustomBoundaries := false
 	for i, block := range iParams.Blocks {
 		if block.Boundary != nil {
 			boundaries[i] = *block.Boundary
-			if *block.Boundary != 64 { // ChaCha block size
+			actualDataSize += *block.Boundary
+			if *block.Boundary != blockSize {
 				hasCustomBoundaries = true
 			}
 		} else {
-			boundaries[i] = 64 // Default to full block
+			boundaries[i] = blockSize
+			actualDataSize += blockSize
 		}
 	}
 
+	// Create padded input if necessary
+	var paddedInput []byte
+	if uint32(len(iParams.Input)) == actualDataSize && actualDataSize < uint32(totalExpectedSize) {
+		// Input is unpadded, we need to pad it
+		paddedInput = make([]byte, totalExpectedSize)
+		srcOffset := uint32(0)
+		for b := 0; b < chachaV3.Blocks; b++ {
+			dstStart := uint32(b) * blockSize
+			copyLen := boundaries[b]
+			if copyLen > 0 && srcOffset < uint32(len(iParams.Input)) {
+				actualCopy := copyLen
+				if srcOffset+actualCopy > uint32(len(iParams.Input)) {
+					actualCopy = uint32(len(iParams.Input)) - srcOffset
+				}
+				copy(paddedInput[dstStart:dstStart+actualCopy], iParams.Input[srcOffset:srcOffset+actualCopy])
+				srcOffset += copyLen
+			}
+		}
+	} else if len(iParams.Input) == totalExpectedSize {
+		// Input is already padded
+		paddedInput = iParams.Input
+	} else {
+		fmt.Printf("Invalid input length: expected %d (padded) or %d (unpadded), got %d\n", totalExpectedSize, actualDataSize, len(iParams.Input))
+		return false
+	}
+
+	copy(witness.In[:], utils.BytesToUint32BEBits(paddedInput))
+
 	if hasCustomBoundaries {
-		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, 64)
+		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, blockSize)
 	} else {
 		utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
 	}
@@ -338,26 +371,59 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage) b
 		witness.Counter[b] = iParams.Blocks[b].Counter
 	}
 
-	for i := 0; i < len(iParams.Input); i++ {
-		witness.In[i] = iParams.Input[i]
-	}
-
-	// Check if we have boundaries and use the appropriate bitmask function
+	// Handle padding based on boundaries
 	boundaries := make([]uint32, len(iParams.Blocks))
+	totalExpectedSize := aes_v2.BLOCKS * 16
+	blockSize := uint32(16) // AES has 16-byte blocks
+
+	// Calculate actual data size and boundaries
+	actualDataSize := uint32(0)
 	hasCustomBoundaries := false
 	for i, block := range iParams.Blocks {
 		if block.Boundary != nil {
 			boundaries[i] = *block.Boundary
-			if *block.Boundary != 16 { // AES block size
+			actualDataSize += *block.Boundary
+			if *block.Boundary != blockSize {
 				hasCustomBoundaries = true
 			}
 		} else {
-			boundaries[i] = 16 // Default to full block
+			boundaries[i] = blockSize
+			actualDataSize += blockSize
 		}
 	}
 
+	// Create padded input if necessary
+	var paddedInput []byte
+	if uint32(len(iParams.Input)) == actualDataSize && actualDataSize < uint32(totalExpectedSize) {
+		// Input is unpadded, we need to pad it
+		paddedInput = make([]byte, totalExpectedSize)
+		srcOffset := uint32(0)
+		for b := 0; b < aes_v2.BLOCKS; b++ {
+			dstStart := uint32(b) * blockSize
+			copyLen := boundaries[b]
+			if copyLen > 0 && srcOffset < uint32(len(iParams.Input)) {
+				actualCopy := copyLen
+				if srcOffset+actualCopy > uint32(len(iParams.Input)) {
+					actualCopy = uint32(len(iParams.Input)) - srcOffset
+				}
+				copy(paddedInput[dstStart:dstStart+actualCopy], iParams.Input[srcOffset:srcOffset+actualCopy])
+				srcOffset += copyLen
+			}
+		}
+	} else if len(iParams.Input) == totalExpectedSize {
+		// Input is already padded
+		paddedInput = iParams.Input
+	} else {
+		fmt.Printf("Invalid input length: expected %d (padded) or %d (unpadded), got %d\n", totalExpectedSize, actualDataSize, len(iParams.Input))
+		return false
+	}
+
+	for i := 0; i < len(paddedInput); i++ {
+		witness.In[i] = paddedInput[i]
+	}
+
 	if hasCustomBoundaries {
-		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, 16)
+		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, blockSize)
 	} else {
 		utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
 	}

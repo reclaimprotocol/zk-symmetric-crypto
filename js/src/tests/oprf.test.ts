@@ -103,7 +103,7 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 			})
 		}
 
-		it.only('should prove OPRF spread across blocks with multi nonces', async() => {
+		it('should prove OPRF spread across blocks with multi nonces', async() => {
 			const email = 'test@email.com'
 			const domainSeparator = 'reclaim'
 

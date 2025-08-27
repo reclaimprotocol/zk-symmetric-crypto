@@ -152,11 +152,14 @@ export type ZKTOPRFPublicSignals = {
 	responses: ZKTOPRFResponsePublicSignals[]
 }
 
+export type BlockInfo = {
+	nonce: ZKInputItem
+	counter: number
+	boundary: number
+}
+
 export type ZKProofPublicSignals = {
-	noncesAndCounters: {
-		nonce: ZKInputItem
-		counter: number
-	}[]
+	noncesAndCounters: BlockInfo[]
 	in: ZKInputItem
 	out: ZKInputItem
 }

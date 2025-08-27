@@ -1,6 +1,6 @@
 import { concatenateUint8Arrays } from '@reclaimprotocol/tls'
 import { CONFIG } from './config.ts'
-import type { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, RawPublicInput, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
+import type { BlockInfo, EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, RawPublicInput, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
 import { getBlockSizeBytes, getCounterForByteOffset, splitCiphertextToBlocks } from './utils.ts'
 
 /**
@@ -95,34 +95,37 @@ export async function getPublicSignals(
 
 	const ciphertextBlocks: Uint8Array[] = []
 	const plaintextBlocks: Uint8Array[] = []
-	const noncesAndCounters: { nonce: Uint8Array, counter: number }[] = []
+	const noncesAndCounters: BlockInfo[] = []
 	const blockSize = getBlockSizeBytes(algorithm)
 	const expSize = getExpectedChunkSizeBytes(algorithm)
 
-	if(!Array.isArray(publicInput)) {
-		await addCiphertext({
-			...publicInput,
-			ciphertext:padCiphertextToChunkSize(algorithm, publicInput.ciphertext)
-		})
-	} else if(publicInput.length) {
-		let bytesDone = 0
-		publicInput = publicInput.flatMap(input => (
-			splitCiphertextToBlocks(algorithm, input.ciphertext, input.iv)
-				.map(item => {
-					item.offsetBytes = (input.offsetBytes ?? 0) + (item.offsetBytes ?? 0)
-					return item
-				})
-		))
+	publicInput = Array.isArray(publicInput) ? publicInput : [publicInput]
+	if(publicInput.length) {
+		for(const [i, { ciphertext, iv, offsetBytes = 0 }] of publicInput.entries()) {
+			const blocks = splitCiphertextToBlocks(algorithm, ciphertext, iv)
+			for(const block of blocks) {
+				await addCiphertextBlock(
+					{ ...block, offsetBytes: offsetBytes + (block.offsetBytes || 0) }
+				)
+			}
 
-		for(
-			const [i, inpt] of publicInput.entries()
-		) {
-			inpt.ciphertext = i === publicInput.length - 1
-				? padCiphertextToSize(inpt.ciphertext, expSize - bytesDone)
-				: inpt.ciphertext
-			bytesDone += inpt.ciphertext.length
+			if(i < publicInput.length - 1) {
+				continue
+			}
 
-			await addCiphertext(inpt)
+			const bytesDone = ciphertextBlocks.reduce((a, b) => a + b.length, 0)
+			if(bytesDone >= expSize) {
+				continue
+			}
+
+			const padding = new Uint8Array(expSize - bytesDone)
+			const offset = offsetBytes + ceilToMultipleOf(ciphertext.length, blockSize)
+			const paddingBlocks = splitCiphertextToBlocks(algorithm, padding, iv)
+			for(const block of paddingBlocks) {
+				await addCiphertextBlock(
+					{ ...block, offsetBytes: offset + (block.offsetBytes || 0) }
+				)
+			}
 		}
 	} else {
 		throw new Error('at least one public input is required')
@@ -144,7 +147,7 @@ export async function getPublicSignals(
 
 	return pubSigs
 
-	async function addCiphertext(
+	async function addCiphertextBlock(
 		{ ciphertext, iv, offsetBytes = 0 }: RawPublicInput
 	) {
 		if(iv.length !== ivSizeBytes) {
@@ -152,11 +155,12 @@ export async function getPublicSignals(
 		}
 
 		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
+		noncesAndCounters.push(
+			{ nonce: iv, counter: startCounter, boundary: ciphertext.length }
+		)
 
+		ciphertext = padCiphertextToSize(ciphertext, blockSize)
 		ciphertextBlocks.push(ciphertext)
-
-		console.log(ciphertext.length, blockSize)
-		noncesAndCounters.push({ nonce: iv, counter: startCounter })
 
 		if('key' in opts) {
 			const plaintextArray = await decryptCiphertext({
@@ -169,15 +173,6 @@ export async function getPublicSignals(
 			plaintextBlocks.push(plaintextArray)
 		}
 	}
-}
-
-function padCiphertextToChunkSize(
-	alg: EncryptionAlgorithm,
-	ciphertext: Uint8Array
-) {
-	const { chunkSize, bitsPerWord } = CONFIG[alg]
-	const expectedSizeBytes = (chunkSize * bitsPerWord) / 8
-	return padCiphertextToSize(ciphertext, expectedSizeBytes)
 }
 
 function padCiphertextToSize(ciphertext: Uint8Array, size: number) {
@@ -197,6 +192,10 @@ function padCiphertextToSize(ciphertext: Uint8Array, size: number) {
 function getExpectedChunkSizeBytes(alg: EncryptionAlgorithm) {
 	const { blocksPerChunk } = CONFIG[alg]
 	return getBlockSizeBytes(alg) * blocksPerChunk
+}
+
+function ceilToMultipleOf(value: number, multiple: number) {
+	return Math.ceil(value / multiple) * multiple
 }
 
 type DecryptCiphertextOpts = {

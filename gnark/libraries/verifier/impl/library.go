@@ -68,9 +68,13 @@ type TOPRFResponse struct {
 	R              []byte  `json:"r"`
 }
 
+type Location struct {
+	Pos uint32 `json:"pos"`
+	Len uint32 `json:"len"`
+}
+
 type TOPRFParams struct {
-	Pos             uint32           `json:"pos"`
-	Len             uint32           `json:"len"`
+	Locations       []Location       `json:"locations"`
 	Mask            []uint8          `json:"mask"`
 	DomainSeparator []uint8          `json:"domainSeparator"`
 	Output          []uint8          `json:"output"`

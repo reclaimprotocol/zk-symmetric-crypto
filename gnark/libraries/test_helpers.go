@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -307,8 +308,7 @@ func RunFullTest(t *testing.T, config *CipherConfig, withBoundaries bool) {
 		emailBytes := []byte(td.Email)
 		oprfData := GenerateOPRFData(t, emailBytes)
 		inputParams.TOPRF = &prover.TOPRFParams{
-			Pos:             td.EmailPos,
-			Len:             uint32(len(emailBytes)),
+			Locations:       []prover.Location{{Pos: td.EmailPos, Len: uint32(len(emailBytes))}},
 			Mask:            oprfData.Mask,
 			DomainSeparator: []byte(oprfData.DomainSeparator),
 			Output:          oprfData.Output,
@@ -318,6 +318,7 @@ func RunFullTest(t *testing.T, config *CipherConfig, withBoundaries bool) {
 
 	// Generate proof
 	buf, _ := json.Marshal(inputParams)
+	fmt.Println(string(buf))
 	res := prover.Prove(buf)
 	assert.True(len(res) > 0)
 
@@ -359,12 +360,17 @@ func verifyTest(t *testing.T, config *CipherConfig, td *TestData, inputParams *p
 			}
 		}
 
+		// Convert prover locations to verifier locations
+		verifierLocations := make([]verifier.Location, len(inputParams.TOPRF.Locations))
+		for i, loc := range inputParams.TOPRF.Locations {
+			verifierLocations[i] = verifier.Location{Pos: loc.Pos, Len: loc.Len}
+		}
+
 		oprfParams := &verifier.InputTOPRFParams{
 			Blocks: verifierBlocks,
 			Input:  td.Ciphertext,
 			TOPRF: &verifier.TOPRFParams{
-				Pos:             inputParams.TOPRF.Pos,
-				Len:             inputParams.TOPRF.Len,
+				Locations:       verifierLocations,
 				DomainSeparator: inputParams.TOPRF.DomainSeparator,
 				Output:          inputParams.TOPRF.Output,
 				Responses:       verifyResponses,

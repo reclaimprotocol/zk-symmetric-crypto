@@ -35,9 +35,13 @@ type TOPRFResponse struct {
 	R              []byte  `json:"r"`
 }
 
+type Location struct {
+	Pos uint32 `json:"pos"`
+	Len uint32 `json:"len"`
+}
+
 type TOPRFParams struct {
-	Pos             uint32           `json:"pos"`
-	Len             uint32           `json:"len"`
+	Locations       []Location       `json:"locations"`
 	Mask            []uint8          `json:"mask"`
 	DomainSeparator []uint8          `json:"domainSeparator"`
 	Output          []uint8          `json:"output"`
@@ -407,6 +411,14 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	copy(witness.In[:], bInput)
 	copy(witness.Out[:], bOutput)
 
+	// Convert TOPRFParams locations to utils.Location
+	locations := make([]utils.Location, len(oprf.Locations))
+	totalLen := uint32(0)
+	for i, loc := range oprf.Locations {
+		locations[i] = utils.Location{Pos: loc.Pos, Len: loc.Len}
+		totalLen += loc.Len
+	}
+
 	// Check if all boundaries are full blocks (64 bytes for ChaCha)
 	allFullBlocks := true
 	for _, boundary := range boundaries {
@@ -417,13 +429,13 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 	}
 
 	if allFullBlocks {
-		// Use original simple bitmask for backward compatibility
-		utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+		// Use simple bitmask for multiple locations
+		utils.SetBitmaskForLocations(witness.Bitmask[:], locations)
 	} else {
-		// Use boundary-aware bitmask for incomplete blocks
-		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, 64) // ChaCha block size is 64 bytes
+		// Use boundary-aware bitmask for multiple locations with incomplete blocks
+		utils.SetBitmaskForLocationsWithBoundaries(witness.Bitmask[:], locations, boundaries, 64) // ChaCha block size is 64 bytes
 	}
-	witness.Len = oprf.Len
+	witness.Len = totalLen
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField())
 	if err != nil {
@@ -556,6 +568,14 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 		},
 	}
 
+	// Convert TOPRFParams locations to utils.Location
+	locations := make([]utils.Location, len(oprf.Locations))
+	totalLen := uint32(0)
+	for i, loc := range oprf.Locations {
+		locations[i] = utils.Location{Pos: loc.Pos, Len: loc.Len}
+		totalLen += loc.Len
+	}
+
 	// Check if all boundaries are full blocks (16 bytes for AES)
 	allFullBlocks := true
 	for _, boundary := range boundaries {
@@ -566,13 +586,13 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	}
 
 	if allFullBlocks {
-		// Use original simple bitmask for backward compatibility
-		utils.SetBitmask(circuit.Bitmask[:], oprf.Pos, oprf.Len)
+		// Use simple bitmask for multiple locations
+		utils.SetBitmaskForLocations(circuit.Bitmask[:], locations)
 	} else {
-		// Use boundary-aware bitmask for incomplete blocks
-		utils.SetBitmaskWithBoundaries(circuit.Bitmask[:], oprf.Pos, oprf.Len, boundaries, 16) // AES block size is 16 bytes
+		// Use boundary-aware bitmask for multiple locations with incomplete blocks
+		utils.SetBitmaskForLocationsWithBoundaries(circuit.Bitmask[:], locations, boundaries, 16) // AES block size is 16 bytes
 	}
-	circuit.Len = oprf.Len
+	circuit.Len = totalLen
 
 	for i := 0; i < len(key); i++ {
 		circuit.Key[i] = key[i]

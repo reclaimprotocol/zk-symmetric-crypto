@@ -51,27 +51,27 @@ func init() {
 
 // Simplified test functions using helpers
 
-func TestFullChaCha20_Refactored(t *testing.T) {
+func TestFullChaCha20(t *testing.T) {
 	RunFullTest(t, CipherConfigs["chacha20"], false)
 }
 
-func TestFullChaCha20OPRF_Refactored(t *testing.T) {
+func TestFullChaCha20OPRF(t *testing.T) {
 	RunFullTest(t, CipherConfigs["chacha20-toprf"], true) // with boundaries
 }
 
-func TestFullAES128_Refactored(t *testing.T) {
+func TestFullAES128(t *testing.T) {
 	RunFullTest(t, CipherConfigs["aes-128-ctr"], false)
 }
 
-func TestFullAES128OPRF_Refactored(t *testing.T) {
+func TestFullAES128OPRF(t *testing.T) {
 	RunFullTest(t, CipherConfigs["aes-128-ctr-toprf"], true) // with boundaries
 }
 
-func TestFullAES256_Refactored(t *testing.T) {
+func TestFullAES256(t *testing.T) {
 	RunFullTest(t, CipherConfigs["aes-256-ctr"], false)
 }
 
-func TestFullAES256OPRF_Refactored(t *testing.T) {
+func TestFullAES256OPRF(t *testing.T) {
 	RunFullTest(t, CipherConfigs["aes-256-ctr-toprf"], true) // with boundaries
 }
 
@@ -201,8 +201,7 @@ func TestChaCha20OPRFWithZeroBoundary(t *testing.T) {
 		Blocks: blocks,
 		Input:  ciphertext, // Only 12 bytes
 		TOPRF: &prover.TOPRFParams{
-			Pos:             0,
-			Len:             uint32(len(emailBytes)),
+			Locations:       []prover.Location{{Pos: 0, Len: uint32(len(emailBytes))}},
 			Mask:            oprfData.Mask,
 			DomainSeparator: []byte(domainSeparator),
 			Output:          oprfData.Output,
@@ -249,8 +248,7 @@ func TestChaCha20OPRFWithZeroBoundary(t *testing.T) {
 		Blocks: verifierBlocks,
 		Input:  ciphertext,
 		TOPRF: &verifier.TOPRFParams{
-			Pos:             0,
-			Len:             uint32(len(emailBytes)),
+			Locations:       []verifier.Location{{Pos: 0, Len: uint32(len(emailBytes))}},
 			DomainSeparator: []byte(domainSeparator),
 			Output:          oprfData.Output,
 			Responses:       verifyResponses,
@@ -358,8 +356,7 @@ func TestAES128OPRFWithMixedBoundaries(t *testing.T) {
 		Blocks: blocks,
 		Input:  ciphertext, // 42 bytes
 		TOPRF: &prover.TOPRFParams{
-			Pos:             20, // Email starts at position 20
-			Len:             uint32(len(emailBytes)),
+			Locations:       []prover.Location{{Pos: 20, Len: uint32(len(emailBytes))}}, // Email starts at position 20
 			Mask:            oprfData.Mask,
 			DomainSeparator: []byte(domainSeparator),
 			Output:          oprfData.Output,
@@ -422,8 +419,7 @@ func TestAES128OPRFWithMixedBoundaries(t *testing.T) {
 		Blocks: verifierBlocks,
 		Input:  ciphertext,
 		TOPRF: &verifier.TOPRFParams{
-			Pos:             20,
-			Len:             uint32(len(emailBytes)),
+			Locations:       []verifier.Location{{Pos: 20, Len: uint32(len(emailBytes))}},
 			DomainSeparator: []byte(domainSeparator),
 			Output:          oprfData.Output,
 			Responses:       verifyResponses,

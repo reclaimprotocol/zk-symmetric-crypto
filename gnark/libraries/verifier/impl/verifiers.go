@@ -276,12 +276,20 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage
 
 	copy(witness.In[:], utils.BytesToUint32BEBits(paddedInput))
 
-	if hasCustomBoundaries {
-		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, blockSize)
-	} else {
-		utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	// Convert verifier locations to utils.Location
+	locations := make([]utils.Location, len(oprf.Locations))
+	totalLen := uint32(0)
+	for i, loc := range oprf.Locations {
+		locations[i] = utils.Location{Pos: loc.Pos, Len: loc.Len}
+		totalLen += loc.Len
 	}
-	witness.Len = oprf.Len
+
+	if hasCustomBoundaries {
+		utils.SetBitmaskForLocationsWithBoundaries(witness.Bitmask[:], locations, boundaries, blockSize)
+	} else {
+		utils.SetBitmaskForLocations(witness.Bitmask[:], locations)
+	}
+	witness.Len = totalLen
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {
@@ -422,12 +430,20 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage) b
 		witness.In[i] = paddedInput[i]
 	}
 
-	if hasCustomBoundaries {
-		utils.SetBitmaskWithBoundaries(witness.Bitmask[:], oprf.Pos, oprf.Len, boundaries, blockSize)
-	} else {
-		utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
+	// Convert verifier locations to utils.Location
+	locations := make([]utils.Location, len(oprf.Locations))
+	totalLen := uint32(0)
+	for i, loc := range oprf.Locations {
+		locations[i] = utils.Location{Pos: loc.Pos, Len: loc.Len}
+		totalLen += loc.Len
 	}
-	witness.Len = oprf.Len
+
+	if hasCustomBoundaries {
+		utils.SetBitmaskForLocationsWithBoundaries(witness.Bitmask[:], locations, boundaries, blockSize)
+	} else {
+		utils.SetBitmaskForLocations(witness.Bitmask[:], locations)
+	}
+	witness.Len = totalLen
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {

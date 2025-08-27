@@ -47,9 +47,7 @@ export async function verifyProof(opts: VerifyProofOpts): Promise<void> {
 	let verified: boolean
 	if('toprf' in opts) {
 		verified = await operator.groth16Verify(
-			{ ...publicSignals, toprf: opts.toprf },
-			proofData,
-			logger
+			{ ...publicSignals, toprf: opts.toprf }, proofData, logger
 		)
 	} else {
 		// serialise to array of numbers for the ZK circuit
@@ -100,35 +98,34 @@ export async function getPublicSignals(
 	const expSize = getExpectedChunkSizeBytes(algorithm)
 
 	publicInput = Array.isArray(publicInput) ? publicInput : [publicInput]
-	if(publicInput.length) {
-		for(const [i, { ciphertext, iv, offsetBytes = 0 }] of publicInput.entries()) {
-			const blocks = splitCiphertextToBlocks(algorithm, ciphertext, iv)
-			for(const block of blocks) {
-				await addCiphertextBlock(
-					{ ...block, offsetBytes: offsetBytes + (block.offsetBytes || 0) }
-				)
-			}
-
-			if(i < publicInput.length - 1) {
-				continue
-			}
-
-			const bytesDone = ciphertextBlocks.reduce((a, b) => a + b.length, 0)
-			if(bytesDone >= expSize) {
-				continue
-			}
-
-			const padding = new Uint8Array(expSize - bytesDone)
-			const offset = offsetBytes + ceilToMultipleOf(ciphertext.length, blockSize)
-			const paddingBlocks = splitCiphertextToBlocks(algorithm, padding, iv)
-			for(const block of paddingBlocks) {
-				await addCiphertextBlock(
-					{ ...block, offsetBytes: offset + (block.offsetBytes || 0) }
-				)
-			}
-		}
-	} else {
+	if(!publicInput.length) {
 		throw new Error('at least one public input is required')
+	}
+
+	for(const [i, { ciphertext, iv, offsetBytes = 0 }] of publicInput.entries()) {
+		const blocks = splitCiphertextToBlocks(algorithm, ciphertext, iv)
+		for(const block of blocks) {
+			await addCiphertextBlock(
+				{ ...block, offsetBytes: offsetBytes + (block.offsetBytes || 0) }
+			)
+		}
+
+		if(i < publicInput.length - 1) {
+			continue
+		}
+
+		const bytesDone = ciphertextBlocks.reduce((a, b) => a + b.length, 0)
+		if(bytesDone >= expSize) {
+			continue
+		}
+
+		const padding = expSize - bytesDone
+		const offset = offsetBytes + ceilToMultipleOf(ciphertext.length, blockSize)
+		for(let i = 0;i < padding; i += blockSize) {
+			await addCiphertextBlock(
+				{ ciphertext: new Uint8Array(), iv, offsetBytes: offset + i }
+			)
+		}
 	}
 
 	const pubSigs: ZKProofPublicSignals = {
@@ -155,9 +152,8 @@ export async function getPublicSignals(
 		}
 
 		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-		noncesAndCounters.push(
-			{ nonce: iv, counter: startCounter, boundary: ciphertext.length }
-		)
+		const boundary = ciphertext.length
+		noncesAndCounters.push({ nonce: iv, counter: startCounter, boundary })
 
 		ciphertext = padCiphertextToSize(ciphertext, blockSize)
 		ciphertextBlocks.push(ciphertext)

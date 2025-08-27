@@ -27,7 +27,7 @@ export function makeGnarkOPRFOperator({
 			const rslt = await executeGnarkFnAndGetJson(lib.prove, witness)
 			if(typeof rslt !== 'object' || !('proof' in rslt) || !rslt.proof) {
 				throw new Error(
-					`Failed to create gnark proof: ${JSON.stringify(rslt)}`
+					`Failed to create gnark TOPRF proof: ${JSON.stringify(rslt)}`
 				)
 			}
 

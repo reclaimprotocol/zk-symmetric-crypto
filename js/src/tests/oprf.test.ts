@@ -4,6 +4,7 @@ import { makeLocalFileFetch } from '../file-fetch.ts'
 import { makeGnarkOPRFOperator } from '../gnark/toprf.ts'
 import { strToUint8Array } from '../gnark/utils.ts'
 import type { EncryptionAlgorithm, OPRFOperator, OPRFResponseData, ZKEngine, ZKTOPRFPublicSignals } from '../types.ts'
+import { getBlockSizeBytes } from '../utils.ts'
 import { generateProof, verifyProof } from '../zk.ts'
 
 const fetcher = makeLocalFileFetch()
@@ -130,12 +131,15 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 				.finaliseOPRF(keys.publicKey, req, resps)
 			const len = email.length
 
-			const plaintext1 = new Uint8Array(Buffer.alloc(50))
+			const blockSize = getBlockSizeBytes(algorithm)
+			const blocksPerChunk = CONFIG[algorithm].blocksPerChunk
+			const chunkSize = blockSize * blocksPerChunk
+			const plaintext1 = new Uint8Array(Buffer.alloc(chunkSize - 8))
 			// replace part of plaintext with email, such that the first
-			// 64 bytes contain part of the email and the rest is in the
-			// next block
-			const pos = 45
-			const emailInFirstBlock = email.slice(0, plaintext1.length - pos)
+			// few bytes are at the end of the first plaintext block
+			// and the rest is in the next block
+			const emailInFirstBlock = email.slice(0, 5)
+			const pos = plaintext1.length - emailInFirstBlock.length
 			plaintext1.set(Buffer.from(emailInFirstBlock), pos)
 
 			const plaintext2 = new Uint8Array(email.length)
@@ -152,8 +156,9 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 			const ciphertext2
 				= await encrypt({ in: plaintext2, key, iv: iv2 })
 
+			const textOffset = blockSize
 			const toprf: ZKTOPRFPublicSignals = {
-				pos: pos, //pos in plaintext
+				pos: pos - textOffset, //pos in plaintext
 				len: len, // length of data to "hash"
 				domainSeparator,
 				output: nullifier,
@@ -161,7 +166,11 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 			}
 
 			const publicInput = [
-				{ iv: iv1, ciphertext: ciphertext1 },
+				{
+					iv: iv1,
+					ciphertext: ciphertext1.slice(textOffset),
+					offsetBytes: textOffset
+				},
 				{ iv: iv2, ciphertext: ciphertext2 }
 			]
 			const proof = await generateProof({

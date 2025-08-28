@@ -144,9 +144,13 @@ export type ZKTOPRFResponsePublicSignals = {
 	r: ZKInputItem
 }
 
-export type ZKTOPRFPublicSignals = {
+type TOPRFLocation = {
 	pos: number
 	len: number
+}
+
+export type ZKTOPRFPublicSignals = {
+	locations: TOPRFLocation[]
 	domainSeparator: string
 	output: ZKInputItem
 	responses: ZKTOPRFResponsePublicSignals[]
@@ -155,7 +159,6 @@ export type ZKTOPRFPublicSignals = {
 export type BlockInfo = {
 	nonce: ZKInputItem
 	counter: number
-	boundary: number
 }
 
 export type ZKProofPublicSignals = {

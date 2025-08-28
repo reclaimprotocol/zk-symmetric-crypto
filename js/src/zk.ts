@@ -1,7 +1,7 @@
 import { concatenateUint8Arrays } from '@reclaimprotocol/tls'
 import { CONFIG } from './config.ts'
 import type { BlockInfo, EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, RawPublicInput, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
-import { getBlockSizeBytes, getCounterForByteOffset, splitCiphertextToBlocks } from './utils.ts'
+import { ceilToBlockSizeMultiple, getBlockSizeBytes, getCounterForByteOffset, splitCiphertextToBlocks } from './utils.ts'
 
 /**
  * Generate ZK proof for CHACHA20-CTR encryption.
@@ -120,7 +120,8 @@ export async function getPublicSignals(
 		}
 
 		const padding = expSize - bytesDone
-		const offset = offsetBytes + ceilToMultipleOf(ciphertext.length, blockSize)
+		const offset = offsetBytes
+			+ ceilToBlockSizeMultiple(ciphertext.length, algorithm)
 		for(let i = 0;i < padding; i += blockSize) {
 			await addCiphertextBlock(
 				{ ciphertext: new Uint8Array(), iv, offsetBytes: offset + i }
@@ -152,8 +153,7 @@ export async function getPublicSignals(
 		}
 
 		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-		const boundary = ciphertext.length
-		noncesAndCounters.push({ nonce: iv, counter: startCounter, boundary })
+		noncesAndCounters.push({ nonce: iv, counter: startCounter })
 
 		ciphertext = padCiphertextToSize(ciphertext, blockSize)
 		ciphertextBlocks.push(ciphertext)
@@ -188,10 +188,6 @@ function padCiphertextToSize(ciphertext: Uint8Array, size: number) {
 function getExpectedChunkSizeBytes(alg: EncryptionAlgorithm) {
 	const { blocksPerChunk } = CONFIG[alg]
 	return getBlockSizeBytes(alg) * blocksPerChunk
-}
-
-function ceilToMultipleOf(value: number, multiple: number) {
-	return Math.ceil(value / multiple) * multiple
 }
 
 type DecryptCiphertextOpts = {

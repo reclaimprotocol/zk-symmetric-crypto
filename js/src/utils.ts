@@ -243,3 +243,10 @@ export function splitCiphertextToBlocks(
 
 	return inputs
 }
+
+export function ceilToBlockSizeMultiple(
+	value: number, alg: EncryptionAlgorithm
+) {
+	const blockSize = getBlockSizeBytes(alg)
+	return Math.ceil(value / blockSize) * blockSize
+}

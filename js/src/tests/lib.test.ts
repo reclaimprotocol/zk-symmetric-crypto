@@ -142,8 +142,8 @@ for(const { zkEngine, algorithm } of TEST_MATRIX) {
 				operator
 			})
 			// fill output with 0s
-			for(let i = 0;i < proof.plaintext.length;i++) {
-				proof.plaintext[i] = 0
+			for(let i = 0;i < proof.plaintext!.length;i++) {
+				proof.plaintext![i] = 0
 			}
 
 			await assert.rejects(

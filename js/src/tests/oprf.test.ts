@@ -1,3 +1,4 @@
+import assert from 'assert'
 import { describe, it } from 'node:test'
 import { CONFIG } from '../config.ts'
 import { makeLocalFileFetch } from '../file-fetch.ts'
@@ -98,6 +99,7 @@ for(const { engine, algorithm } of OPRF_TEST_MATRIX) {
 					mask: req.mask,
 					toprf,
 				})
+				assert.ok(!proof.plaintext)
 
 				await verifyProof({
 					proof,

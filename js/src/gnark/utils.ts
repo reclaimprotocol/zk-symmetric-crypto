@@ -154,7 +154,7 @@ export function generateGnarkWitness(
 		key: 'key' in input
 			? Base64.fromUint8Array(input.key)
 			: undefined,
-		ciphertext: 'out' in input
+		ciphertext: 'out' in input && input.out?.length
 			? Base64.fromUint8Array(input.out)
 			: undefined,
 		blocks: input.noncesAndCounters.map(n => ({

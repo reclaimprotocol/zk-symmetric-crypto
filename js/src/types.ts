@@ -16,8 +16,9 @@ export type Proof = {
 	/**
 	 * the plaintext obtained as an output
 	 * of the ZK circuit
+	 * Will be `undefined` if proving with TOPRF
 	 */
-	plaintext: Uint8Array
+	plaintext: Uint8Array | undefined
 }
 
 export type FileFetch = {
@@ -85,7 +86,7 @@ export type GetPublicSignalsOpts = {
 	algorithm: EncryptionAlgorithm
 	publicInput: PublicInput
 } & ({
-	plaintext: Uint8Array
+	plaintext: Uint8Array | undefined
 } | {
 	key: Uint8Array
 })

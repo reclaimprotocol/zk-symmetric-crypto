@@ -12,6 +12,7 @@ import { ceilToBlockSizeMultiple, getBlockSizeBytes, getCounterForByteOffset, sp
 export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
 	const { algorithm, operator, logger } = opts
 	const { witness, plaintextArray } = await generateZkWitness(opts)
+
 	let wtnsSerialised: Uint8Array
 	if('mask' in opts) {
 		wtnsSerialised = await operator.generateWitness({
@@ -26,7 +27,11 @@ export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
 
 	const { proof } = await operator.groth16Prove(wtnsSerialised, logger)
 
-	return { algorithm, proofData: proof, plaintext: plaintextArray }
+	return {
+		algorithm,
+		proofData: proof,
+		plaintext: 'mask' in opts ? undefined : plaintextArray
+	}
 }
 
 /**
@@ -132,7 +137,7 @@ export async function getPublicSignals(
 	const pubSigs: ZKProofPublicSignals = {
 		noncesAndCounters,
 		in: concatenateUint8Arrays(ciphertextBlocks),
-		out: 'plaintext' in opts
+		out: 'plaintext' in opts && opts.plaintext
 			? opts.plaintext
 			: concatenateUint8Arrays(plaintextBlocks),
 	}

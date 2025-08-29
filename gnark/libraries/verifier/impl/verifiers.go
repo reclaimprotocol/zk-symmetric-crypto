@@ -2,7 +2,6 @@ package impl
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
@@ -20,37 +19,56 @@ import (
 )
 
 type Verifier interface {
-	Verify(proof []byte, publicSignals []uint8) bool
+	Verify(proof []byte, publicSignals json.RawMessage) bool
 }
 
 type ChachaVerifier struct {
 	vk groth16.VerifyingKey
 }
 
-func (cv *ChachaVerifier) Verify(proof []byte, publicSignals []uint8) bool {
+func (cv *ChachaVerifier) Verify(proof []byte, publicSignals json.RawMessage) bool {
+	// Parse the JSON public signals
+	var signals PublicSignalsJSON
+	err := json.Unmarshal(publicSignals, &signals)
+	if err != nil {
+		fmt.Printf("failed to parse public signals JSON: %v\n", err)
+		return false
+	}
+
+	// Validate input sizes
 	chunkLen := 64 * chachaV3.Blocks
-	pubLen := chunkLen*2 + 12 + 4     // in & out, nonce, counter
-	if len(publicSignals) != pubLen { // in, nonce, counter, out
-		fmt.Printf("public signals must be %d bytes, not %d\n", pubLen, len(publicSignals))
+	if len(signals.Ciphertext) != chunkLen {
+		fmt.Printf("ciphertext must be %d bytes, not %d\n", chunkLen, len(signals.Ciphertext))
+		return false
+	}
+	if len(signals.Input) != chunkLen {
+		fmt.Printf("input must be %d bytes, not %d\n", chunkLen, len(signals.Input))
+		return false
+	}
+	if len(signals.Blocks) != chachaV3.Blocks {
+		fmt.Printf("blocks array must have %d elements, not %d\n", chachaV3.Blocks, len(signals.Blocks))
 		return false
 	}
 
 	witness := &chachaV3.ChaChaCircuit{}
 
-	bOut := publicSignals[:chunkLen]
-	bIn := publicSignals[chunkLen+12+4:]
-	bNonce := publicSignals[chunkLen : chunkLen+12]
-	bCounter := publicSignals[chunkLen+12 : chunkLen+12+4]
+	// Set nonces and counters for each block
+	for b := 0; b < chachaV3.Blocks; b++ {
+		if len(signals.Blocks[b].Nonce) != 12 {
+			fmt.Printf("block[%d] nonce must be 12 bytes, not %d\n", b, len(signals.Blocks[b].Nonce))
+			return false
+		}
+		nonce := utils.BytesToUint32LEBits(signals.Blocks[b].Nonce)
+		copy(witness.Nonce[b][:], nonce)
+		witness.Counter[b] = utils.Uint32ToBits(signals.Blocks[b].Counter)
+	}
 
-	out := utils.BytesToUint32BEBits(bOut)
-	in := utils.BytesToUint32BEBits(bIn)
-	nonce := utils.BytesToUint32LEBits(bNonce)
-	counter := utils.BytesToUint32LEBits(bCounter)
+	// Set input and output (ciphertext)
+	out := utils.BytesToUint32BEBits(signals.Ciphertext)
+	in := utils.BytesToUint32BEBits(signals.Input)
 
 	copy(witness.In[:], in)
 	copy(witness.Out[:], out)
-	copy(witness.Nonce[:], nonce)
-	witness.Counter = counter[0]
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {
@@ -75,33 +93,51 @@ type AESVerifier struct {
 	vk groth16.VerifyingKey
 }
 
-func (av *AESVerifier) Verify(bProof []byte, publicSignals []uint8) bool {
-
-	bytesPerInput := aes_v2.BLOCKS * 16
-
-	if len(publicSignals) != bytesPerInput*2+12+4 { // plaintext, nonce, counter, ciphertext
+func (av *AESVerifier) Verify(bProof []byte, publicSignals json.RawMessage) bool {
+	// Parse the JSON public signals
+	var signals PublicSignalsJSON
+	err := json.Unmarshal(publicSignals, &signals)
+	if err != nil {
+		fmt.Printf("failed to parse public signals JSON: %v\n", err)
 		return false
 	}
 
-	ciphertext := publicSignals[:bytesPerInput]
-	plaintext := publicSignals[bytesPerInput+12+4:]
-	nonce := publicSignals[bytesPerInput : bytesPerInput+12]
-	bCounter := publicSignals[bytesPerInput+12 : bytesPerInput+12+4]
+	// Validate input sizes
+	bytesPerInput := aes_v2.BLOCKS * 16
+	if len(signals.Ciphertext) != bytesPerInput {
+		fmt.Printf("ciphertext must be %d bytes, not %d\n", bytesPerInput, len(signals.Ciphertext))
+		return false
+	}
+	if len(signals.Input) != bytesPerInput {
+		fmt.Printf("input must be %d bytes, not %d\n", bytesPerInput, len(signals.Input))
+		return false
+	}
+	if len(signals.Blocks) != aes_v2.BLOCKS {
+		fmt.Printf("blocks array must have %d elements, not %d\n", aes_v2.BLOCKS, len(signals.Blocks))
+		return false
+	}
 
 	witness := &aes_v2.AESCircuit{
 		AESBaseCircuit: aes_v2.AESBaseCircuit{Key: make([]frontend.Variable, 1)}, // avoid warnings
 	}
 
-	for i := 0; i < len(plaintext); i++ {
-		witness.In[i] = plaintext[i]
-		witness.Out[i] = ciphertext[i]
+	// Set nonces and counters for each block
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		if len(signals.Blocks[b].Nonce) != 12 {
+			fmt.Printf("block[%d] nonce must be 12 bytes, not %d\n", b, len(signals.Blocks[b].Nonce))
+			return false
+		}
+		for i := 0; i < 12; i++ {
+			witness.Nonce[b][i] = signals.Blocks[b].Nonce[i]
+		}
+		witness.Counter[b] = signals.Blocks[b].Counter
 	}
 
-	for i := 0; i < len(nonce); i++ {
-		witness.Nonce[i] = nonce[i]
+	// Set input (plaintext) and output (ciphertext)
+	for i := 0; i < len(signals.Input); i++ {
+		witness.In[i] = signals.Input[i]
+		witness.Out[i] = signals.Ciphertext[i]
 	}
-
-	witness.Counter = binary.BigEndian.Uint32(bCounter)
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {
@@ -128,7 +164,7 @@ type ChachaOPRFVerifier struct {
 	vk groth16.VerifyingKey
 }
 
-func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
+func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage) bool {
 	var iParams *InputTOPRFParams
 	err := json.Unmarshal(publicSignals, &iParams)
 	if err != nil {
@@ -180,15 +216,80 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		},
 	}
 
-	nonce := utils.BytesToUint32LEBits(iParams.Nonce)
-	counter := utils.Uint32ToBits(iParams.Counter)
+	// Set per-block nonce and counter from arrays
+	for b := 0; b < chachaV3.Blocks; b++ {
+		if b >= len(iParams.Blocks) {
+			fmt.Printf("Invalid blocks array length\n")
+			return false
+		}
+		nonce := utils.BytesToUint32LEBits(iParams.Blocks[b].Nonce)
+		copy(witness.Nonce[b][:], nonce)
+		witness.Counter[b] = utils.Uint32ToBits(iParams.Blocks[b].Counter)
+	}
 
-	copy(witness.In[:], utils.BytesToUint32BEBits(iParams.Input))
-	copy(witness.Nonce[:], nonce)
-	witness.Counter = counter
+	// Handle padding based on boundaries
+	boundaries := make([]uint32, len(iParams.Blocks))
+	totalExpectedSize := chachaV3.Blocks * 64
+	blockSize := uint32(64) // ChaCha20 has 64-byte blocks
 
-	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
-	witness.Len = oprf.Len
+	// Calculate actual data size and boundaries
+	actualDataSize := uint32(0)
+	hasCustomBoundaries := false
+	for i, block := range iParams.Blocks {
+		if block.Boundary != nil {
+			boundaries[i] = *block.Boundary
+			actualDataSize += *block.Boundary
+			if *block.Boundary != blockSize {
+				hasCustomBoundaries = true
+			}
+		} else {
+			boundaries[i] = blockSize
+			actualDataSize += blockSize
+		}
+	}
+
+	// Create padded input if necessary
+	var paddedInput []byte
+	if uint32(len(iParams.Input)) == actualDataSize && actualDataSize < uint32(totalExpectedSize) {
+		// Input is unpadded, we need to pad it
+		paddedInput = make([]byte, totalExpectedSize)
+		srcOffset := uint32(0)
+		for b := 0; b < chachaV3.Blocks; b++ {
+			dstStart := uint32(b) * blockSize
+			copyLen := boundaries[b]
+			if copyLen > 0 && srcOffset < uint32(len(iParams.Input)) {
+				actualCopy := copyLen
+				if srcOffset+actualCopy > uint32(len(iParams.Input)) {
+					actualCopy = uint32(len(iParams.Input)) - srcOffset
+				}
+				copy(paddedInput[dstStart:dstStart+actualCopy], iParams.Input[srcOffset:srcOffset+actualCopy])
+				srcOffset += copyLen
+			}
+		}
+	} else if len(iParams.Input) == totalExpectedSize {
+		// Input is already padded
+		paddedInput = iParams.Input
+	} else {
+		fmt.Printf("Invalid input length: expected %d (padded) or %d (unpadded), got %d\n", totalExpectedSize, actualDataSize, len(iParams.Input))
+		return false
+	}
+
+	copy(witness.In[:], utils.BytesToUint32BEBits(paddedInput))
+
+	// Convert verifier locations to utils.Location
+	locations := make([]utils.Location, len(oprf.Locations))
+	totalLen := uint32(0)
+	for i, loc := range oprf.Locations {
+		locations[i] = utils.Location{Pos: loc.Pos, Len: loc.Len}
+		totalLen += loc.Len
+	}
+
+	if hasCustomBoundaries {
+		utils.SetBitmaskForLocationsWithBoundaries(witness.Bitmask[:], locations, boundaries, blockSize)
+	} else {
+		utils.SetBitmaskForLocations(witness.Bitmask[:], locations)
+	}
+	witness.Len = totalLen
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {
@@ -213,7 +314,7 @@ type AESOPRFVerifier struct {
 	vk groth16.VerifyingKey
 }
 
-func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
+func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage) bool {
 	var iParams *InputTOPRFParams
 	err := json.Unmarshal(publicSignals, &iParams)
 	if err != nil {
@@ -266,17 +367,83 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals []uint8) bool {
 		},
 	}
 
-	for i := 0; i < len(iParams.Nonce); i++ {
-		witness.Nonce[i] = iParams.Nonce[i]
-	}
-	for i := 0; i < len(iParams.Input); i++ {
-		witness.In[i] = iParams.Input[i]
+	// Set per-block nonce and counter from arrays
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		if b >= len(iParams.Blocks) {
+			fmt.Printf("Invalid blocks array length\n")
+			return false
+		}
+		for i := 0; i < len(iParams.Blocks[b].Nonce); i++ {
+			witness.Nonce[b][i] = iParams.Blocks[b].Nonce[i]
+		}
+		witness.Counter[b] = iParams.Blocks[b].Counter
 	}
 
-	witness.Counter = iParams.Counter
+	// Handle padding based on boundaries
+	boundaries := make([]uint32, len(iParams.Blocks))
+	totalExpectedSize := aes_v2.BLOCKS * 16
+	blockSize := uint32(16) // AES has 16-byte blocks
 
-	utils.SetBitmask(witness.Bitmask[:], oprf.Pos, oprf.Len)
-	witness.Len = oprf.Len
+	// Calculate actual data size and boundaries
+	actualDataSize := uint32(0)
+	hasCustomBoundaries := false
+	for i, block := range iParams.Blocks {
+		if block.Boundary != nil {
+			boundaries[i] = *block.Boundary
+			actualDataSize += *block.Boundary
+			if *block.Boundary != blockSize {
+				hasCustomBoundaries = true
+			}
+		} else {
+			boundaries[i] = blockSize
+			actualDataSize += blockSize
+		}
+	}
+
+	// Create padded input if necessary
+	var paddedInput []byte
+	if uint32(len(iParams.Input)) == actualDataSize && actualDataSize < uint32(totalExpectedSize) {
+		// Input is unpadded, we need to pad it
+		paddedInput = make([]byte, totalExpectedSize)
+		srcOffset := uint32(0)
+		for b := 0; b < aes_v2.BLOCKS; b++ {
+			dstStart := uint32(b) * blockSize
+			copyLen := boundaries[b]
+			if copyLen > 0 && srcOffset < uint32(len(iParams.Input)) {
+				actualCopy := copyLen
+				if srcOffset+actualCopy > uint32(len(iParams.Input)) {
+					actualCopy = uint32(len(iParams.Input)) - srcOffset
+				}
+				copy(paddedInput[dstStart:dstStart+actualCopy], iParams.Input[srcOffset:srcOffset+actualCopy])
+				srcOffset += copyLen
+			}
+		}
+	} else if len(iParams.Input) == totalExpectedSize {
+		// Input is already padded
+		paddedInput = iParams.Input
+	} else {
+		fmt.Printf("Invalid input length: expected %d (padded) or %d (unpadded), got %d\n", totalExpectedSize, actualDataSize, len(iParams.Input))
+		return false
+	}
+
+	for i := 0; i < len(paddedInput); i++ {
+		witness.In[i] = paddedInput[i]
+	}
+
+	// Convert verifier locations to utils.Location
+	locations := make([]utils.Location, len(oprf.Locations))
+	totalLen := uint32(0)
+	for i, loc := range oprf.Locations {
+		locations[i] = utils.Location{Pos: loc.Pos, Len: loc.Len}
+		totalLen += loc.Len
+	}
+
+	if hasCustomBoundaries {
+		utils.SetBitmaskForLocationsWithBoundaries(witness.Bitmask[:], locations, boundaries, blockSize)
+	} else {
+		utils.SetBitmaskForLocations(witness.Bitmask[:], locations)
+	}
+	witness.Len = totalLen
 
 	wtns, err := frontend.NewWitness(witness, ecc.BN254.ScalarField(), frontend.PublicOnly())
 	if err != nil {

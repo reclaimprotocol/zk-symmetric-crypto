@@ -32,14 +32,25 @@ func TestAES256(t *testing.T) {
 	plaintext := make([]byte, aes_v2.BLOCKS*16)
 	copy(plaintext[pos:], secretBytes)
 
-	// calculate ciphertext ourselves
+	// calculate ciphertext ourselves for each block
 	block, err := aes.NewCipher(mustHex(key))
 	if err != nil {
 		panic(err)
 	}
-	ctr := cipher.NewCTR(block, append(mustHex(Nonce), binary.BigEndian.AppendUint32(nil, uint32(Counter))...))
 	ciphertext := make([]byte, len(plaintext))
-	ctr.XORKeyStream(ciphertext, plaintext)
+	blockSize := 16
+
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		start := b * blockSize
+		end := start + blockSize
+		if end > len(plaintext) {
+			end = len(plaintext)
+		}
+
+		iv := append(mustHex(Nonce), binary.BigEndian.AppendUint32(nil, uint32(Counter+b))...)
+		ctr := cipher.NewCTR(block, iv)
+		ctr.XORKeyStream(ciphertext[start:end], plaintext[start:end])
+	}
 
 	keyAssign := mustHex(key)
 	nonceAssign := mustHex(Nonce)
@@ -60,8 +71,8 @@ func createWitness256(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int
 	witness := AESTOPRFCircuit{
 		AESBaseCircuit: aes_v2.AESBaseCircuit{
 			Key:     make([]frontend.Variable, 32),
-			Counter: counter,
-			Nonce:   [12]frontend.Variable{},
+			Counter: [aes_v2.BLOCKS]frontend.Variable{},
+			Nonce:   [aes_v2.BLOCKS][12]frontend.Variable{},
 			In:      [aes_v2.BLOCKS * 16]frontend.Variable{},
 		},
 		Out: [aes_v2.BLOCKS * 16]frontend.Variable{},
@@ -88,8 +99,12 @@ func createWitness256(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int
 		witness.Out[i] = plaintext[i]
 	}
 
-	for i := 0; i < len(bNonce); i++ {
-		witness.Nonce[i] = bNonce[i]
+	// Set per-block nonce and counter
+	for b := 0; b < aes_v2.BLOCKS; b++ {
+		for i := 0; i < len(bNonce); i++ {
+			witness.Nonce[b][i] = bNonce[i]
+		}
+		witness.Counter[b] = counter + b
 	}
 	utils.SetBitmask(witness.Bitmask[:], uint32(pos), uint32(l))
 	return witness

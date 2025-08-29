@@ -155,22 +155,34 @@ func TestCipher(t *testing.T) {
 	rand.Read(bPt)
 	bCt := make([]byte, Blocks*64)
 
-	cipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
-	assert.NoError(err)
+	// Process each block with its own counter
+	blockSize := 64 // ChaCha20 has 64-byte blocks
+	for b := 0; b < Blocks; b++ {
+		start := b * blockSize
+		end := start + blockSize
 
-	cipher.SetCounter(1)
-	cipher.XORKeyStream(bCt, bPt)
+		cipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
+		assert.NoError(err)
+
+		cipher.SetCounter(uint32(counter + b))
+		cipher.XORKeyStream(bCt[start:end], bPt[start:end])
+	}
 
 	witness := ChaChaCircuit{}
 
 	copy(witness.Key[:], utils.BytesToUint32LEBits(bKey))
-	copy(witness.Nonce[:], utils.BytesToUint32LEBits(bNonce))
-	witness.Counter = utils.Uint32ToBits(counter)
+
+	// Set per-block nonce and counter
+	for b := 0; b < Blocks; b++ {
+		copy(witness.Nonce[b][:], utils.BytesToUint32LEBits(bNonce))
+		witness.Counter[b] = utils.Uint32ToBits(uint32(counter + b))
+	}
+
 	copy(witness.In[:], utils.BytesToUint32BEBits(bPt))
 	copy(witness.Out[:], utils.BytesToUint32BEBits(bCt))
 
-	err = test.IsSolved(&ChaChaCircuit{}, &witness, ecc.BN254.ScalarField())
-	assert.NoError(err)
+	err2 := test.IsSolved(&ChaChaCircuit{}, &witness, ecc.BN254.ScalarField())
+	assert.NoError(err2)
 
 	assert.CheckCircuit(&ChaChaCircuit{}, test.WithValidAssignment(&witness))
 }

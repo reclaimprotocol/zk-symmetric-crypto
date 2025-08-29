@@ -1,8 +1,7 @@
 import { Base64 } from 'js-base64'
 import { CONFIG } from '../config.ts'
 import type { EncryptionAlgorithm, FileFetch, Logger, MakeZKOperatorOpts, ZKOperator } from '../types.ts'
-import { serialiseNumberTo4Bytes } from '../utils.ts'
-import { executeGnarkFn, executeGnarkFnAndGetJson, initGnarkAlgorithm, serialiseGnarkWitness } from './utils.ts'
+import { executeGnarkFn, executeGnarkFnAndGetJson, generateGnarkWitness, initGnarkAlgorithm, serialiseGnarkWitness } from './utils.ts'
 
 const ALGS_MAP: {
 	[key in EncryptionAlgorithm]: { ext: string }
@@ -22,30 +21,25 @@ export function makeGnarkZkOperator({
 		},
 		async groth16Prove(witness, logger) {
 			const lib = await initGnark(algorithm, fetcher, logger)
-			const {
-				proof,
-				publicSignals
-			} = await executeGnarkFnAndGetJson(lib.prove, witness)
-			return {
-				proof: Base64.toUint8Array(proof),
-				publicSignals: Array.from(Base64.toUint8Array(publicSignals))
+			const rslt = await executeGnarkFnAndGetJson(lib.prove, witness)
+			if(typeof rslt !== 'object' || !('proof' in rslt) || !rslt.proof) {
+				throw new Error(
+					`Failed to create gnark proof: ${JSON.stringify(rslt)}`
+				)
 			}
+
+			return { proof: Base64.toUint8Array(rslt.proof) }
 		},
 		async groth16Verify(publicSignals, proof, logger) {
 			const lib = await initGnark(algorithm, fetcher, logger)
-			const pubSignals = Base64.fromUint8Array(new Uint8Array([
-				...publicSignals.out,
-				...publicSignals.nonce,
-				...serialiseNumberTo4Bytes(algorithm, publicSignals.counter),
-				...publicSignals.in
-			]))
+			const pubSignals = generateGnarkWitness(algorithm, publicSignals)
 
 			const verifyParams = JSON.stringify({
 				cipher: algorithm,
 				proof: typeof proof === 'string'
 					? proof
 					: Base64.fromUint8Array(proof),
-				publicSignals: pubSignals,
+				publicSignals: pubSignals
 			})
 			return executeGnarkFn(lib.verify, verifyParams) === 1
 		},

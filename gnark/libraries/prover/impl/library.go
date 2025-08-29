@@ -36,40 +36,40 @@ var algorithmNames = map[uint8]string{
 
 var provers = map[string]*ProverParams{
 	"chacha20": {
-		KeyHash:     "4bfc68e4cf1fc95a8bcd83b07ca980c227c3a333c1c70d1ef5ab7982ea2cc30b",
-		CircuitHash: "4382aa593cfe8f3b3dcd35cff62a27d8ca2b415dae64bdeca2a561a707fabab0",
+		KeyHash:     "e74dbfb793af8e3b62f8be035fa20764e1076ac415057204dbc1336e3079d12f",
+		CircuitHash: "517cdf7642c84dcb165a29f0accea413178fc11b21d8998461156a1acce6ebbd",
 		Prover:      &ChaChaProver{},
 	},
 	"aes-128-ctr": {
-		KeyHash:     "618fe3b1781170993eb8645925335ece4bd22277c26b372bf9713dcbeecf84f1",
-		CircuitHash: "b1ee478f009fe81946e6e2768ef0b6d62ab266525f186baaa4e8dec61b6e3ea6",
+		KeyHash:     "91c509d3324b7c0c8eaf7cba9b0910a4d880533d1e613d37b48b8747c8f2412b",
+		CircuitHash: "8ef58f13706568eed44f9aa40b97da7c2f2a7f1bce47b7bfe52f7df860a049fb",
 		Prover:      &AESProver{},
 	},
 	"aes-256-ctr": {
-		KeyHash:     "522e51d29d81605e0211485ee5630a52b85cb0f88e476e85b74ab4db7b482c27",
-		CircuitHash: "e62f8e74b17cad4012513cf23971ddf58faa63a4a87676047bccd255021dee13",
+		KeyHash:     "bc8277d9f9a3e06b411210a5b78fc05146529971ef93e7a58d48cd7c24e17586",
+		CircuitHash: "7f589a6d1a24efa6d01f663c11b671e0abef196c15cadb93d2c6b226df7bf0dd",
 		Prover:      &AESProver{},
 	},
 	"chacha20-toprf": {
-		KeyHash:     "153dd306e5f90d1c239cc63efa1a98e19e5d6fac6fb22dc1b18c4bffd23be5c2",
-		CircuitHash: "9107e9b1fbb174cff7a662e02c8f3f04dd6c8ba305303a94f5d0513dda5b0fd9",
+		KeyHash:     "94890204952ab6ed567c89bfd2fdbaae641a2053209782ab3e76b62e5b36263e",
+		CircuitHash: "c89d658071cfa79df85264ff5dc729bd0867456fe7dc320240a23d4621e89c73",
 		Prover:      &ChaChaOPRFProver{},
 	},
 	"aes-128-ctr-toprf": {
-		KeyHash:     "aae5e5e48cb75802aef73f8b0e0384d665c4f26e04227352f10a3401767b1986",
-		CircuitHash: "33b0c9bbc6c2a3e322027f48ecc8d20590e44ed772db1a896990c043325ef3e0",
+		KeyHash:     "38dcc4bef71b85a8d02ef628d73259c67879f04c2b0e6cc359212c088cc7c736",
+		CircuitHash: "827d5a963f8fba81c1c46f42a3925270e8cf06a69144b948af369d8c52054ad4",
 		Prover:      &AESOPRFProver{},
 	},
 	"aes-256-ctr-toprf": {
-		KeyHash:     "a3c5c6ef394ac3edb158de12b235bce836bd9c3a0286787c92648bbce8830adb",
-		CircuitHash: "58ba58ff0124a662f6643f5ba081fb88a4f7f5bdadaeddc003fc2cc3e26d8ec2",
+		KeyHash:     "50f9c857888dcc28b992036e458ae022079c2fc9be39284d581ea39636011b8f",
+		CircuitHash: "26e6f063071523531e10787f0303703c9b165f16fadead2ac629d1d98d15ac8d",
 		Prover:      &AESOPRFProver{},
 	},
 }
 
 type OutputParams struct {
-	Proof         []uint8 `json:"proof"`
-	PublicSignals []uint8 `json:"publicSignals"`
+	Proof      []uint8 `json:"proof"`
+	Ciphertext []uint8 `json:"ciphertext"`
 }
 
 type ProverParams struct {
@@ -153,8 +153,8 @@ func Prove(params []byte) []byte {
 		proof, ciphertext := prover.Prove(inputParams)
 
 		res, er := json.Marshal(&OutputParams{
-			Proof:         proof,
-			PublicSignals: ciphertext,
+			Proof:      proof,
+			Ciphertext: ciphertext,
 		})
 		if er != nil {
 			panic(er)

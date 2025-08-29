@@ -9,18 +9,14 @@ const Blocks = 2
 
 type ChaChaBaseCircuit struct {
 	Key     [8][BITS_PER_WORD]frontend.Variable
-	Counter [BITS_PER_WORD]frontend.Variable              `gnark:",public"`
-	Nonce   [3][BITS_PER_WORD]frontend.Variable           `gnark:",public"`
+	Counter [Blocks][BITS_PER_WORD]frontend.Variable      `gnark:",public"`
+	Nonce   [Blocks][3][BITS_PER_WORD]frontend.Variable   `gnark:",public"`
 	In      [16 * Blocks][BITS_PER_WORD]frontend.Variable `gnark:",public"`
 }
 
 func (c *ChaChaBaseCircuit) Define(api frontend.API, out [16 * Blocks][BITS_PER_WORD]frontend.Variable) error {
 
 	var state [16][BITS_PER_WORD]frontend.Variable
-	counter := c.Counter
-
-	var one [BITS_PER_WORD]frontend.Variable
-	copy(one[:], api.ToBinary(1, 32))
 
 	c1 := bits.ToBinary(api, 0x61707865, bits.WithNbDigits(32))
 	c2 := bits.ToBinary(api, 0x3320646e, bits.WithNbDigits(32))
@@ -36,10 +32,10 @@ func (c *ChaChaBaseCircuit) Define(api frontend.API, out [16 * Blocks][BITS_PER_
 
 		// set key
 		copy(state[4:], c.Key[:])
-		// set counter
-		state[12] = counter
-		// set nonce
-		copy(state[13:], c.Nonce[:])
+		// set per-block counter
+		state[12] = c.Counter[b]
+		// set per-block nonce
+		copy(state[13:], c.Nonce[b][:])
 		// modify state with round function
 		Round(api, &state)
 		// produce keystream from state
@@ -56,10 +52,6 @@ func (c *ChaChaBaseCircuit) Define(api frontend.API, out [16 * Blocks][BITS_PER_
 			for j := 0; j < BITS_PER_WORD; j++ {
 				api.AssertIsEqual(out[b*16+i][j], output[i][j])
 			}
-		}
-		// increment counter for next block
-		if b+1 < Blocks {
-			add32(api, &counter, &one)
 		}
 	}
 

@@ -12,10 +12,52 @@ import (
 	"github.com/consensys/gnark/logger"
 )
 
+type Block struct {
+	Nonce    []uint8 `json:"nonce"`
+	Counter  uint32  `json:"counter"`
+	Boundary *uint32 `json:"boundary,omitempty"`
+}
+
+type PublicSignalsJSON struct {
+	Ciphertext []uint8 `json:"ciphertext"`
+	Blocks     []Block `json:"blocks"`          // Array of blocks with nonce, counter, and optional boundary
+	Input      []uint8 `json:"input,omitempty"` // Optional: plaintext/input for non-OPRF circuits
+}
+
+// Helper functions for backward compatibility
+func (ps *PublicSignalsJSON) GetNonces() [][]uint8 {
+	nonces := make([][]uint8, len(ps.Blocks))
+	for i, block := range ps.Blocks {
+		nonces[i] = block.Nonce
+	}
+	return nonces
+}
+
+func (ps *PublicSignalsJSON) GetCounters() []uint32 {
+	counters := make([]uint32, len(ps.Blocks))
+	for i, block := range ps.Blocks {
+		counters[i] = block.Counter
+	}
+	return counters
+}
+
+func (ps *PublicSignalsJSON) GetBoundaries() []uint32 {
+	boundaries := make([]uint32, len(ps.Blocks))
+	for i, block := range ps.Blocks {
+		if block.Boundary != nil {
+			boundaries[i] = *block.Boundary
+		} else {
+			// Default to full block size - defaults to AES, can be adjusted based on cipher type
+			boundaries[i] = 16 // AES block size as default
+		}
+	}
+	return boundaries
+}
+
 type InputVerifyParams struct {
-	Cipher        string  `json:"cipher"`
-	Proof         []uint8 `json:"proof"`
-	PublicSignals []uint8 `json:"publicSignals"`
+	Cipher        string          `json:"cipher"`
+	Proof         []uint8         `json:"proof"`
+	PublicSignals json.RawMessage `json:"publicSignals"`
 }
 
 type TOPRFResponse struct {
@@ -26,9 +68,13 @@ type TOPRFResponse struct {
 	R              []byte  `json:"r"`
 }
 
+type Location struct {
+	Pos uint32 `json:"pos"`
+	Len uint32 `json:"len"`
+}
+
 type TOPRFParams struct {
-	Pos             uint32           `json:"pos"`
-	Len             uint32           `json:"len"`
+	Locations       []Location       `json:"locations"`
 	Mask            []uint8          `json:"mask"`
 	DomainSeparator []uint8          `json:"domainSeparator"`
 	Output          []uint8          `json:"output"`
@@ -36,10 +82,9 @@ type TOPRFParams struct {
 }
 
 type InputTOPRFParams struct {
-	Nonce   []uint8      `json:"nonce"`
-	Counter uint32       `json:"counter"`
-	Input   []uint8      `json:"input"` // usually it's redacted ciphertext
-	TOPRF   *TOPRFParams `json:"toprf"`
+	Blocks []Block      `json:"blocks"` // Array of blocks with nonce, counter, and optional boundary
+	Input  []uint8      `json:"input"`  // usually it's redacted ciphertext
+	TOPRF  *TOPRFParams `json:"toprf"`
 }
 
 var verifiers = make(map[string]Verifier)

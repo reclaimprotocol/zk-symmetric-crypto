@@ -31,13 +31,14 @@ export function makeExpanderZkOperator({
 
 	return {
 		generateWitness(input) {
+			const { noncesAndCounters: [{ nonce, counter }] } = input
 			const witness = new Uint8Array([
 				// let's just call this the version flag
 				1,
 				...serialiseValuesToBits(
 					algorithm,
-					input.counter,
-					input.nonce,
+					counter,
+					nonce,
 					input.in,
 					input.out,
 					input.key
@@ -81,14 +82,11 @@ export function makeExpanderZkOperator({
 
 			await loadCircuitAsRequired(logger)
 
+			const {
+				noncesAndCounters: [{ nonce, counter }], in: inData, out: outData
+			} = publicSignals
 			const pubSignals = new Uint8Array(
-				serialiseValuesToBits(
-					algorithm,
-					publicSignals.counter,
-					publicSignals.nonce,
-					publicSignals.in,
-					publicSignals.out,
-				)
+				serialiseValuesToBits(algorithm, counter, nonce, inData, outData)
 			)
 
 			return verify(id, pubSignals, proof)

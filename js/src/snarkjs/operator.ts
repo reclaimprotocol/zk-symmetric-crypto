@@ -80,10 +80,11 @@ export function makeSnarkJsZKOperator({
 				}
 			})()
 
+			const { noncesAndCounters: [{ nonce, counter }] } = input
 			const inputBits = {
 				key: serialiseValuesToBits(algorithm, input.key),
-				nonce: serialiseValuesToBits(algorithm, input.nonce),
-				counter: serialiseValuesToBits(algorithm, input.counter),
+				nonce: serialiseValuesToBits(algorithm, nonce),
+				counter: serialiseValuesToBits(algorithm, counter),
 				in: serialiseValuesToBits(algorithm, input.in),
 			}
 
@@ -130,13 +131,14 @@ export function makeSnarkJsZKOperator({
 					.exportVerificationKey(zkeyResult.data)
 			}
 
+			const { noncesAndCounters: [{ nonce, counter }] } = publicSignals
 			return snarkjs.groth16.verify(
 				zkeyResult.json,
 				serialiseValuesToBits(
 					algorithm,
 					publicSignals.out,
-					publicSignals.nonce,
-					publicSignals.counter,
+					nonce,
+					counter,
 					publicSignals.in
 				),
 				JSON.parse(proof),

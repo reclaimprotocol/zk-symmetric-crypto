@@ -1,5 +1,5 @@
 import { CONFIG } from './config.ts'
-import type { EncryptionAlgorithm, UintArray } from './types.ts'
+import type { EncryptionAlgorithm, RawPublicInput, UintArray } from './types.ts'
 
 export const BITS_PER_WORD = 32
 
@@ -226,4 +226,27 @@ export function getCounterForByteOffset(
 export function getBlockSizeBytes(alg: EncryptionAlgorithm) {
 	const { chunkSize, bitsPerWord, blocksPerChunk } = CONFIG[alg]
 	return chunkSize * bitsPerWord / (8 * blocksPerChunk)
+}
+
+export function splitCiphertextToBlocks(
+	algorithm: EncryptionAlgorithm,
+	ciphertext: Uint8Array,
+	iv: Uint8Array
+) {
+	const blockSize = getBlockSizeBytes(algorithm)
+	const inputs: RawPublicInput[] = []
+	for(let i = 0; i < ciphertext.length; i += blockSize) {
+		inputs.push(
+			{ iv, ciphertext: ciphertext.slice(i, i + blockSize), offsetBytes: i }
+		)
+	}
+
+	return inputs
+}
+
+export function ceilToBlockSizeMultiple(
+	value: number, alg: EncryptionAlgorithm
+) {
+	const blockSize = getBlockSizeBytes(alg)
+	return Math.ceil(value / blockSize) * blockSize
 }

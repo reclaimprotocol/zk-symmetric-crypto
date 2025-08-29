@@ -1,6 +1,7 @@
+import { concatenateUint8Arrays } from '@reclaimprotocol/tls'
 import { CONFIG } from './config.ts'
-import type { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
-import { getCounterForByteOffset } from './utils.ts'
+import type { BlockInfo, EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, RawPublicInput, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types.ts'
+import { ceilToBlockSizeMultiple, getBlockSizeBytes, getCounterForByteOffset, splitCiphertextToBlocks } from './utils.ts'
 
 /**
  * Generate ZK proof for CHACHA20-CTR encryption.
@@ -11,6 +12,7 @@ import { getCounterForByteOffset } from './utils.ts'
 export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
 	const { algorithm, operator, logger } = opts
 	const { witness, plaintextArray } = await generateZkWitness(opts)
+
 	let wtnsSerialised: Uint8Array
 	if('mask' in opts) {
 		wtnsSerialised = await operator.generateWitness({
@@ -25,7 +27,11 @@ export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
 
 	const { proof } = await operator.groth16Prove(wtnsSerialised, logger)
 
-	return { algorithm, proofData: proof, plaintext: plaintextArray }
+	return {
+		algorithm,
+		proofData: proof,
+		plaintext: 'mask' in opts ? undefined : plaintextArray
+	}
 }
 
 /**
@@ -36,23 +42,23 @@ export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
  * @param zkey
  */
 export async function verifyProof(opts: VerifyProofOpts): Promise<void> {
-	const publicSignals = getPublicSignals(opts)
+	const publicSignals = await getPublicSignals({
+		algorithm: opts.proof.algorithm,
+		plaintext: opts.proof.plaintext,
+		publicInput: opts.publicInput,
+	})
 
 	const { proof: { proofData }, operator, logger } = opts
 	let verified: boolean
 	if('toprf' in opts) {
 		verified = await operator.groth16Verify(
-			{ ...publicSignals, toprf: opts.toprf },
-			proofData,
-			logger
+			{ ...publicSignals, toprf: opts.toprf }, proofData, logger
 		)
 	} else {
 		// serialise to array of numbers for the ZK circuit
 		verified = await operator.groth16Verify(
 			// @ts-expect-error
-			publicSignals,
-			proofData,
-			logger
+			publicSignals, proofData, logger
 		)
 	}
 
@@ -69,88 +75,124 @@ export async function verifyProof(opts: VerifyProofOpts): Promise<void> {
 export async function generateZkWitness({
 	algorithm,
 	privateInput: { key },
-	publicInput: { ciphertext, iv, offsetBytes = 0 },
+	publicInput,
 }: GenerateWitnessOpts,
 ) {
-	const {
-		keySizeBytes,
-		ivSizeBytes,
-	} = CONFIG[algorithm]
+	const { keySizeBytes } = CONFIG[algorithm]
 	if(key.length !== keySizeBytes) {
 		throw new Error(`key must be ${keySizeBytes} bytes`)
 	}
 
-	if(iv.length !== ivSizeBytes) {
-		throw new Error(`iv must be ${ivSizeBytes} bytes`)
-	}
-
-	const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-	const ciphertextArray = padCiphertextToChunkSize(
-		algorithm,
-		ciphertext,
-	)
-	const plaintextArray = await decryptCiphertext({
-		algorithm,
-		key,
-		iv,
-		startOffset: offsetBytes,
-		ciphertext: ciphertextArray,
-	})
-
 	const witness: ZKProofInput = {
 		key,
-		nonce: iv,
-		counter: startCounter,
-		in: ciphertextArray,
-		out: plaintextArray,
+		...await getPublicSignals({ publicInput, algorithm, key })
 	}
 
-	return { witness, plaintextArray }
+	return { witness, plaintextArray: witness.out }
 }
 
-export function getPublicSignals(
-	{
-		proof: { algorithm, plaintext },
-		publicInput: { ciphertext, iv, offsetBytes = 0 },
-	}: GetPublicSignalsOpts
-): ZKProofPublicSignals {
-	const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-	const ciphertextArray = padCiphertextToChunkSize(
-		algorithm,
-		ciphertext
-	)
-
-	if(ciphertextArray.length !== plaintext.length) {
-		throw new Error('ciphertext and plaintext must be the same length')
-	}
-
-	return {
-		nonce: iv,
-		counter: startCounter,
-		in: ciphertextArray,
-		out: plaintext,
-	}
-}
-
-function padCiphertextToChunkSize(
-	alg: EncryptionAlgorithm,
-	ciphertext: Uint8Array
+export async function getPublicSignals(
+	{ publicInput, algorithm, ...opts }: GetPublicSignalsOpts
 ) {
-	const { chunkSize, bitsPerWord } = CONFIG[alg]
+	const { ivSizeBytes } = CONFIG[algorithm]
 
-	const expectedSizeBytes = (chunkSize * bitsPerWord) / 8
-	if(ciphertext.length > expectedSizeBytes) {
-		throw new Error(`ciphertext must be <= ${expectedSizeBytes}b`)
+	const ciphertextBlocks: Uint8Array[] = []
+	const plaintextBlocks: Uint8Array[] = []
+	const noncesAndCounters: BlockInfo[] = []
+	const blockSize = getBlockSizeBytes(algorithm)
+	const expSize = getExpectedChunkSizeBytes(algorithm)
+
+	publicInput = Array.isArray(publicInput) ? publicInput : [publicInput]
+	if(!publicInput.length) {
+		throw new Error('at least one public input is required')
 	}
 
-	if(ciphertext.length < expectedSizeBytes) {
-		const arr = new Uint8Array(expectedSizeBytes).fill(0)
-		arr.set(ciphertext)
+	for(const [i, { ciphertext, iv, offsetBytes = 0 }] of publicInput.entries()) {
+		const blocks = splitCiphertextToBlocks(algorithm, ciphertext, iv)
+		for(const block of blocks) {
+			await addCiphertextBlock(
+				{ ...block, offsetBytes: offsetBytes + (block.offsetBytes || 0) }
+			)
+		}
 
+		if(i < publicInput.length - 1) {
+			continue
+		}
+
+		const bytesDone = ciphertextBlocks.reduce((a, b) => a + b.length, 0)
+		if(bytesDone >= expSize) {
+			continue
+		}
+
+		const padding = expSize - bytesDone
+		const offset = offsetBytes
+			+ ceilToBlockSizeMultiple(ciphertext.length, algorithm)
+		for(let i = 0;i < padding; i += blockSize) {
+			await addCiphertextBlock(
+				{ ciphertext: new Uint8Array(), iv, offsetBytes: offset + i }
+			)
+		}
+	}
+
+	const pubSigs: ZKProofPublicSignals = {
+		noncesAndCounters,
+		in: concatenateUint8Arrays(ciphertextBlocks),
+		out: 'plaintext' in opts && opts.plaintext
+			? opts.plaintext
+			: concatenateUint8Arrays(plaintextBlocks),
+	}
+
+	if(pubSigs.in.length !== getExpectedChunkSizeBytes(algorithm)) {
+		throw new Error(
+			`Ciphertext must be exactly ${expSize}b, got ${pubSigs.in.length}b`
+		)
+	}
+
+	return pubSigs
+
+	async function addCiphertextBlock(
+		{ ciphertext, iv, offsetBytes = 0 }: RawPublicInput
+	) {
+		if(iv.length !== ivSizeBytes) {
+			throw new Error(`iv must be ${ivSizeBytes} bytes`)
+		}
+
+		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
+		noncesAndCounters.push({ nonce: iv, counter: startCounter })
+
+		ciphertext = padCiphertextToSize(ciphertext, blockSize)
+		ciphertextBlocks.push(ciphertext)
+
+		if('key' in opts) {
+			const plaintextArray = await decryptCiphertext({
+				algorithm,
+				key: opts.key,
+				iv,
+				startOffset: offsetBytes,
+				ciphertext: ciphertext,
+			})
+			plaintextBlocks.push(plaintextArray)
+		}
+	}
+}
+
+function padCiphertextToSize(ciphertext: Uint8Array, size: number) {
+	if(ciphertext.length > size) {
+		throw new Error(`ciphertext must be <= ${size}b`)
+	}
+
+	if(ciphertext.length < size) {
+		const arr = new Uint8Array(size)
+		arr.set(ciphertext)
 		ciphertext = arr
 	}
 
 	return ciphertext
+}
+
+function getExpectedChunkSizeBytes(alg: EncryptionAlgorithm) {
+	const { blocksPerChunk } = CONFIG[alg]
+	return getBlockSizeBytes(alg) * blocksPerChunk
 }
 
 type DecryptCiphertextOpts = {

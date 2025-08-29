@@ -34,18 +34,24 @@ func TestCipher(t *testing.T) {
 	copy(plaintext[pos:], secretBytes)
 
 	ciphertext := make([]byte, chachaV3.Blocks*64)
+	blockSize := 64
 
-	cipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
-	assert.NoError(err)
+	for b := 0; b < chachaV3.Blocks; b++ {
+		start := b * blockSize
+		end := start + blockSize
 
-	cipher.SetCounter(uint32(counter))
-	cipher.XORKeyStream(ciphertext, plaintext)
+		cipher, err := chacha20.NewUnauthenticatedCipher(bKey, bNonce)
+		assert.NoError(err)
+
+		cipher.SetCounter(uint32(counter + b))
+		cipher.XORKeyStream(ciphertext[start:end], plaintext[start:end])
+	}
 
 	d, _ := toprf.PrepareTestData(secretStr, "reclaim")
 
 	witness := createWitness(d, bKey, bNonce, counter, ciphertext, plaintext, pos, len(secretBytes))
 
-	err = test.IsSolved(&witness, &witness, ecc.BN254.ScalarField())
+	err := test.IsSolved(&witness, &witness, ecc.BN254.ScalarField())
 	assert.NoError(err)
 	assert.CheckCircuit(&witness, test.WithValidAssignment(&witness), test.WithBackends(backend.GROTH16), test.WithCurves(ecc.BN254))
 
@@ -85,8 +91,12 @@ func createWitness(d *toprf.Params, bKey []uint8, bNonce []uint8, counter int, c
 	}
 
 	copy(witness.Key[:], utils.BytesToUint32LEBits(bKey))
-	copy(witness.Nonce[:], utils.BytesToUint32LEBits(bNonce))
-	witness.Counter = utils.Uint32ToBits(counter)
+
+	// Set per-block nonce and counter
+	for b := 0; b < chachaV3.Blocks; b++ {
+		copy(witness.Nonce[b][:], utils.BytesToUint32LEBits(bNonce))
+		witness.Counter[b] = utils.Uint32ToBits(uint32(counter + b))
+	}
 	copy(witness.In[:], utils.BytesToUint32BEBits(ciphertext))
 	copy(witness.Out[:], utils.BytesToUint32BEBits(plaintext))
 	utils.SetBitmask(witness.Bitmask[:], uint32(pos), uint32(len))

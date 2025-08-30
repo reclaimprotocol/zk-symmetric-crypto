@@ -5,9 +5,9 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
-	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
-	"gnark-symmetric-crypto/circuits/toprf"
-	"gnark-symmetric-crypto/utils"
+	aes_v2 "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/aesV2"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/toprf"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/utils"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc"

@@ -1,8 +1,8 @@
 package chachaV3_oprf
 
 import (
-	"gnark-symmetric-crypto/circuits/chachaV3"
-	"gnark-symmetric-crypto/circuits/toprf"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/chachaV3"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/toprf"
 
 	"github.com/consensys/gnark/frontend"
 )

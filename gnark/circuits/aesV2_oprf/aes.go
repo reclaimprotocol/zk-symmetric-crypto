@@ -1,8 +1,8 @@
 package aes_v2_oprf
 
 import (
-	aes_v2 "gnark-symmetric-crypto/circuits/aesV2"
-	"gnark-symmetric-crypto/circuits/toprf"
+	aes_v2 "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/aesV2"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/toprf"
 
 	"github.com/consensys/gnark/frontend"
 )

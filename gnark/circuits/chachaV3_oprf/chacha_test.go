@@ -3,9 +3,9 @@ package chachaV3_oprf
 import (
 	"crypto/rand"
 	"fmt"
-	"gnark-symmetric-crypto/circuits/chachaV3"
-	"gnark-symmetric-crypto/circuits/toprf"
-	"gnark-symmetric-crypto/utils"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/chachaV3"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/toprf"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/utils"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc"

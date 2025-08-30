@@ -3,8 +3,8 @@ package oprf
 import (
 	"encoding/json"
 	"fmt"
-	"gnark-symmetric-crypto/circuits/toprf"
-	"gnark-symmetric-crypto/utils"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/toprf"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/utils"
 	"math/big"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"

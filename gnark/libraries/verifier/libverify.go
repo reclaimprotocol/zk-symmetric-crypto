@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"gnark-symmetric-crypto/libraries/verifier/impl"
-	"gnark-symmetric-crypto/libraries/verifier/oprf"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/libraries/verifier/impl"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/libraries/verifier/oprf"
 	"unsafe"
 )
 

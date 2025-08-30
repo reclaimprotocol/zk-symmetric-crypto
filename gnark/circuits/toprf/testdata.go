@@ -2,7 +2,7 @@ package toprf
 
 import (
 	"crypto/rand"
-	"gnark-symmetric-crypto/utils"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/utils"
 	"math/big"
 
 	tbn254 "github.com/consensys/gnark-crypto/ecc/bn254/twistededwards"

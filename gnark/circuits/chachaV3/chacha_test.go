@@ -2,7 +2,7 @@ package chachaV3
 
 import (
 	"crypto/rand"
-	"gnark-symmetric-crypto/utils"
+	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/utils"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc"

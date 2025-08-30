@@ -40,7 +40,7 @@ template Round(BITS_PER_WORD) {
 			k ++;
 		}
 
-		// 4 diagnals
+		// 4 diagonals
 		// 0, 5, 10, 15
 		rounds[k] = QR(BITS_PER_WORD);
 		rounds[k].in[0] <== tmp[0];

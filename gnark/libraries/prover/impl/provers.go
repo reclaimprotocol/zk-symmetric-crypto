@@ -6,14 +6,15 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"log"
+	"math/big"
+
 	aes_v2 "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/aesV2"
 	aes_v2_oprf "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/aesV2_oprf"
 	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/chachaV3"
 	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/chachaV3_oprf"
 	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/toprf"
 	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/utils"
-	"log"
-	"math/big"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"
@@ -626,5 +627,5 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 		panic(err)
 	}
 
-	return buf.Bytes(), output
+	return buf.Bytes(), nil
 }

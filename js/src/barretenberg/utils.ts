@@ -99,14 +99,13 @@ function convertChaCha20ToNoirWitness(input: ZKProofInput): NoirWitnessInput {
 	const keyU32 = new Uint32Array(input.key.buffer, input.key.byteOffset, input.key.byteLength / 4)
 	const plaintextU32 = new Uint32Array(input.in.buffer, input.in.byteOffset, input.in.byteLength / 4)
 	const ciphertextU32 = new Uint32Array(input.out.buffer, input.out.byteOffset, input.out.byteLength / 4)
-	
 	// Convert nonce from bytes to u32 array (3 words for ChaCha20)
 	const nonceU32 = new Uint32Array(3)
 	const nonceView = new DataView(input.nonce.buffer, input.nonce.byteOffset)
 	for(let i = 0; i < 3; i++) {
 		nonceU32[i] = nonceView.getUint32(i * 4, true) // little-endian
 	}
-	
+
 	// Return in the format expected by Noir circuit
 	return {
 		key: Array.from(keyU32), // [u32; 8]

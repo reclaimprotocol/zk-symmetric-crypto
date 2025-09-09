@@ -3,9 +3,9 @@ import { UltraHonkBackend } from '@aztec/bb.js'
 import { CompiledCircuit, Noir } from '@noir-lang/noir_js'
 import PQueue from 'p-queue'
 import {
+	BarretenbergOperator,
 	Logger,
 	MakeZKOperatorOpts,
-	ZKOperator,
 	ZKProofInput,
 	ZKProofPublicSignals,
 } from '../types'
@@ -20,7 +20,7 @@ export function makeBarretenbergZKOperator({
 	algorithm,
 	fetcher,
 	options: { threads = 1, maxProofConcurrency = 2 } = {}
-}: MakeZKOperatorOpts<BarretenbergOpts & { maxProofConcurrency?: number }>): ZKOperator {
+}: MakeZKOperatorOpts<BarretenbergOpts & { maxProofConcurrency?: number }>): BarretenbergOperator {
 	let circuit: CompiledCircuit
 	let noir
 	let backend
@@ -69,9 +69,7 @@ export function makeBarretenbergZKOperator({
 			return witness
 		},
 
-		async groth16Prove(witness: Uint8Array, logger?: Logger): Promise<{ proof: Uint8Array }> {
-			// Note: Barretenberg doesn't use Groth16, it uses UltraHonk
-			// But we keep the method name for interface compatibility
+		async ultrahonkProve(witness: Uint8Array, logger?: Logger): Promise<{ proof: Uint8Array }> {
 			return concurrencyLimiter.add(async() => {
 				const { backend: backendInstance } = await initializeBackend(logger)
 				// console.log('backendInstance', backendInstance)
@@ -95,7 +93,7 @@ export function makeBarretenbergZKOperator({
 			})
 		},
 
-		async groth16Verify(
+		async ultrahonkVerify(
 			publicSignals: ZKProofPublicSignals,
 			proof: Uint8Array | string,
 			logger?: Logger

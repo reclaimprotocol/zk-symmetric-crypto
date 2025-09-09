@@ -1,5 +1,5 @@
 import { CONFIG } from './config'
-import { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, Proof, VerifyProofOpts, ZKProofInput, ZKProofPublicSignals } from './types'
+import { EncryptionAlgorithm, GenerateProofOpts, GenerateWitnessOpts, GetPublicSignalsOpts, isBarretenbergOperator, OPRFOperator, Proof, VerifyProofOpts, ZKOperator, ZKProofInput, ZKProofPublicSignals, ZKProofPublicSignalsOPRF } from './types'
 import { getCounterForByteOffset } from './utils'
 
 /**
@@ -23,9 +23,14 @@ export async function generateProof(opts: GenerateProofOpts): Promise<Proof> {
 		wtnsSerialised = await operator.generateWitness(witness)
 	}
 
-	const { proof } = await operator.groth16Prove(wtnsSerialised, logger)
+	const proveFn = isBarretenbergOperator(operator)
+		? operator.ultrahonkProve
+		: (operator).groth16Prove
 
-	return { algorithm, proofData: proof, plaintext: plaintextArray }
+	const proof = await proveFn(wtnsSerialised, logger)
+
+
+	return { algorithm, proofData: proof.proof, plaintext: plaintextArray }
 }
 
 /**
@@ -40,20 +45,31 @@ export async function verifyProof(opts: VerifyProofOpts): Promise<void> {
 
 	const { proof: { proofData }, operator, logger } = opts
 	let verified: boolean
-	if('toprf' in opts) {
-		verified = await operator.groth16Verify(
-			{ ...publicSignals, toprf: opts.toprf },
-			proofData,
-			logger
-		)
-	} else {
-		// serialise to array of numbers for the ZK circuit
-		verified = await operator.groth16Verify(
-			// @ts-expect-error
+
+	if(isBarretenbergOperator(operator)) {
+		verified = await operator.ultrahonkVerify(
 			publicSignals,
 			proofData,
 			logger
 		)
+	} else {
+		if('toprf' in opts) {
+			const publicSignalsWithToprf: ZKProofPublicSignalsOPRF = {
+				...publicSignals,
+				toprf: opts.toprf
+			}
+			verified = await (operator as OPRFOperator).groth16Verify(
+				publicSignalsWithToprf,
+				proofData,
+				logger
+			)
+		} else {
+			verified = await (operator as ZKOperator).groth16Verify(
+				publicSignals,
+				proofData,
+				logger
+			)
+		}
 	}
 
 	if(!verified) {

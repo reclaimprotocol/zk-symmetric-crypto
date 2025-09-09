@@ -11,7 +11,7 @@ const logger: Logger = console
 
 const CLONE_DIR = './zk-symmetric-crypto'
 const CLONE_CMD = [
-	`git clone https://github.com/reclaimprotocol/zk-symmetric-crypto ${CLONE_DIR}`,
+	`git clone https://github.com/ModoriLabs/zk-symmetric-crypto ${CLONE_DIR}`,
 	`cd ${CLONE_DIR}`,
 	`git reset ${GIT_COMMIT_HASH} --hard`
 ].join(' && ')

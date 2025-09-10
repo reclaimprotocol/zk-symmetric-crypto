@@ -19,13 +19,11 @@ import { convertToNoirWitness, getCircuitFilename } from './utils'
 export function makeBarretenbergZKOperator({
 	algorithm,
 	fetcher,
-	options: { threads = 1, maxProofConcurrency = 2 } = {}
-}: MakeZKOperatorOpts<BarretenbergOpts & { maxProofConcurrency?: number }>): BarretenbergOperator {
+	options: { threads = 1 } = {}
+}: MakeZKOperatorOpts<BarretenbergOpts>): BarretenbergOperator {
 	let circuit: CompiledCircuit
-	let noir
-	let backend
-
-	const concurrencyLimiter = new PQueue({ concurrency: maxProofConcurrency })
+	let noir: Noir
+	let backend: UltraHonkBackend
 
 	async function loadCircuit(logger?: Logger): Promise<CompiledCircuit> {
 		if(!circuit) {
@@ -70,27 +68,24 @@ export function makeBarretenbergZKOperator({
 		},
 
 		async ultrahonkProve(witness: Uint8Array, logger?: Logger): Promise<{ proof: Uint8Array }> {
-			return concurrencyLimiter.add(async() => {
-				const { backend: backendInstance } = await initializeBackend(logger)
-				// console.log('backendInstance', backendInstance)
+			const { backend: backendInstance } = await initializeBackend(logger)
 
-				logger?.info?.('Generating proof with UltraHonk backend...')
-				const startTime = Date.now()
+			logger?.info?.('Generating proof with UltraHonk backend...')
+			const startTime = Date.now()
 
-				const proofData = await backendInstance.generateProof(witness)
-				const proofTime = Date.now() - startTime
-				logger?.info?.(`Proof generated in ${proofTime}ms, size: ${proofData.proof.length} bytes`)
+			const proofData = await backendInstance.generateProof(witness)
+			const proofTime = Date.now() - startTime
+			logger?.info?.(`Proof generated in ${proofTime}ms, size: ${proofData.proof.length} bytes`)
 
-				// Store the full proof data (including public inputs) in the proof bytes
-				// We'll need to reconstruct this for verification
-				const fullProof = {
-					proof: Array.from(proofData.proof),
-					publicInputs: proofData.publicInputs
-				}
-				const proofBytes = new TextEncoder().encode(JSON.stringify(fullProof))
+			// Store the full proof data (including public inputs) in the proof bytes
+			// We'll need to reconstruct this for verification
+			const fullProof = {
+				proof: Array.from(proofData.proof),
+				publicInputs: proofData.publicInputs
+			}
+			const proofBytes = new TextEncoder().encode(JSON.stringify(fullProof))
 
-				return { proof: proofBytes }
-			})
+			return { proof: proofBytes }
 		},
 
 		async ultrahonkVerify(
@@ -124,6 +119,6 @@ export function makeBarretenbergZKOperator({
 				// console.error('Verification error details:', error)
 				return false
 			}
-		},
-	}
+		}
+  }
 }

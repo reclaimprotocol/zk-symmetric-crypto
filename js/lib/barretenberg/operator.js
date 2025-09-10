@@ -1,23 +1,18 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.makeBarretenbergZKOperator = makeBarretenbergZKOperator;
 const bb_js_1 = require("@aztec/bb.js");
 // @ts-ignore
 const noir_js_1 = require("@noir-lang/noir_js");
-const p_queue_1 = __importDefault(require("p-queue"));
 const utils_1 = require("./utils");
 /**
  * Creates a Barretenberg ZK operator for Noir circuits
  * This operator uses the UltraHonk proving system from Barretenberg
  */
-function makeBarretenbergZKOperator({ algorithm, fetcher, options: { threads = 1, maxProofConcurrency = 2 } = {} }) {
+function makeBarretenbergZKOperator({ algorithm, fetcher, options: { threads = 1 } = {} }) {
     let circuit;
     let noir;
     let backend;
-    const concurrencyLimiter = new p_queue_1.default({ concurrency: maxProofConcurrency });
     async function loadCircuit(logger) {
         if (!circuit) {
             logger?.info?.(`Loading Noir circuit for ${algorithm}`);
@@ -49,23 +44,20 @@ function makeBarretenbergZKOperator({ algorithm, fetcher, options: { threads = 1
             return witness;
         },
         async ultrahonkProve(witness, logger) {
-            return concurrencyLimiter.add(async () => {
-                const { backend: backendInstance } = await initializeBackend(logger);
-                // console.log('backendInstance', backendInstance)
-                logger?.info?.('Generating proof with UltraHonk backend...');
-                const startTime = Date.now();
-                const proofData = await backendInstance.generateProof(witness);
-                const proofTime = Date.now() - startTime;
-                logger?.info?.(`Proof generated in ${proofTime}ms, size: ${proofData.proof.length} bytes`);
-                // Store the full proof data (including public inputs) in the proof bytes
-                // We'll need to reconstruct this for verification
-                const fullProof = {
-                    proof: Array.from(proofData.proof),
-                    publicInputs: proofData.publicInputs
-                };
-                const proofBytes = new TextEncoder().encode(JSON.stringify(fullProof));
-                return { proof: proofBytes };
-            });
+            const { backend: backendInstance } = await initializeBackend(logger);
+            logger?.info?.('Generating proof with UltraHonk backend...');
+            const startTime = Date.now();
+            const proofData = await backendInstance.generateProof(witness);
+            const proofTime = Date.now() - startTime;
+            logger?.info?.(`Proof generated in ${proofTime}ms, size: ${proofData.proof.length} bytes`);
+            // Store the full proof data (including public inputs) in the proof bytes
+            // We'll need to reconstruct this for verification
+            const fullProof = {
+                proof: Array.from(proofData.proof),
+                publicInputs: proofData.publicInputs
+            };
+            const proofBytes = new TextEncoder().encode(JSON.stringify(fullProof));
+            return { proof: proofBytes };
         },
         async ultrahonkVerify(publicSignals, proof, logger) {
             const { backend: backendInstance } = await initializeBackend(logger);
@@ -91,6 +83,6 @@ function makeBarretenbergZKOperator({ algorithm, fetcher, options: { threads = 1
                 // console.error('Verification error details:', error)
                 return false;
             }
-        },
+        }
     };
 }

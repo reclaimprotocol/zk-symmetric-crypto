@@ -160,6 +160,7 @@ export type ZKTOPRFPublicSignals = {
 export type BlockInfo = {
 	nonce: ZKInputItem
 	counter: number
+    boundary: number | undefined
 }
 
 export type ZKProofPublicSignals = {

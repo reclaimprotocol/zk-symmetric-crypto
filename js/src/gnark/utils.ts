@@ -159,7 +159,8 @@ export function generateGnarkWitness(
 			: undefined,
 		blocks: input.noncesAndCounters.map(n => ({
 			nonce: Base64.fromUint8Array(n.nonce),
-			counter: n.counter
+			counter: n.counter,
+			boundary: n.boundary || null
 		})),
 		input: Base64.fromUint8Array(input.in),
 		toprf: generateTOPRFParams()

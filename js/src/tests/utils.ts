@@ -91,7 +91,7 @@ export const ZK_CONFIG_MAP: {
 		makeBarretenbergZKOperator({
 			algorithm,
 			fetcher,
-			options: { maxProofConcurrency: 2 }
+			options: { threads: cpus().length }
 		})
 	),
 }

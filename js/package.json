@@ -1,6 +1,6 @@
 {
   "name": "zk-symmetric-crypto-test",
-  "version": "1.2.0",
+  "version": "1.4.3",
   "description": "JS Wrappers for Various ZK Snark Circuits for noir integration test",
   "main": "lib/index.js",
   "scripts": {

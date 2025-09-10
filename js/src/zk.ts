@@ -158,7 +158,7 @@ export async function getPublicSignals(
 		}
 
 		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-		noncesAndCounters.push({ nonce: iv, counter: startCounter })
+		noncesAndCounters.push({ nonce: iv, counter: startCounter, boundary:undefined })
 
 		ciphertext = padCiphertextToSize(ciphertext, blockSize)
 		ciphertextBlocks.push(ciphertext)

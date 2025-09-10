@@ -12,8 +12,8 @@ export type GnarkLib = {
     koffi: typeof import('koffi');
 };
 export declare function initGnarkAlgorithm(id: number, fileExt: string, fetcher: FileFetch, logger?: Logger): Promise<GnarkLib>;
-export declare function strToUint8Array(str: string): Uint8Array;
-export declare function serialiseGnarkWitness(cipher: EncryptionAlgorithm, input: ZKProofInput | ZKProofInputOPRF | ZKProofPublicSignals | ZKProofPublicSignalsOPRF): Uint8Array;
+export declare function strToUint8Array(str: string): Uint8Array<ArrayBufferLike>;
+export declare function serialiseGnarkWitness(cipher: EncryptionAlgorithm, input: ZKProofInput | ZKProofInputOPRF | ZKProofPublicSignals | ZKProofPublicSignalsOPRF): Uint8Array<ArrayBufferLike>;
 export declare function generateGnarkWitness(cipher: EncryptionAlgorithm, input: ZKProofInput | ZKProofInputOPRF | ZKProofPublicSignals | ZKProofPublicSignalsOPRF): {
     cipher: string;
     key: string | undefined;

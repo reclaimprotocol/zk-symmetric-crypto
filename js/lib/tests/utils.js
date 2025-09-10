@@ -54,7 +54,7 @@ exports.ZK_CONFIG_MAP = {
     'barretenberg': (algorithm) => ((0, operator_1.makeBarretenbergZKOperator)({
         algorithm,
         fetcher,
-        options: { maxProofConcurrency: 2 }
+        options: { threads: (0, os_1.cpus)().length }
     })),
 };
 exports.ZK_CONFIGS = Object.keys(exports.ZK_CONFIG_MAP);

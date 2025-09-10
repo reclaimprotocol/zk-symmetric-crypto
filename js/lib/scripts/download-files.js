@@ -6,18 +6,15 @@ const path_1 = require("path");
 const util_1 = require("util");
 const execPromise = (0, util_1.promisify)(child_process_1.exec);
 const logger = console;
-const GIT_COMMIT_HASH_OF_CIRCUIT = '9ab94804a1d7400e74fe91412f4a0d238c15320f';
-const CLONE_DIR = './zk-symmetric-crypto';
+const GIT_COMMIT_HASH_OF_CIRCUIT = "7faf1fdbe9d2ede8a4b7688ea7d734c9cf6224df";
+const CLONE_DIR = "./zk-symmetric-crypto";
 const CLONE_CMD = [
     `git clone https://github.com/ModoriLabs/zk-symmetric-crypto ${CLONE_DIR}`,
     `cd ${CLONE_DIR}`,
-    `git reset ${GIT_COMMIT_HASH_OF_CIRCUIT} --hard`
-].join(' && ');
-const BASE_DIR = (0, path_1.join)(__dirname, '../../');
-const DIRS_TO_COPY = [
-    'resources',
-    'bin'
-];
+    `git reset ${GIT_COMMIT_HASH_OF_CIRCUIT} --hard`,
+].join(" && ");
+const BASE_DIR = (0, path_1.join)(__dirname, "../../");
+const DIRS_TO_COPY = ["resources", "bin"];
 async function main() {
     for (const dir of DIRS_TO_COPY) {
         await (0, promises_1.rm)((0, path_1.join)(BASE_DIR, dir), { recursive: true, force: true });
@@ -35,6 +32,6 @@ async function main() {
     }
     await (0, promises_1.rm)(CLONE_DIR, { recursive: true, force: true });
     logger.info(`removed "${CLONE_DIR}" directory`);
-    logger.info('done');
+    logger.info("done");
 }
 main();

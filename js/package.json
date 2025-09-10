@@ -1,6 +1,6 @@
 {
   "name": "zk-symmetric-crypto-test",
-  "version": "1.4.5",
+  "version": "1.4.8",
   "description": "JS Wrappers for Various ZK Snark Circuits for noir integration test",
   "main": "lib/index.js",
   "scripts": {
@@ -58,6 +58,7 @@
     "@adiwajshing/eslint-config": "github:adiwajshing/eslint-config",
     "@commitlint/cli": "^17.7.1",
     "@commitlint/config-conventional": "^17.7.0",
+    "@noir-lang/noir_js": "^1.0.0-beta.8",
     "@swc-node/register": "^1.10.9",
     "@swc/core": "^1.12.14",
     "@swc/jest": "^0.2.36",

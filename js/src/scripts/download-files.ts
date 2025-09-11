@@ -1,4 +1,4 @@
-import { createWriteStream } from 'fs'
+import { createReadStream, createWriteStream } from 'fs'
 import { rename, rm } from 'fs/promises'
 import { dirname, join } from 'path'
 import { Readable } from 'stream'
@@ -6,6 +6,7 @@ import { pipeline } from 'stream/promises'
 import { Extract } from 'unzipper'
 import { GIT_COMMIT_HASH } from '../config.ts'
 import type { Logger } from '../types.ts'
+
 
 const logger: Logger = console
 
@@ -41,16 +42,16 @@ async function downloadAndExtractZip() {
 	}
 
 	await pipeline(
-		Readable.fromWeb(response.body as any),
+		// @ts-ignore
+		Readable.from(response.body),
 		createWriteStream(zipPath)
 	)
 
 	logger.info('downloaded ZIP, extracting...')
 
 	// Extract ZIP
-	const fs = await import('fs')
 	await pipeline(
-		fs.createReadStream(zipPath),
+		createReadStream(zipPath),
 		Extract({ path: './' })
 	)
 

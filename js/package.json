@@ -54,10 +54,10 @@
     "lib"
   ],
   "peerDependencies": {
+    "@reclaimprotocol/tls": "*",
     "koffi": "*",
     "p-queue": "*",
-    "snarkjs": "*",
-    "@reclaimprotocol/tls": "*"
+    "snarkjs": "*"
   },
   "peerDependenciesMeta": {
     "snarkjs": {
@@ -79,6 +79,7 @@
     "@commitlint/config-conventional": "^17.7.0",
     "@reclaimprotocol/tls": "^0.1.0",
     "@types/node": "^22.0.0",
+    "@types/unzipper": "^0.10.11",
     "circom_tester": "^0.0.20",
     "circomlib": "^2.0.5",
     "compare-versions": "^6.1.1",
@@ -87,6 +88,7 @@
     "p-queue": "^8.0.0",
     "snarkjs": "git+https://github.com/reclaimprotocol/snarkjs.git",
     "tinybench": "^3.0.3",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "unzipper": "^0.12.3"
   }
 }

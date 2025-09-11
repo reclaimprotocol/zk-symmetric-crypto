@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'fs'
-import { rename, rm } from 'fs/promises'
+import { mkdir, rename, rm } from 'fs/promises'
 import { dirname, join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
@@ -34,7 +34,6 @@ async function downloadAndExtractZip() {
 	await rm(EXTRACTED_DIR, { recursive: true, force: true })
 
 	// Create download directory and download ZIP
-	const { mkdir } = await import('fs/promises')
 	await mkdir(DOWNLOAD_DIR, { recursive: true })
 
 	if(!response.body) {

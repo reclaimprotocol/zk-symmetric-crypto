@@ -1,6 +1,6 @@
 {
   "name": "@reclaimprotocol/zk-symmetric-crypto",
-  "version": "5.0.2",
+  "version": "5.0.3",
   "description": "JS Wrappers for Various ZK Snark Circuits",
   "type": "module",
   "exports": {
@@ -71,7 +71,8 @@
     }
   },
   "dependencies": {
-    "js-base64": "^3.7.7"
+    "js-base64": "^3.7.7",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
     "@adiwajshing/eslint-config": "github:adiwajshing/eslint-config",
@@ -88,7 +89,6 @@
     "p-queue": "^8.0.0",
     "snarkjs": "git+https://github.com/reclaimprotocol/snarkjs.git",
     "tinybench": "^3.0.3",
-    "typescript": "^5.2.2",
-    "unzipper": "^0.12.3"
+    "typescript": "^5.2.2"
   }
 }

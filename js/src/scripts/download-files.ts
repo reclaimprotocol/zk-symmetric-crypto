@@ -1,13 +1,14 @@
-import { createReadStream, createWriteStream } from 'fs'
+import { exec } from 'child_process'
+import { createWriteStream } from 'fs'
 import { mkdir, rename, rm } from 'fs/promises'
 import { dirname, join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
-import { Extract } from 'unzipper'
+import { promisify } from 'util'
 import { GIT_COMMIT_HASH } from '../config.ts'
 import type { Logger } from '../types.ts'
 
-
+const execPromise = promisify(exec)
 const logger: Logger = console
 
 const ZIP_URL = `https://github.com/reclaimprotocol/zk-symmetric-crypto/archive/${GIT_COMMIT_HASH}.zip`
@@ -48,11 +49,8 @@ async function downloadAndExtractZip() {
 
 	logger.info('downloaded ZIP, extracting...')
 
-	// Extract ZIP
-	await pipeline(
-		createReadStream(zipPath),
-		Extract({ path: './' })
-	)
+	// Extract ZIP using unzip command
+	await execPromise(`unzip -q ${zipPath} -d ./`)
 
 	logger.info(`extracted to ${EXTRACTED_DIR}`)
 }

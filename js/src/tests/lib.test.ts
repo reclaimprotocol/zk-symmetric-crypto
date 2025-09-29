@@ -21,7 +21,6 @@ const ALL_ALGOS: EncryptionAlgorithm[] = [
 ]
 
 const SUPPORTED_ALGO_MAP: { [T in ZKEngine]: EncryptionAlgorithm[] } = {
-	'expander': ['chacha20'],
 	'gnark': ALL_ALGOS,
 	'snarkjs': ALL_ALGOS,
 }

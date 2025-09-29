@@ -1,5 +1,3 @@
-import { cpus } from 'os'
-import { makeExpanderZkOperator } from '../expander/operator.ts'
 import { makeGnarkZkOperator } from '../gnark/operator.ts'
 import {
 	type EncryptionAlgorithm,
@@ -12,17 +10,11 @@ const fetcher = makeLocalFileFetch()
 
 type ConfigItem = 'snarkjs'
 	| 'gnark'
-	| 'expander-single-thread'
-	| 'expander-multi-thread'
 
 export function getEngineForConfigItem(item: ConfigItem) {
 	return item === 'snarkjs'
 		? 'snarkjs'
-		: (
-			item === 'gnark'
-				? 'gnark'
-				: 'expander'
-		)
+		: 'gnark'
 }
 
 export const ZK_CONFIG_MAP: {
@@ -37,20 +29,6 @@ export const ZK_CONFIG_MAP: {
 	),
 	'gnark': (algorithm) => (
 		makeGnarkZkOperator({ algorithm, fetcher })
-	),
-	'expander-single-thread': (algorithm) => (
-		makeExpanderZkOperator({
-			algorithm,
-			fetcher,
-			options: { maxWorkers: 0 }
-		})
-	),
-	'expander-multi-thread': (algorithm) => (
-		makeExpanderZkOperator({
-			algorithm,
-			fetcher,
-			options: { maxWorkers: cpus().length }
-		})
 	),
 }
 

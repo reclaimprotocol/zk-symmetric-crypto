@@ -1,6 +1,6 @@
 {
   "name": "@reclaimprotocol/zk-symmetric-crypto",
-  "version": "5.0.4",
+  "version": "5.0.5",
   "description": "JS Wrappers for Various ZK Snark Circuits",
   "type": "module",
   "exports": {
@@ -15,10 +15,6 @@
     "./gnark": {
       "types": "./lib/gnark/index.d.ts",
       "default": "./lib/gnark/index.js"
-    },
-    "./expander": {
-      "types": "./lib/expander/operator.d.ts",
-      "import": "./lib/expander/operator.js"
     }
   },
   "scripts": {

@@ -29,8 +29,6 @@ We currently support the following algorithms:
 Our library implements multiple ZK proof systems:
 - **[Circom Circuits](/circom/)** backed by `snarkjs` (groth16).
 - **[`gnark` Frontend Circuits](/gnark/)** backed by `gnark` (groth16).
-- **[`gnark` Frontend Circuits](/expander/)** backed by `expander` (GKR):
-    - Note: This is a work in progress and may be insecure. It is also only available for `chacha20` at the moment.
 
 All these proof systems can be accessed easily via a single **[JS Package](/js)**. This package provides user-friendly abstract interfaces for generating and verifying proofs.
 

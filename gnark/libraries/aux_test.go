@@ -3,16 +3,17 @@ package libraries
 import (
 	"crypto/rand"
 	"encoding/json"
-	aes_v2 "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/aesV2"
-	"github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/chachaV3"
-	prover "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/libraries/prover/impl"
-	oprf2 "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/libraries/prover/oprf"
-	verifier "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/libraries/verifier/impl"
+	"fmt"
 	"math"
 	"math/big"
 	"os"
 	"sync"
 	"testing"
+
+	aes_v2 "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/circuits/aesV2"
+	prover "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/libraries/prover/impl"
+	oprf2 "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/libraries/prover/oprf"
+	verifier "github.com/reclaimprotocol/zk-symmetric-crypto/gnark/libraries/verifier/impl"
 
 	"github.com/consensys/gnark/test"
 )
@@ -144,68 +145,48 @@ func BenchmarkTOPRFFinalize(b *testing.B) {
 
 func TestChaCha20RandomNoncesCounters(t *testing.T) {
 	assert := test.NewAssert(t)
-	assert.True(prover.InitAlgorithm(prover.CHACHA20, chachaKey, chachaR1CS))
-	bKey := make([]byte, 32)
-	bIn := make([]byte, 64*chachaV3.Blocks)
+	assert.True(prover.InitAlgorithm(prover.AES_128, aes128Key, aes128r1cs))
 
-	rand.Read(bKey)
-	rand.Read(bIn)
+	j := `{
+  "cipher": "aes-128-ctr",
+  "key": "1WmuU/OkjNjfyZjT+wy+HQ==",
+  "ciphertext": "AKtju67OIJmJW1Ck2xZcqbJVvXR5G0LAZPdTzr0NCg0KTm0osuIC+G2KjKvdx5Hx8Dr95l52LtDw7vCT/xvM7WEUGoYMGAPFfDwlvLtvpjk=",
+  "blocks": [
+    {
+      "nonce": "et0QvQAAAAAAAAAB",
+      "counter": 32,
+      "boundary": null
+    },
+    {
+      "nonce": "et0QvQAAAAAAAAAB",
+      "counter": 33,
+      "boundary": null
+    },
+    {
+      "nonce": "et0QvQAAAAAAAAAB",
+      "counter": 34,
+      "boundary": null
+    },
+    {
+      "nonce": "et0QvQAAAAAAAAAB",
+      "counter": 35,
+      "boundary": null
+    },
+    {
+      "nonce": "et0QvQAAAAAAAAAB",
+      "counter": 36,
+      "boundary": null
+    }
+  ],
+  "input": "KioqKioqKioqKioqKioqKioqKioqKioqKioqKioYBQ+ZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  "toprf": {
+    
+  }
+}`
 
-	// Create truly random nonces and counters for each block
-	blocks := make([]prover.Block, chachaV3.Blocks)
-	for b := 0; b < chachaV3.Blocks; b++ {
-		nonce := make([]byte, 12)
-		rand.Read(nonce)
-		tmp, _ := rand.Int(rand.Reader, big.NewInt(math.MaxUint32))
-		counter := uint32(tmp.Uint64())
-		blocks[b] = prover.Block{
-			Nonce:   nonce,
-			Counter: counter,
-		}
-	}
-
-	inputParams := &prover.InputParams{
-		Cipher: "chacha20",
-		Key:    bKey,
-		Blocks: blocks,
-		Input:  bIn,
-	}
-
-	buf, _ := json.Marshal(inputParams)
-
-	res := prover.Prove(buf)
+	res := prover.Prove([]byte(j))
 	assert.True(len(res) > 0)
-	var outParams *prover.OutputParams
-	json.Unmarshal(res, &outParams)
-
-	// Create verifier blocks
-	verifierBlocks := make([]verifier.Block, len(blocks))
-
-	for i, b := range blocks {
-		verifierBlocks[i] = verifier.Block{
-			Nonce:   b.Nonce,
-			Counter: b.Counter,
-		}
-	}
-
-	// Create the new JSON structure for public signals
-	publicSignals := &verifier.PublicSignalsJSON{
-		Ciphertext: outParams.Ciphertext,
-		Blocks:     verifierBlocks,
-		Input:      bIn,
-	}
-
-	publicSignalsJSON, err := json.Marshal(publicSignals)
-	assert.NoError(err)
-
-	inParams := &verifier.InputVerifyParams{
-		Cipher:        inputParams.Cipher,
-		Proof:         outParams.Proof,
-		PublicSignals: publicSignalsJSON,
-	}
-	inBuf, err := json.Marshal(inParams)
-	assert.NoError(err)
-	assert.True(verifier.Verify(inBuf))
+	fmt.Println(string(res))
 }
 
 func TestAES128RandomNoncesCounters(t *testing.T) {

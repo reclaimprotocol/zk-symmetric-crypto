@@ -24,10 +24,6 @@ import (
 	"golang.org/x/crypto/chacha20"
 )
 
-func init() {
-	// std.RegisterHints()
-}
-
 type TOPRFResponse struct {
 	Index          uint8   `json:"index"`
 	PublicKeyShare []byte  `json:"publicKeyShare"`

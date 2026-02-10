@@ -1,5 +1,5 @@
 import { GIT_COMMIT_HASH } from './config.ts'
-import type { FileFetch } from './types.ts'
+import type { FileFetch, Logger } from './types.ts'
 
 const DEFAULT_REMOTE_BASE_URL = `https://github.com/reclaimprotocol/zk-symmetric-crypto/raw/${GIT_COMMIT_HASH}/resources/`
 const DEFAULT_BASE_PATH = '../resources'
@@ -7,6 +7,7 @@ const DEFAULT_BASE_PATH = '../resources'
 export type MakeRemoteFileFetchOpts = {
 	baseUrl?: string
 	maxRetries?: number
+	logger?: Logger
 }
 
 export type MakeLocalFileFetchOpts = {
@@ -24,6 +25,7 @@ export type MakeLocalFileFetchOpts = {
 export function makeRemoteFileFetch({
 	baseUrl = DEFAULT_REMOTE_BASE_URL,
 	maxRetries = 3,
+	logger
 }: MakeRemoteFileFetchOpts = {}): FileFetch {
 	return {
 		async fetch(engine, filename) {
@@ -41,8 +43,12 @@ export function makeRemoteFileFetch({
 
 					const arr = await res.arrayBuffer()
 					return new Uint8Array(arr)
-				} catch(error) {
-					lastError = error
+				} catch(err) {
+					logger?.warn(
+						{ err, attempt, engine, filename },
+						'failed to fetch zk resource'
+					)
+					lastError = err
 					if(attempt < maxRetries) {
 						// add some delay before retrying
 						await new Promise(resolve => setTimeout(resolve, 1000 * attempt))

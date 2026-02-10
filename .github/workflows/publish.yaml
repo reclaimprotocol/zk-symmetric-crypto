@@ -2,6 +2,7 @@ name: Publish to NPM
 
 permissions:
   contents: write
+  id-token: write  # Required for OIDC
 
 # Manually triggered workflow
 on:
@@ -30,7 +31,7 @@ jobs:
       - name: Install dependencies
         working-directory: ./${{ matrix.package-dir }}
         run: npm install
-      
+
       - name: Lint
         working-directory: ./${{ matrix.package-dir }}
         run: npm run lint
@@ -42,6 +43,4 @@ jobs:
 
       - name: Publish to NPM
         working-directory: ./${{ matrix.package-dir }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm run publish:pkg

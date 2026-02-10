@@ -71,6 +71,21 @@ func ExtractSecretElements(api frontend.API, bits, bitmask []frontend.Variable, 
 	return [2]frontend.Variable{res1, res2}
 }
 
+// assertNotSmallOrder verifies that point p is not in a small subgroup by checking
+// that [8]p != identity (where 8 is the BabyJubJub cofactor). This prevents DLEQ
+// forgery attacks using small-order points. Uses only 3 point doublings.
+func assertNotSmallOrder(api frontend.API, curve twistededwards.Curve, p twistededwards.Point) {
+	// Compute [8]P = [2^3]P using 3 doublings (cofactor multiplication)
+	cleared := curve.Double(p)
+	cleared = curve.Double(cleared)
+	cleared = curve.Double(cleared)
+
+	// Assert [8]P is not the identity point.
+	// In twisted Edwards form, identity is (0, 1). A point with X=0 on BabyJubJub
+	// is the identity, so checking X != 0 is sufficient.
+	api.AssertIsDifferent(cleared.X, 0)
+}
+
 func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) error {
 	curve, err := twistededwards.NewEdCurve(api, tbn.BN254)
 	if err != nil {
@@ -97,6 +112,10 @@ func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) e
 	for i := 0; i < Threshold; i++ {
 		curve.AssertIsOnCurve(p.Responses[i])
 		curve.AssertIsOnCurve(p.SharePublicKeys[i])
+		// BabyJubJub has cofactor 8, so we must verify points are not in a small subgroup.
+		// Check [8]P != identity to ensure the point has a prime-order component.
+		assertNotSmallOrder(api, curve, p.Responses[i])
+		assertNotSmallOrder(api, curve, p.SharePublicKeys[i])
 		err = verifyDLEQ(api, curve, masked, p.Responses[i], p.SharePublicKeys[i], p.C[i], p.R[i])
 		if err != nil {
 			return err

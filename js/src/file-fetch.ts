@@ -6,6 +6,7 @@ const DEFAULT_BASE_PATH = '../resources'
 
 export type MakeRemoteFileFetchOpts = {
 	baseUrl?: string
+	maxRetries?: number
 }
 
 export type MakeLocalFileFetchOpts = {
@@ -22,19 +23,36 @@ export type MakeLocalFileFetchOpts = {
  */
 export function makeRemoteFileFetch({
 	baseUrl = DEFAULT_REMOTE_BASE_URL,
+	maxRetries = 3,
 }: MakeRemoteFileFetchOpts = {}): FileFetch {
 	return {
 		async fetch(engine, filename) {
 			const url = `${baseUrl}/${engine}/${filename}`
-			const res = await fetch(url)
-			if(!res.ok) {
-				throw new Error(
-					`${engine}-${filename} fetch failed with code: ${res.status}`
-				)
+			let lastError: unknown
+
+			for(let attempt = 1; attempt <= maxRetries; attempt++) {
+				try {
+					const res = await fetch(url)
+					if(!res.ok) {
+						throw new Error(
+							`${engine}-${filename} fetch failed with code: ${res.status}`
+						)
+					}
+
+					const arr = await res.arrayBuffer()
+					return new Uint8Array(arr)
+				} catch(error) {
+					lastError = error
+					if(attempt < maxRetries) {
+						// add some delay before retrying
+						await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+					}
+				}
 			}
 
-			const arr = await res.arrayBuffer()
-			return new Uint8Array(arr)
+			throw lastError || new Error(
+				`Failed to fetch ${engine}-${filename} after ${maxRetries} attempts`
+			)
 		},
 	}
 }

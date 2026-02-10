@@ -17,6 +17,10 @@
       "default": "./lib/gnark/index.js"
     }
   },
+  "repository": {
+  	"type": "git",
+   	"url": "https://github.com/reclaimprotocol/zk-symmetric-crypto"
+  },
   "scripts": {
     "run:tsc": "node --experimental-strip-types",
     "test": "node --experimental-strip-types --import=./src/tests/setup.ts --test --test-force-exit src/tests/*.test.ts",

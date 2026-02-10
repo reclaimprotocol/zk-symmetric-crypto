@@ -13,14 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [22]
+        node-version: [24]
         package-dir: [js]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

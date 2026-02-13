@@ -346,21 +346,6 @@ func SetBitmaskWithBoundaries(bits []frontend.Variable, pos, length uint32, boun
 	}
 }
 
-// Helper functions for min/max
-func min(a, b uint32) uint32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b uint32) uint32 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func BEtoLE(b []byte) []byte {
 	for i := 0; i < len(b)/2; i++ {
 		b[i], b[len(b)-1-i] = b[len(b)-1-i], b[i]

@@ -105,6 +105,24 @@ func OPRFEvaluate(serverPrivate *big.Int, request *twistededwards.PointAffine) (
 }
 
 func OPRFFinalize(serverPublic *twistededwards.PointAffine, request *OPRFRequest, response *OPRFResponse) (*big.Int, error) {
+	// Validate server public key
+	if !serverPublic.IsOnCurve() {
+		return nil, errors.New("server public key is not on curve")
+	}
+	t := new(twistededwards.PointAffine).ScalarMultiplication(serverPublic, big.NewInt(8))
+	if t.X.IsZero() {
+		return nil, errors.New("server public key is in small subgroup")
+	}
+
+	// Validate evaluated point
+	if !response.EvaluatedPoint.IsOnCurve() {
+		return nil, errors.New("evaluated point is not on curve")
+	}
+	t.ScalarMultiplication(response.EvaluatedPoint, big.NewInt(8))
+	if t.X.IsZero() {
+		return nil, errors.New("evaluated point is in small subgroup")
+	}
+
 	if !VerifyDLEQ(response.C, response.R, serverPublic, response.EvaluatedPoint, request.MaskedData) {
 		return nil, errors.New("DLEQ proof is invalid")
 	}

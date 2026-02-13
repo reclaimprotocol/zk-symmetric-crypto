@@ -97,6 +97,8 @@ func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) e
 	}
 	helper := NewBabyJubFieldHelper(api)
 
+	api.AssertIsDifferent(p.Mask, 0) // mask must be non-zero for inversion
+
 	maskBits := bits.ToBinary(api, p.Mask, bits.WithNbDigits(api.Compiler().Field().BitLen()))
 	mask := field.FromBits(maskBits...)
 

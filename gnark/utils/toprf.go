@@ -2,6 +2,8 @@ package utils
 
 import (
 	"crypto/rand"
+	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	rnd "math/rand/v2"
@@ -91,6 +93,20 @@ func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twis
 }
 
 func TOPRFFinalize(idxs []int, elements []*twistededwards.PointAffine, secretElements [2]*big.Int, mask *big.Int) (*big.Int, error) {
+	if mask == nil || mask.Sign() == 0 {
+		return nil, errors.New("mask must be non-zero")
+	}
+
+	// Validate all elements
+	for i, el := range elements {
+		if !el.IsOnCurve() {
+			return nil, fmt.Errorf("element %d is not on curve", i)
+		}
+		t := new(twistededwards.PointAffine).ScalarMultiplication(el, big.NewInt(8))
+		if t.X.IsZero() {
+			return nil, fmt.Errorf("element %d is in small subgroup", i)
+		}
+	}
 
 	res := TOPRFThresholdMul(idxs, elements)
 

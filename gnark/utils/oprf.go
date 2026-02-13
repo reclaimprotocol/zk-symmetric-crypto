@@ -73,12 +73,18 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 func OPRFEvaluate(serverPrivate *big.Int, request *twistededwards.PointAffine) (*OPRFResponse, error) {
 	curve := twistededwards.GetEdwardsCurve()
 
-	t := new(twistededwards.PointAffine)
-	t.Set(request)
-	t.ScalarMultiplication(t, big.NewInt(8)) // cofactor check
-
-	if !t.IsOnCurve() {
+	// Verify request point is on curve
+	if !request.IsOnCurve() {
 		return nil, fmt.Errorf("request point is not on curve")
+	}
+
+	// Subgroup check: compute [8]P and verify it's not the identity.
+	// If [8]P = identity, the point is in a small subgroup (order dividing 8),
+	// which would allow DLEQ forgery. Identity on twisted Edwards is (0, 1).
+	t := new(twistededwards.PointAffine)
+	t.ScalarMultiplication(request, big.NewInt(8))
+	if t.X.IsZero() {
+		return nil, fmt.Errorf("request point is in small subgroup")
 	}
 
 	resp := &twistededwards.PointAffine{}

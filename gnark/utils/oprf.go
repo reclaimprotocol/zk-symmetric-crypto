@@ -314,56 +314,6 @@ func SetBitmaskForLocationsWithBoundaries(bits []frontend.Variable, locations []
 	}
 }
 
-// SetBitmaskWithBoundaries sets bitmask accounting for block boundaries
-// When data spans multiple blocks with boundaries, it maps logical positions to physical positions
-// boundaries slice contains the actual data bytes used in each block
-// blockSize is the size of each block in bytes (16 for AES, 64 for ChaCha)
-// pos is the byte position where target data starts in the logical data stream
-// length is the length of target data in bytes
-func SetBitmaskWithBoundaries(bits []frontend.Variable, pos, length uint32, boundaries []uint32, blockSize uint32) {
-	// Initialize all bits to 0
-	for i := range bits {
-		bits[i] = 0
-	}
-
-	// Track the current logical position in the data stream
-	logicalPos := uint32(0)
-	targetEnd := pos + length
-
-	// Process each block
-	for blockIdx, boundary := range boundaries {
-		// Physical start position of this block
-		blockPhysicalStart := uint32(blockIdx) * blockSize
-
-		// Logical range for this block: [logicalPos, logicalPos + boundary)
-		logicalBlockEnd := logicalPos + boundary
-
-		// Find intersection of target data [pos, targetEnd) with this block's logical range
-		intersectStart := max(pos, logicalPos)
-		intersectEnd := min(targetEnd, logicalBlockEnd)
-
-		// If there's an intersection, set the bits
-		if intersectStart < intersectEnd {
-			// Map logical positions to physical positions in this block
-			for logicalByte := intersectStart; logicalByte < intersectEnd; logicalByte++ {
-				// Physical position = block start + offset within block
-				physicalByte := blockPhysicalStart + (logicalByte - logicalPos)
-
-				// Set 8 bits for this byte
-				for bit := uint32(0); bit < 8; bit++ {
-					bitIndex := physicalByte*8 + bit
-					if bitIndex < uint32(len(bits)) {
-						bits[bitIndex] = 1
-					}
-				}
-			}
-		}
-
-		// Move to next block's logical position
-		logicalPos = logicalBlockEnd
-	}
-}
-
 func BEtoLE(b []byte) []byte {
 	for i := 0; i < len(b)/2; i++ {
 		b[i], b[len(b)-1-i] = b[len(b)-1-i], b[i]

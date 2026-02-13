@@ -73,12 +73,18 @@ func OPRFGenerateRequest(secretBytes []byte, domainSeparator string) (*OPRFReque
 func OPRFEvaluate(serverPrivate *big.Int, request *twistededwards.PointAffine) (*OPRFResponse, error) {
 	curve := twistededwards.GetEdwardsCurve()
 
-	t := new(twistededwards.PointAffine)
-	t.Set(request)
-	t.ScalarMultiplication(t, big.NewInt(8)) // cofactor check
-
-	if !t.IsOnCurve() {
+	// Verify request point is on curve
+	if !request.IsOnCurve() {
 		return nil, fmt.Errorf("request point is not on curve")
+	}
+
+	// Subgroup check: compute [8]P and verify it's not the identity.
+	// If [8]P = identity, the point is in a small subgroup (order dividing 8),
+	// which would allow DLEQ forgery. Identity on twisted Edwards is (0, 1).
+	t := new(twistededwards.PointAffine)
+	t.ScalarMultiplication(request, big.NewInt(8))
+	if t.X.IsZero() {
+		return nil, fmt.Errorf("request point is in small subgroup")
 	}
 
 	resp := &twistededwards.PointAffine{}
@@ -99,6 +105,24 @@ func OPRFEvaluate(serverPrivate *big.Int, request *twistededwards.PointAffine) (
 }
 
 func OPRFFinalize(serverPublic *twistededwards.PointAffine, request *OPRFRequest, response *OPRFResponse) (*big.Int, error) {
+	// Validate server public key
+	if !serverPublic.IsOnCurve() {
+		return nil, errors.New("server public key is not on curve")
+	}
+	t := new(twistededwards.PointAffine).ScalarMultiplication(serverPublic, big.NewInt(8))
+	if t.X.IsZero() {
+		return nil, errors.New("server public key is in small subgroup")
+	}
+
+	// Validate evaluated point
+	if !response.EvaluatedPoint.IsOnCurve() {
+		return nil, errors.New("evaluated point is not on curve")
+	}
+	t.ScalarMultiplication(response.EvaluatedPoint, big.NewInt(8))
+	if t.X.IsZero() {
+		return nil, errors.New("evaluated point is in small subgroup")
+	}
+
 	if !VerifyDLEQ(response.C, response.R, serverPublic, response.EvaluatedPoint, request.MaskedData) {
 		return nil, errors.New("DLEQ proof is invalid")
 	}
@@ -288,71 +312,6 @@ func SetBitmaskForLocationsWithBoundaries(bits []frontend.Variable, locations []
 			logicalPos = logicalBlockEnd
 		}
 	}
-}
-
-// SetBitmaskWithBoundaries sets bitmask accounting for block boundaries
-// When data spans multiple blocks with boundaries, it maps logical positions to physical positions
-// boundaries slice contains the actual data bytes used in each block
-// blockSize is the size of each block in bytes (16 for AES, 64 for ChaCha)
-// pos is the byte position where target data starts in the logical data stream
-// length is the length of target data in bytes
-func SetBitmaskWithBoundaries(bits []frontend.Variable, pos, length uint32, boundaries []uint32, blockSize uint32) {
-	// Initialize all bits to 0
-	for i := range bits {
-		bits[i] = 0
-	}
-
-	// Track the current logical position in the data stream
-	logicalPos := uint32(0)
-	targetEnd := pos + length
-
-	// Process each block
-	for blockIdx, boundary := range boundaries {
-		// Physical start position of this block
-		blockPhysicalStart := uint32(blockIdx) * blockSize
-
-		// Logical range for this block: [logicalPos, logicalPos + boundary)
-		logicalBlockEnd := logicalPos + boundary
-
-		// Find intersection of target data [pos, targetEnd) with this block's logical range
-		intersectStart := max(pos, logicalPos)
-		intersectEnd := min(targetEnd, logicalBlockEnd)
-
-		// If there's an intersection, set the bits
-		if intersectStart < intersectEnd {
-			// Map logical positions to physical positions in this block
-			for logicalByte := intersectStart; logicalByte < intersectEnd; logicalByte++ {
-				// Physical position = block start + offset within block
-				physicalByte := blockPhysicalStart + (logicalByte - logicalPos)
-
-				// Set 8 bits for this byte
-				for bit := uint32(0); bit < 8; bit++ {
-					bitIndex := physicalByte*8 + bit
-					if bitIndex < uint32(len(bits)) {
-						bits[bitIndex] = 1
-					}
-				}
-			}
-		}
-
-		// Move to next block's logical position
-		logicalPos = logicalBlockEnd
-	}
-}
-
-// Helper functions for min/max
-func min(a, b uint32) uint32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b uint32) uint32 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func BEtoLE(b []byte) []byte {

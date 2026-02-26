@@ -155,15 +155,9 @@ export async function getPublicSignals(
 			throw new Error(`iv must be ${ivSizeBytes} bytes`)
 		}
 
-		if(offsetBytes > ciphertext.length) {
-			throw new Error(
-				`offsetBytes(${offsetBytes}) must be `
-				+ `<= ciphertext length (${ciphertext.length})`
-			)
-		}
-
 		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-		noncesAndCounters.push({ nonce: iv, counter: startCounter, boundary:undefined })
+		noncesAndCounters
+			.push({ nonce: iv, counter: startCounter, boundary: undefined })
 
 		ciphertext = padCiphertextToSize(ciphertext, blockSize)
 		ciphertextBlocks.push(ciphertext)

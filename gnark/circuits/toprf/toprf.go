@@ -71,19 +71,18 @@ func ExtractSecretElements(api frontend.API, bits, bitmask []frontend.Variable, 
 	return [2]frontend.Variable{res1, res2}
 }
 
-// assertNotSmallOrder verifies that point p is not in a small subgroup by checking
-// that [8]p != identity (where 8 is the BabyJubJub cofactor). This prevents DLEQ
-// forgery attacks using small-order points. Uses only 3 point doublings.
-func assertNotSmallOrder(api frontend.API, curve twistededwards.Curve, p twistededwards.Point) {
-	// Compute [8]P = [2^3]P using 3 doublings (cofactor multiplication)
+// clearCofactor multiplies point by cofactor 8 to ensure it's in the prime-order subgroup
+// per RFC 9497. Returns the cleared point after asserting it's not identity.
+func clearCofactor(api frontend.API, curve twistededwards.Curve, p twistededwards.Point) twistededwards.Point {
+	// Compute [8]P = [2^3]P using 3 doublings
 	cleared := curve.Double(p)
 	cleared = curve.Double(cleared)
 	cleared = curve.Double(cleared)
 
-	// Assert [8]P is not the identity point.
-	// In twisted Edwards form, identity is (0, 1). A point with X=0 on BabyJubJub
-	// is the identity, so checking X != 0 is sufficient.
+	// Assert [8]P is not the identity point (0, 1).
 	api.AssertIsDifferent(cleared.X, 0)
+
+	return cleared
 }
 
 func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) error {
@@ -109,16 +108,15 @@ func VerifyTOPRF(api frontend.API, p *Params, secretData [2]frontend.Variable) e
 
 	masked := curve.ScalarMul(*dataPoint, p.Mask)
 
-	// verify each DLEQ first
+	// verify each DLEQ with cofactor-cleared points per RFC 9497
 
 	for i := 0; i < Threshold; i++ {
 		curve.AssertIsOnCurve(p.Responses[i])
 		curve.AssertIsOnCurve(p.SharePublicKeys[i])
-		// BabyJubJub has cofactor 8, so we must verify points are not in a small subgroup.
-		// Check [8]P != identity to ensure the point has a prime-order component.
-		assertNotSmallOrder(api, curve, p.Responses[i])
-		assertNotSmallOrder(api, curve, p.SharePublicKeys[i])
-		err = verifyDLEQ(api, curve, masked, p.Responses[i], p.SharePublicKeys[i], p.C[i], p.R[i])
+		// Clear cofactor to ensure points are in prime-order subgroup per RFC 9497
+		clearedResponse := clearCofactor(api, curve, p.Responses[i])
+		clearedSharePubKey := clearCofactor(api, curve, p.SharePublicKeys[i])
+		err = verifyDLEQ(api, curve, masked, clearedResponse, clearedSharePubKey, p.C[i], p.R[i])
 		if err != nil {
 			return err
 		}

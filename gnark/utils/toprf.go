@@ -134,11 +134,13 @@ func TOPRFFinalize(idxs []int, elements, sharePublicKeys []*twistededwards.Point
 
 	res := TOPRFThresholdMul(idxs, elements)
 
-	invR := new(big.Int)
-	invR.ModInverse(mask, TNBCurveOrder)
+	invMask := new(big.Int).ModInverse(mask, TNBCurveOrder)
+	if invMask == nil {
+		return nil, errors.New("mask is not invertible modulo curve order")
+	}
 
 	deblinded := &twistededwards.PointAffine{}
-	deblinded.ScalarMultiplication(res, invR)
+	deblinded.ScalarMultiplication(res, invMask)
 
 	x := deblinded.X.BigInt(new(big.Int))
 	y := deblinded.Y.BigInt(new(big.Int))

@@ -255,6 +255,9 @@ func GenerateOPRFData(t *testing.T, emailBytes []byte) *OPRFData {
 	cs := make([]*big.Int, threshold)
 	rs := make([]*big.Int, threshold)
 
+	serverPublicKey := &twistededwards.PointAffine{}
+	serverPublicKey.Unmarshal(shares.PublicKey)
+
 	for i := 0; i < threshold; i++ {
 		sk := new(big.Int).SetBytes(shares.Shares[idxs[i]].PrivateKey)
 		evalResult, _ := utils.OPRFEvaluate(sk, req.MaskedData)
@@ -276,7 +279,7 @@ func GenerateOPRFData(t *testing.T, emailBytes []byte) *OPRFData {
 	}
 
 	// Finalize OPRF
-	out, _ := utils.TOPRFFinalize(idxs, elements, sharePubKeys, cs, rs, req.MaskedData, req.SecretElements, req.Mask)
+	out, _ := utils.TOPRFFinalize(idxs, elements, sharePubKeys, cs, rs, req.MaskedData, req.SecretElements, req.Mask, serverPublicKey)
 
 	return &OPRFData{
 		Mask:            req.Mask.Bytes(),

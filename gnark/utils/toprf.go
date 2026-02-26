@@ -92,12 +92,21 @@ func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twis
 	return result
 }
 
-func TOPRFFinalize(idxs []int, elements, sharePublicKeys []*twistededwards.PointAffine, cs, rs []*big.Int, maskedRequest *twistededwards.PointAffine, secretElements [2]*big.Int, mask *big.Int) (*big.Int, error) {
+func TOPRFFinalize(idxs []int, elements, sharePublicKeys []*twistededwards.PointAffine, cs, rs []*big.Int, maskedRequest *twistededwards.PointAffine, secretElements [2]*big.Int, mask *big.Int, serverPublicKey *twistededwards.PointAffine) (*big.Int, error) {
 	if mask == nil || mask.Sign() == 0 {
 		return nil, errors.New("mask must be non-zero")
 	}
-	if len(elements) != len(sharePublicKeys) || len(elements) != len(cs) || len(elements) != len(rs) {
+	if len(elements) != len(sharePublicKeys) || len(elements) != len(cs) || len(elements) != len(rs) || len(elements) != len(idxs) {
 		return nil, errors.New("mismatched input lengths")
+	}
+	if serverPublicKey == nil {
+		return nil, errors.New("server public key is required")
+	}
+
+	// Verify share public keys reconstruct to expected server public key
+	reconstructedPubKey := TOPRFThresholdMul(idxs, sharePublicKeys)
+	if !reconstructedPubKey.X.Equal(&serverPublicKey.X) || !reconstructedPubKey.Y.Equal(&serverPublicKey.Y) {
+		return nil, errors.New("share public keys do not reconstruct to server public key")
 	}
 
 	// Validate and verify DLEQ for each response

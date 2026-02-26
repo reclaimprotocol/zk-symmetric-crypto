@@ -59,7 +59,7 @@ func TestOPRF(t *testing.T) {
 		idxs[i] = i
 	}
 
-	out, err := TOPRFFinalize(idxs, resps, sharePubKeys, cs, rs, req.MaskedData, req.SecretElements, req.Mask)
+	out, err := TOPRFFinalize(idxs, resps, sharePubKeys, cs, rs, req.MaskedData, req.SecretElements, req.Mask, serverPublic)
 	require.NoError(t, err)
 	require.Equal(t, "EnTod4kXJzeXybI7tRvGjU7GYYRXz8tEJ2Az0L2XQIc=", base64.StdEncoding.EncodeToString(out.Bytes()))
 }

@@ -123,7 +123,7 @@ func TOPRFFinalize(params []byte) []byte {
 	secretElements[0] = new(big.Int).SetBytes(inputParams.Request.SecretElements[0])
 	secretElements[1] = new(big.Int).SetBytes(inputParams.Request.SecretElements[1])
 
-	out, err := utils.TOPRFFinalize(idxs, elements, sharePubKeys, cs, rs, maskedData, secretElements, mask)
+	out, err := utils.TOPRFFinalize(idxs, elements, sharePubKeys, cs, rs, maskedData, secretElements, mask, serverPublicKey)
 	if err != nil {
 		panic(err)
 	}

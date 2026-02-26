@@ -83,10 +83,8 @@ export async function generateZkWitness({
 		throw new Error(`key must be ${keySizeBytes} bytes`)
 	}
 
-	const witness: ZKProofInput = {
-		key,
-		...await getPublicSignals({ publicInput, algorithm, key })
-	}
+	const witness: ZKProofInput
+		= { key, ...await getPublicSignals({ publicInput, algorithm, key }) }
 
 	return { witness, plaintextArray: witness.out }
 }
@@ -155,6 +153,13 @@ export async function getPublicSignals(
 	) {
 		if(iv.length !== ivSizeBytes) {
 			throw new Error(`iv must be ${ivSizeBytes} bytes`)
+		}
+
+		if(offsetBytes > ciphertext.length) {
+			throw new Error(
+				`offsetBytes(${offsetBytes}) must be `
+				+ `<= ciphertext length (${ciphertext.length})`
+			)
 		}
 
 		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)

@@ -90,6 +90,9 @@ func TOPRFFinalize(params []byte) []byte {
 	}
 
 	elements := make([]*twistededwards.PointAffine, toprf.Threshold)
+	sharePubKeys := make([]*twistededwards.PointAffine, toprf.Threshold)
+	cs := make([]*big.Int, toprf.Threshold)
+	rs := make([]*big.Int, toprf.Threshold)
 	idxs := make([]int, toprf.Threshold)
 	for i := 0; i < toprf.Threshold; i++ {
 		elements[i] = &twistededwards.PointAffine{}
@@ -100,6 +103,13 @@ func TOPRFFinalize(params []byte) []byte {
 		if !elements[i].IsOnCurve() {
 			panic("evaluated element is not on curve")
 		}
+		sharePubKeys[i] = &twistededwards.PointAffine{}
+		err = sharePubKeys[i].Unmarshal(inputParams.Responses[i].PublicKeyShare)
+		if err != nil {
+			panic(err)
+		}
+		cs[i] = new(big.Int).SetBytes(inputParams.Responses[i].C)
+		rs[i] = new(big.Int).SetBytes(inputParams.Responses[i].R)
 		idxs[i] = int(inputParams.Responses[i].Index)
 	}
 
@@ -113,7 +123,7 @@ func TOPRFFinalize(params []byte) []byte {
 	secretElements[0] = new(big.Int).SetBytes(inputParams.Request.SecretElements[0])
 	secretElements[1] = new(big.Int).SetBytes(inputParams.Request.SecretElements[1])
 
-	out, err := utils.TOPRFFinalize(idxs, elements, secretElements, mask)
+	out, err := utils.TOPRFFinalize(idxs, elements, sharePubKeys, cs, rs, maskedData, secretElements, mask)
 	if err != nil {
 		panic(err)
 	}

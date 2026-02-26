@@ -92,12 +92,15 @@ func TOPRFThresholdMul(idxs []int, elements []*twistededwards.PointAffine) *twis
 	return result
 }
 
-func TOPRFFinalize(idxs []int, elements []*twistededwards.PointAffine, secretElements [2]*big.Int, mask *big.Int) (*big.Int, error) {
+func TOPRFFinalize(idxs []int, elements, sharePublicKeys []*twistededwards.PointAffine, cs, rs []*big.Int, maskedRequest *twistededwards.PointAffine, secretElements [2]*big.Int, mask *big.Int) (*big.Int, error) {
 	if mask == nil || mask.Sign() == 0 {
 		return nil, errors.New("mask must be non-zero")
 	}
+	if len(elements) != len(sharePublicKeys) || len(elements) != len(cs) || len(elements) != len(rs) {
+		return nil, errors.New("mismatched input lengths")
+	}
 
-	// Validate all elements
+	// Validate and verify DLEQ for each response
 	for i, el := range elements {
 		if !el.IsOnCurve() {
 			return nil, fmt.Errorf("element %d is not on curve", i)
@@ -106,16 +109,27 @@ func TOPRFFinalize(idxs []int, elements []*twistededwards.PointAffine, secretEle
 		if t.X.IsZero() {
 			return nil, fmt.Errorf("element %d is in small subgroup", i)
 		}
+
+		if !sharePublicKeys[i].IsOnCurve() {
+			return nil, fmt.Errorf("share public key %d is not on curve", i)
+		}
+		t.ScalarMultiplication(sharePublicKeys[i], big.NewInt(8))
+		if t.X.IsZero() {
+			return nil, fmt.Errorf("share public key %d is in small subgroup", i)
+		}
+
+		if !VerifyDLEQ(cs[i], rs[i], sharePublicKeys[i], el, maskedRequest) {
+			return nil, fmt.Errorf("DLEQ proof %d is invalid", i)
+		}
 	}
 
 	res := TOPRFThresholdMul(idxs, elements)
 
-	// output calc
 	invR := new(big.Int)
-	invR.ModInverse(mask, TNBCurveOrder) // mask^-1
+	invR.ModInverse(mask, TNBCurveOrder)
 
 	deblinded := &twistededwards.PointAffine{}
-	deblinded.ScalarMultiplication(res, invR) // H *mask * sk * mask^-1 = H * sk
+	deblinded.ScalarMultiplication(res, invR)
 
 	x := deblinded.X.BigInt(new(big.Int))
 	y := deblinded.Y.BigInt(new(big.Int))

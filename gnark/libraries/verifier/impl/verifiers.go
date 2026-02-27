@@ -222,6 +222,10 @@ func (cv *ChachaOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage
 			fmt.Printf("Invalid blocks array length\n")
 			return false
 		}
+		if len(iParams.Blocks[b].Nonce) != 12 {
+			fmt.Printf("block[%d] nonce must be exactly 12 bytes, not %d\n", b, len(iParams.Blocks[b].Nonce))
+			return false
+		}
 		nonce := utils.BytesToUint32LEBits(iParams.Blocks[b].Nonce)
 		copy(witness.Nonce[b][:], nonce)
 		witness.Counter[b] = utils.Uint32ToBits(iParams.Blocks[b].Counter)
@@ -371,6 +375,10 @@ func (cv *AESOPRFVerifier) Verify(proof []byte, publicSignals json.RawMessage) b
 	for b := 0; b < aes_v2.BLOCKS; b++ {
 		if b >= len(iParams.Blocks) {
 			fmt.Printf("Invalid blocks array length\n")
+			return false
+		}
+		if len(iParams.Blocks[b].Nonce) != 12 {
+			fmt.Printf("block[%d] nonce must be exactly 12 bytes, not %d\n", b, len(iParams.Blocks[b].Nonce))
 			return false
 		}
 		for i := 0; i < len(iParams.Blocks[b].Nonce); i++ {

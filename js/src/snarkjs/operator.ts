@@ -80,6 +80,13 @@ export function makeSnarkJsZKOperator({
 				}
 			})()
 
+			if(input.noncesAndCounters.length !== 1) {
+				throw new Error(
+					`Expected exactly 1 nonce and counter pair,
+						got ${input.noncesAndCounters.length}`
+				)
+			}
+
 			const { noncesAndCounters: [{ nonce, counter }] } = input
 			const inputBits = {
 				key: serialiseValuesToBits(algorithm, input.key),
@@ -90,17 +97,10 @@ export function makeSnarkJsZKOperator({
 
 			const wtns: WitnessData = { type: 'mem' }
 			if(await wc) {
-				await snarkjs.wtns.wtnsCalculateWithCalculator(
-					inputBits,
-					await wc,
-					wtns,
-				)
+				await snarkjs.wtns
+					.wtnsCalculateWithCalculator(inputBits,	await wc, wtns)
 			} else {
-				await snarkjs.wtns.calculate(
-					inputBits,
-					await circuitWasm,
-					wtns,
-				)
+				await snarkjs.wtns.calculate(inputBits, await circuitWasm, wtns)
 			}
 
 			return wtns.data!

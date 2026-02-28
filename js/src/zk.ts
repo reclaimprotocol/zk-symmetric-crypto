@@ -83,10 +83,8 @@ export async function generateZkWitness({
 		throw new Error(`key must be ${keySizeBytes} bytes`)
 	}
 
-	const witness: ZKProofInput = {
-		key,
-		...await getPublicSignals({ publicInput, algorithm, key })
-	}
+	const witness: ZKProofInput
+		= { key, ...await getPublicSignals({ publicInput, algorithm, key }) }
 
 	return { witness, plaintextArray: witness.out }
 }
@@ -158,7 +156,8 @@ export async function getPublicSignals(
 		}
 
 		const startCounter = getCounterForByteOffset(algorithm, offsetBytes)
-		noncesAndCounters.push({ nonce: iv, counter: startCounter, boundary:undefined })
+		noncesAndCounters
+			.push({ nonce: iv, counter: startCounter, boundary: undefined })
 
 		ciphertext = padCiphertextToSize(ciphertext, blockSize)
 		ciphertextBlocks.push(ciphertext)

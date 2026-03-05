@@ -78,48 +78,46 @@ impl CtrTraceGenerator {
         *col += 1;
     }
 
-    fn append_nibbles(&mut self, col: &mut usize, value: Simd<u8, 16>) {
-        let lo = value & Simd::splat(0x0F);
-        let hi = value >> Simd::splat(4);
-        self.append(*col, Self::byte_to_packed(lo));
-        *col += 1;
-        self.append(*col, Self::byte_to_packed(hi));
-        *col += 1;
+    /// Append bit decomposition (8 bits, LSB first) for a byte.
+    fn append_bits(&mut self, col: &mut usize, value: Simd<u8, 16>) {
+        for bit_idx in 0..8 {
+            let bit = (value >> Simd::splat(bit_idx)) & Simd::splat(1);
+            self.append(*col, Self::byte_to_packed(bit));
+            *col += 1;
+        }
     }
 
+    /// Process XOR of two bytes with bit decomposition.
+    /// Layout: 8 a_bits, 8 b_bits, 8 c_bits (result bits), result byte
     fn xor_byte_trace(&mut self, col: &mut usize, a: Simd<u8, 16>, b: Simd<u8, 16>) -> Simd<u8, 16> {
         let result = a ^ b;
 
-        self.append_nibbles(col, a);
-        self.append_nibbles(col, b);
-
-        let c_lo = (a & Simd::splat(0x0F)) ^ (b & Simd::splat(0x0F));
-        let c_hi = (a >> Simd::splat(4)) ^ (b >> Simd::splat(4));
-        self.append(*col, Self::byte_to_packed(c_lo));
-        *col += 1;
-        self.append(*col, Self::byte_to_packed(c_hi));
-        *col += 1;
-
+        // Append bit decomposition of a (8 bits)
+        self.append_bits(col, a);
+        // Append bit decomposition of b (8 bits)
+        self.append_bits(col, b);
+        // Append bit decomposition of result (8 bits)
+        self.append_bits(col, result);
+        // Append result byte
         self.append_byte(col, result);
 
         result
     }
 
+    /// Process xtime with bit decomposition.
+    /// Layout: 8 a_bits, 8 r_bits (result bits), result byte
     fn xtime_trace(&mut self, col: &mut usize, a: Simd<u8, 16>) -> Simd<u8, 16> {
         let shifted = a << Simd::splat(1);
         let mask = a >> Simd::splat(7);
         let reduction = mask * Simd::splat(0x1b);
         let result = shifted ^ reduction;
 
+        // Append bit decomposition of a (8 bits)
+        self.append_bits(col, a);
+        // Append bit decomposition of result (8 bits)
+        self.append_bits(col, result);
+        // Append result byte
         self.append_byte(col, result);
-
-        let high_bit = a >> Simd::splat(7);
-        self.append(*col, Self::byte_to_packed(high_bit));
-        *col += 1;
-
-        let low_part = a & Simd::splat(0x7F);
-        self.append(*col, Self::byte_to_packed(low_part));
-        *col += 1;
 
         result
     }

@@ -46,15 +46,8 @@ impl<E: EvalAtRow> ChaChaStreamEvalAtRow<E> {
         }
 
         // Read plaintext (16 u32s x 32 bits = 512 field elements)
+        // Boolean constraints are added by next_u32()
         let plaintext: [BitU32<E::F>; STATE_SIZE] = std::array::from_fn(|_| self.next_u32());
-
-        // Constrain plaintext bits to be binary
-        let one = E::F::from(BaseField::from_u32_unchecked(1));
-        for pt in &plaintext {
-            for bit in &pt.bits {
-                self.eval.add_constraint(bit.clone() * (one.clone() - bit.clone()));
-            }
-        }
 
         // XOR keystream with plaintext to get ciphertext
         // Read ciphertext from trace and constrain
@@ -66,8 +59,15 @@ impl<E: EvalAtRow> ChaChaStreamEvalAtRow<E> {
     }
 
     /// Read next u32 from trace (32 bits).
+    /// Each bit is constrained to be boolean (0 or 1).
     fn next_u32(&mut self) -> BitU32<E::F> {
-        BitU32::new(std::array::from_fn(|_| self.eval.next_trace_mask()))
+        let one = E::F::from(BaseField::from_u32_unchecked(1));
+        BitU32::new(std::array::from_fn(|_| {
+            let bit = self.eval.next_trace_mask();
+            // Constrain bit ∈ {0, 1}: bit * (1 - bit) = 0
+            self.eval.add_constraint(bit.clone() * (one.clone() - bit.clone()));
+            bit
+        }))
     }
 
     /// ChaCha quarter-round on indices a, b, c, d.

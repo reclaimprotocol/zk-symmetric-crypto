@@ -58,8 +58,15 @@ impl<E: EvalAtRow> ChaChabitwiseEvalAtRow<E> {
     }
 
     /// Read next u32 from trace (32 bits).
+    /// Each bit is constrained to be boolean (0 or 1).
     fn next_u32(&mut self) -> BitU32<E::F> {
-        BitU32::new(std::array::from_fn(|_| self.eval.next_trace_mask()))
+        let one = E::F::from(BaseField::from_u32_unchecked(1));
+        BitU32::new(std::array::from_fn(|_| {
+            let bit = self.eval.next_trace_mask();
+            // Constrain bit ∈ {0, 1}: bit * (1 - bit) = 0
+            self.eval.add_constraint(bit.clone() * (one.clone() - bit.clone()));
+            bit
+        }))
     }
 
     /// ChaCha quarter-round on indices a, b, c, d.

@@ -98,73 +98,184 @@ impl<'a, E: EvalAtRow> AESLookupEvalAtRow<'a, E> {
         ]
     }
 
-    /// XOR two bytes using nibble decomposition.
-    /// Reads nibbles and result from trace, constrains decomposition and XOR.
+    /// XOR two bytes using bit decomposition.
+    /// Reads bits and result from trace, constrains decomposition and XOR at bit level.
     fn xor_byte(&mut self, a: &Byte<E::F>, b: &Byte<E::F>) -> Byte<E::F> {
-        // Read decomposition of a, b into nibbles
-        let a_lo = self.eval.next_trace_mask();
-        let a_hi = self.eval.next_trace_mask();
-        let b_lo = self.eval.next_trace_mask();
-        let b_hi = self.eval.next_trace_mask();
+        let one = E::F::from(BaseField::from_u32_unchecked(1));
+        let two = E::F::from(BaseField::from_u32_unchecked(2));
 
-        // Constrain: a = a_lo + 16 * a_hi
-        let sixteen = E::F::from(BaseField::from_u32_unchecked(16));
-        self.eval.add_constraint(
-            a.value.clone() - a_lo.clone() - sixteen.clone() * a_hi.clone(),
-        );
-        // Constrain: b = b_lo + 16 * b_hi
-        self.eval.add_constraint(
-            b.value.clone() - b_lo.clone() - sixteen.clone() * b_hi.clone(),
-        );
+        // Read bit decomposition of a (8 bits)
+        let a_bits: [E::F; 8] = std::array::from_fn(|_| {
+            let bit = self.eval.next_trace_mask();
+            // Constrain bit to be boolean
+            self.eval
+                .add_constraint(bit.clone() * (one.clone() - bit.clone()));
+            bit
+        });
 
-        // Read XOR results for nibbles
-        let c_lo = self.eval.next_trace_mask();
-        let c_hi = self.eval.next_trace_mask();
+        // Read bit decomposition of b (8 bits)
+        let b_bits: [E::F; 8] = std::array::from_fn(|_| {
+            let bit = self.eval.next_trace_mask();
+            // Constrain bit to be boolean
+            self.eval
+                .add_constraint(bit.clone() * (one.clone() - bit.clone()));
+            bit
+        });
 
-        // TODO: Add XOR lookup constraints for nibbles
-        // For now, we just constrain the relationship algebraically for 4-bit values
-        // In full implementation, use 4-bit XOR tables
+        // Read bit decomposition of result (8 bits)
+        let c_bits: [E::F; 8] = std::array::from_fn(|_| {
+            let bit = self.eval.next_trace_mask();
+            // Constrain bit to be boolean
+            self.eval
+                .add_constraint(bit.clone() * (one.clone() - bit.clone()));
+            bit
+        });
 
-        // Read final result
+        // Constrain: a = sum of a_bits[i] * 2^i
+        let mut a_sum = E::F::from(BaseField::from_u32_unchecked(0));
+        let mut power = E::F::from(BaseField::from_u32_unchecked(1));
+        for i in 0..8 {
+            a_sum = a_sum + power.clone() * a_bits[i].clone();
+            if i < 7 {
+                power = power * two.clone();
+            }
+        }
+        self.eval.add_constraint(a.value.clone() - a_sum);
+
+        // Constrain: b = sum of b_bits[i] * 2^i
+        let mut b_sum = E::F::from(BaseField::from_u32_unchecked(0));
+        let mut power = E::F::from(BaseField::from_u32_unchecked(1));
+        for i in 0..8 {
+            b_sum = b_sum + power.clone() * b_bits[i].clone();
+            if i < 7 {
+                power = power * two.clone();
+            }
+        }
+        self.eval.add_constraint(b.value.clone() - b_sum);
+
+        // Constrain XOR at bit level: c[i] = a[i] + b[i] - 2*a[i]*b[i]
+        for i in 0..8 {
+            self.eval.add_constraint(
+                c_bits[i].clone() - a_bits[i].clone() - b_bits[i].clone()
+                    + two.clone() * a_bits[i].clone() * b_bits[i].clone(),
+            );
+        }
+
+        // Read final result byte
         let result = self.next_byte();
 
-        // Constrain: result = c_lo + 16 * c_hi
-        self.eval.add_constraint(
-            result.value.clone() - c_lo - sixteen * c_hi,
-        );
+        // Constrain: result = sum of c_bits[i] * 2^i
+        let mut c_sum = E::F::from(BaseField::from_u32_unchecked(0));
+        let mut power = E::F::from(BaseField::from_u32_unchecked(1));
+        for i in 0..8 {
+            c_sum = c_sum + power.clone() * c_bits[i].clone();
+            if i < 7 {
+                power = power * two.clone();
+            }
+        }
+        self.eval.add_constraint(result.value.clone() - c_sum);
 
         result
     }
 
     /// xtime: multiply by 2 in GF(2^8).
     /// xtime(a) = (a << 1) XOR (0x1b if a >= 128 else 0)
+    /// Uses bit decomposition to properly constrain the GF(2^8) operation.
     fn xtime(&mut self, a: &Byte<E::F>) -> Byte<E::F> {
-        // Read the result from trace
+        let one = E::F::from(BaseField::from_u32_unchecked(1));
+        let two = E::F::from(BaseField::from_u32_unchecked(2));
+
+        // Read bit decomposition of a (8 bits)
+        let a_bits: [E::F; 8] = std::array::from_fn(|_| {
+            let bit = self.eval.next_trace_mask();
+            // Constrain bit to be boolean
+            self.eval
+                .add_constraint(bit.clone() * (one.clone() - bit.clone()));
+            bit
+        });
+
+        // Constrain: a = sum of a_bits[i] * 2^i
+        let mut a_sum = E::F::from(BaseField::from_u32_unchecked(0));
+        let mut power = E::F::from(BaseField::from_u32_unchecked(1));
+        for i in 0..8 {
+            a_sum = a_sum + power.clone() * a_bits[i].clone();
+            if i < 7 {
+                power = power * two.clone();
+            }
+        }
+        self.eval.add_constraint(a.value.clone() - a_sum);
+
+        // Read bit decomposition of result (8 bits)
+        let r_bits: [E::F; 8] = std::array::from_fn(|_| {
+            let bit = self.eval.next_trace_mask();
+            // Constrain bit to be boolean
+            self.eval
+                .add_constraint(bit.clone() * (one.clone() - bit.clone()));
+            bit
+        });
+
+        // xtime operation at bit level:
+        // After left shift: shifted[0]=0, shifted[i]=a[i-1] for i=1..7
+        // If a[7]=1, XOR with 0x1b = 0b00011011 (bits 0,1,3,4 are set)
+        //
+        // Result bits:
+        // r[0] = 0 XOR (a[7] * 1) = a[7]
+        // r[1] = a[0] XOR (a[7] * 1)
+        // r[2] = a[1] XOR 0 = a[1]
+        // r[3] = a[2] XOR (a[7] * 1)
+        // r[4] = a[3] XOR (a[7] * 1)
+        // r[5] = a[4] XOR 0 = a[4]
+        // r[6] = a[5] XOR 0 = a[5]
+        // r[7] = a[6] XOR 0 = a[6]
+
+        let high_bit = a_bits[7].clone();
+
+        // r[0] = a[7] (shifted bit is 0, XOR with high_bit if set)
+        self.eval.add_constraint(r_bits[0].clone() - high_bit.clone());
+
+        // r[1] = a[0] XOR a[7]
+        self.eval.add_constraint(
+            r_bits[1].clone() - a_bits[0].clone() - high_bit.clone()
+                + two.clone() * a_bits[0].clone() * high_bit.clone(),
+        );
+
+        // r[2] = a[1] (no XOR with 0x1b at this position)
+        self.eval.add_constraint(r_bits[2].clone() - a_bits[1].clone());
+
+        // r[3] = a[2] XOR a[7]
+        self.eval.add_constraint(
+            r_bits[3].clone() - a_bits[2].clone() - high_bit.clone()
+                + two.clone() * a_bits[2].clone() * high_bit.clone(),
+        );
+
+        // r[4] = a[3] XOR a[7]
+        self.eval.add_constraint(
+            r_bits[4].clone() - a_bits[3].clone() - high_bit.clone()
+                + two.clone() * a_bits[3].clone() * high_bit.clone(),
+        );
+
+        // r[5] = a[4] (no XOR with 0x1b at this position)
+        self.eval.add_constraint(r_bits[5].clone() - a_bits[4].clone());
+
+        // r[6] = a[5] (no XOR with 0x1b at this position)
+        self.eval.add_constraint(r_bits[6].clone() - a_bits[5].clone());
+
+        // r[7] = a[6] (no XOR with 0x1b at this position)
+        self.eval.add_constraint(r_bits[7].clone() - a_bits[6].clone());
+
+        // Read final result byte
         let result = self.next_byte();
 
-        // Read the high bit indicator (1 if a >= 128, 0 otherwise)
-        let high_bit = self.eval.next_trace_mask();
-
-        // Constrain: high_bit is binary
-        let one = E::F::from(BaseField::from_u32_unchecked(1));
-        self.eval.add_constraint(
-            high_bit.clone() * (one.clone() - high_bit.clone()),
-        );
-
-        // Constrain: high_bit = 1 iff a >= 128
-        // This requires: a = 128 * high_bit + low_part where 0 <= low_part < 128
-        let low_part = self.eval.next_trace_mask();
-        let c128 = E::F::from(BaseField::from_u32_unchecked(128));
-        self.eval.add_constraint(
-            a.value.clone() - c128.clone() * high_bit.clone() - low_part.clone(),
-        );
-
-        // Constrain: result = 2*a mod 256 XOR (high_bit * 0x1b)
-        // result = (2 * low_part + 256 * high_bit) mod 256 XOR (high_bit * 0x1b)
-        // result = 2 * low_part XOR (high_bit * 0x1b)
-        //
-        // For now, we trust the prover computed this correctly
-        // In full implementation, add proper constraints
+        // Constrain: result = sum of r_bits[i] * 2^i
+        let mut r_sum = E::F::from(BaseField::from_u32_unchecked(0));
+        let mut power = E::F::from(BaseField::from_u32_unchecked(1));
+        for i in 0..8 {
+            r_sum = r_sum + power.clone() * r_bits[i].clone();
+            if i < 7 {
+                power = power * two.clone();
+            }
+        }
+        self.eval.add_constraint(result.value.clone() - r_sum);
 
         result
     }

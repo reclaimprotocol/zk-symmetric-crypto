@@ -395,6 +395,194 @@ mod tests {
         println!("Verify time: {:?}", verify_time);
     }
 
+    // ==================== SECURITY TESTS ====================
+    // These tests verify the cryptographic binding of public inputs to proofs.
+    // See README.md "Security Model" section for detailed documentation.
+
+    /// Helper to compute ciphertext for SIMD input using native encrypt.
+    fn compute_simd_ciphertext(
+        key: &[u32; 8],
+        nonce: &[u32; 3],
+        counters: u32x16,
+        plaintext: &[u32x16; 16],
+    ) -> [u32x16; 16] {
+        use crate::chacha::bitwise::gen_stream::chacha20_encrypt;
+        let mut ciphertext: [u32x16; 16] = [u32x16::splat(0); 16];
+        for lane in 0..16 {
+            let counter = counters.to_array()[lane];
+            let pt: [u32; 16] = std::array::from_fn(|w| plaintext[w].to_array()[lane]);
+            let ct = chacha20_encrypt(key, nonce, counter, &pt);
+            for w in 0..16 {
+                let mut arr = ciphertext[w].to_array();
+                arr[lane] = ct[w];
+                ciphertext[w] = u32x16::from_array(arr);
+            }
+        }
+        ciphertext
+    }
+
+    /// Security test: Verify that tampering with public inputs in a serialized proof
+    /// causes verification to fail.
+    ///
+    /// Attack scenario:
+    /// 1. Attacker generates valid proof for data_A
+    /// 2. Attacker modifies proof.stmt.public_inputs to claim data_B
+    /// 3. Verifier should reject the tampered proof
+    #[test]
+    fn test_security_chacha_tampered_public_inputs_in_proof() {
+        let log_size = 4; // Small for fast test
+        let config = PcsConfig::default();
+
+        let key: [u32; 8] = [
+            0x03020100, 0x07060504, 0x0b0a0908, 0x0f0e0d0c,
+            0x13121110, 0x17161514, 0x1b1a1918, 0x1f1e1d1c,
+        ];
+        let nonce: [u32; 3] = [0x00000000, 0x0000004a, 0x00000000];
+        let nonce_bytes: [u8; 12] = {
+            let mut bytes = [0u8; 12];
+            for (i, &word) in nonce.iter().enumerate() {
+                bytes[i*4..(i+1)*4].copy_from_slice(&word.to_le_bytes());
+            }
+            bytes
+        };
+
+        // Generate inputs with proper SIMD ciphertext computation
+        let inputs: Vec<ChaChaStreamInput> = (0..(1 << (log_size - 4)))
+            .map(|i| {
+                let counters = u32x16::from_array(std::array::from_fn(|lane| (i * 16 + lane + 1) as u32));
+                let plaintext: [u32x16; 16] = std::array::from_fn(|word| {
+                    u32x16::from_array(std::array::from_fn(|lane| {
+                        ((i * 16 + lane) * 16 + word) as u32
+                    }))
+                });
+                let ciphertext = compute_simd_ciphertext(&key, &nonce, counters, &plaintext);
+                ChaChaStreamInput { key, nonce, counters, plaintext, ciphertext }
+            })
+            .collect();
+
+        // Collect plaintext/ciphertext bytes for public inputs
+        let mut plaintext_bytes = Vec::new();
+        let mut ciphertext_bytes = Vec::new();
+        for input in &inputs {
+            for lane in 0..16 {
+                for word in 0..16 {
+                    plaintext_bytes.extend_from_slice(&input.plaintext[word].to_array()[lane].to_le_bytes());
+                    ciphertext_bytes.extend_from_slice(&input.ciphertext[word].to_array()[lane].to_le_bytes());
+                }
+            }
+        }
+
+        // Generate valid proof
+        let mut proof = prove_stream_with_inputs::<Blake2sMerkleChannel>(
+            log_size, config, &nonce_bytes, 1, &plaintext_bytes, &ciphertext_bytes, &inputs
+        ).expect("Valid proof should succeed");
+
+        // Tamper with public inputs - claim different plaintext
+        let fake_plaintext = vec![0xffu8; plaintext_bytes.len()];
+        proof.stmt.public_inputs = ChaChaPublicInputs::new(&nonce_bytes, 1, &fake_plaintext, &ciphertext_bytes);
+
+        // Verification should fail
+        let result = verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+            proof, &nonce_bytes, 1, &fake_plaintext, &ciphertext_bytes
+        );
+        assert!(result.is_err(), "Tampered proof should fail verification");
+        println!("Security test passed: tampered public inputs detected");
+    }
+
+    /// Security test: Verify that a valid proof fails when verifier supplies
+    /// different public inputs than what was proven.
+    #[test]
+    fn test_security_chacha_verify_with_wrong_public_inputs() {
+        let log_size = 4;
+        let config = PcsConfig::default();
+
+        let key: [u32; 8] = [
+            0x03020100, 0x07060504, 0x0b0a0908, 0x0f0e0d0c,
+            0x13121110, 0x17161514, 0x1b1a1918, 0x1f1e1d1c,
+        ];
+        let nonce: [u32; 3] = [0x00000000, 0x0000004a, 0x00000000];
+        let nonce_bytes: [u8; 12] = {
+            let mut bytes = [0u8; 12];
+            for (i, &word) in nonce.iter().enumerate() {
+                bytes[i*4..(i+1)*4].copy_from_slice(&word.to_le_bytes());
+            }
+            bytes
+        };
+
+        let inputs: Vec<ChaChaStreamInput> = (0..(1 << (log_size - 4)))
+            .map(|i| {
+                let counters = u32x16::from_array(std::array::from_fn(|lane| (i * 16 + lane + 1) as u32));
+                let plaintext: [u32x16; 16] = std::array::from_fn(|word| {
+                    u32x16::from_array(std::array::from_fn(|lane| {
+                        ((i * 16 + lane) * 16 + word) as u32
+                    }))
+                });
+                let ciphertext = compute_simd_ciphertext(&key, &nonce, counters, &plaintext);
+                ChaChaStreamInput { key, nonce, counters, plaintext, ciphertext }
+            })
+            .collect();
+
+        let mut plaintext_bytes = Vec::new();
+        let mut ciphertext_bytes = Vec::new();
+        for input in &inputs {
+            for lane in 0..16 {
+                for word in 0..16 {
+                    plaintext_bytes.extend_from_slice(&input.plaintext[word].to_array()[lane].to_le_bytes());
+                    ciphertext_bytes.extend_from_slice(&input.ciphertext[word].to_array()[lane].to_le_bytes());
+                }
+            }
+        }
+
+        let proof = prove_stream_with_inputs::<Blake2sMerkleChannel>(
+            log_size, config, &nonce_bytes, 1, &plaintext_bytes, &ciphertext_bytes, &inputs
+        ).expect("Valid proof should succeed");
+
+        // Verify with correct inputs should succeed
+        assert!(
+            verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(), &nonce_bytes, 1, &plaintext_bytes, &ciphertext_bytes
+            ).is_ok(),
+            "Verification with correct inputs should succeed"
+        );
+
+        // Verify with wrong plaintext should fail
+        let wrong_plaintext = vec![0xffu8; plaintext_bytes.len()];
+        assert!(
+            verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(), &nonce_bytes, 1, &wrong_plaintext, &ciphertext_bytes
+            ).is_err(),
+            "Verification with wrong plaintext should fail"
+        );
+
+        // Verify with wrong nonce should fail
+        let wrong_nonce: [u8; 12] = [0xff; 12];
+        assert!(
+            verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(), &wrong_nonce, 1, &plaintext_bytes, &ciphertext_bytes
+            ).is_err(),
+            "Verification with wrong nonce should fail"
+        );
+
+        // Verify with wrong counter should fail
+        assert!(
+            verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(), &nonce_bytes, 999, &plaintext_bytes, &ciphertext_bytes
+            ).is_err(),
+            "Verification with wrong counter should fail"
+        );
+
+        // Verify with wrong ciphertext should fail
+        let wrong_ciphertext = vec![0xffu8; ciphertext_bytes.len()];
+        assert!(
+            verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+                proof, &nonce_bytes, 1, &plaintext_bytes, &wrong_ciphertext
+            ).is_err(),
+            "Verification with wrong ciphertext should fail"
+        );
+
+        println!("Security test passed: wrong public inputs correctly rejected");
+    }
+
     #[test]
     #[ignore]
     fn bench_stream() {

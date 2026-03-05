@@ -107,4 +107,106 @@ const verifyResult = verify_aes_ctr_proof(proof);
 | AES-256-CTR | 32 bytes | 16 bytes | `prove_aes256_ctr_encrypt` |
 | ChaCha20 | 32 bytes | 64 bytes | `prove_chacha20_encrypt` |
 
+## Security Model
+
+### Public Input Binding
+
+This implementation uses **Fiat-Shamir hash binding** to cryptographically bind public inputs (nonce, counter, plaintext, ciphertext) to STARK proofs. This section documents the security model for auditors.
+
+#### How It Works
+
+1. **AIR Constraints**: The constraint system enforces correct encryption:
+   ```
+   ciphertext = AES(key, nonce || counter) XOR plaintext
+   ```
+   or for ChaCha20:
+   ```
+   ciphertext = ChaCha20(key, nonce, counter) XOR plaintext
+   ```
+
+2. **Fiat-Shamir Binding**: Public inputs are hashed (Blake2s) and mixed into the channel before challenges are derived:
+   ```rust
+   // In prove/verify:
+   stmt0.mix_into(channel);  // Mixes hash(nonce, counter, plaintext, ciphertext)
+   commitment_scheme.commit(..., channel);
+   let challenges = channel.draw(...);  // Challenges depend on public input hashes
+   ```
+
+3. **Verification**: The verifier:
+   - Computes hash of their expected public inputs
+   - Compares against proof's embedded hash (fast-fail check)
+   - Runs STARK verification with same channel mixing
+   - If hashes differ, challenges differ, FRI verification fails
+
+#### Security Properties
+
+| Property | Mechanism | Assumption |
+|----------|-----------|------------|
+| Soundness | AIR constraints + FRI | Standard STARK assumptions |
+| Public input binding | Fiat-Shamir hash mixing | Blake2s collision resistance |
+| Key privacy | Key only in private witness | ZK property of STARKs |
+
+#### Comparison with Other Approaches
+
+**Groth16/gnark approach:**
+- Public inputs are directly part of the pairing verification equation
+- Verifier evaluates: `e(A, B) = e(α, β) · e(∑ aᵢGᵢ, γ) · e(C, δ)`
+- Mathematical binding via group operations
+
+**This STARK approach:**
+- Public inputs are hashed and mixed into Fiat-Shamir transcript
+- Verifier recomputes hash, compares, then verifies STARK
+- Cryptographic binding via hash collision resistance
+
+Both approaches are secure. The STARK approach is more flexible (can bind arbitrary data) but requires the hash comparison step.
+
+#### Threat Model
+
+**Attacker capabilities:**
+- Can generate valid proofs for data they know the key for
+- Can intercept and modify serialized proofs
+- Cannot find Blake2s collisions (256-bit security)
+
+**Attack: Tampered public inputs in serialized proof**
+```
+1. Attacker generates valid proof for (nonce_A, counter_A, plaintext_A, ciphertext_A)
+2. Attacker modifies proof.stmt0.public_inputs to claim (nonce_B, counter_B, plaintext_B, ciphertext_B)
+3. Verifier receives tampered proof
+```
+
+**Defense:**
+- Verifier computes `hash(nonce_B, counter_B, plaintext_B, ciphertext_B)`
+- Hash differs from proof's embedded hash
+- `verify_*_with_public_inputs` returns error immediately (fast-fail)
+- Even without fast-fail, STARK verification would fail because:
+  - Channel state differs (different hash mixed in)
+  - Challenges differ
+  - FRI polynomial commitments don't match
+
+**Attack: Hash collision**
+```
+1. Attacker finds (data_A, data_B) where Blake2s(data_A) = Blake2s(data_B)
+2. Generates proof for data_A, claims it's for data_B
+```
+
+**Defense:**
+- Blake2s has 256-bit output, collision resistance ~2^128
+- This is considered computationally infeasible
+
+#### Security Tests
+
+The codebase includes explicit security tests (`cargo test security`):
+
+1. `test_aes_tampered_public_inputs_in_proof` - Verifies that modifying public inputs in a serialized proof causes verification failure
+2. `test_chacha_tampered_public_inputs_in_proof` - Same for ChaCha20
+3. `test_aes_verify_with_wrong_public_inputs` - Verifies that correct proof fails when verifier supplies different public inputs
+4. `test_chacha_verify_with_wrong_public_inputs` - Same for ChaCha20
+
+#### Recommendations for Auditors
+
+1. **Verify Fiat-Shamir transcript completeness**: Check that `mix_into` is called before any challenge derivation
+2. **Verify constraint correctness**: Check that AIR constraints enforce the encryption relationship
+3. **Verify hash comparison**: Check that `verify_*_with_public_inputs` compares hashes before STARK verification
+4. **Check serialization**: Ensure proof deserialization doesn't allow injection attacks
+
 

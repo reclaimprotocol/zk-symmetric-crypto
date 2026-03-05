@@ -791,6 +791,166 @@ mod tests {
         }
     }
 
+    // ==================== SECURITY TESTS ====================
+    // These tests verify the cryptographic binding of public inputs to proofs.
+    // See README.md "Security Model" section for detailed documentation.
+
+    /// Security test: Verify that tampering with public inputs in a serialized proof
+    /// causes verification to fail.
+    ///
+    /// Attack scenario:
+    /// 1. Attacker generates valid proof for data_A
+    /// 2. Attacker modifies proof.stmt0.public_inputs to claim data_B
+    /// 3. Verifier should reject the tampered proof
+    #[test]
+    fn test_security_aes_tampered_public_inputs_in_proof() {
+        use std::simd::Simd;
+        use crate::aes::aes128_ctr_block;
+        use crate::aes::lookup::gen_ctr::AESCtrInput;
+
+        let key: [u8; 16] = [0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
+                            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        let nonce: [u8; 12] = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55];
+        let counter: u32 = 1;
+        let log_size = 8;
+        let config = PcsConfig::default();
+
+        // Real plaintext and ciphertext
+        let plaintext: [u8; 16] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10];
+        let ciphertext = aes128_ctr_block(&key, &nonce, counter, &plaintext);
+
+        // Build valid input
+        let counters = Simd::from_array(std::array::from_fn(|lane| counter + lane as u32));
+        let plaintext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+            Simd::from_array(std::array::from_fn(|lane| {
+                if lane == 0 { plaintext[byte_idx] } else { 0 }
+            }))
+        });
+        let padding_keystreams: Vec<[u8; 16]> = (1..16)
+            .map(|lane| aes128_ctr_block(&key, &nonce, counter + lane as u32, &[0u8; 16]))
+            .collect();
+        let ciphertext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+            Simd::from_array(std::array::from_fn(|lane| {
+                if lane == 0 { ciphertext[byte_idx] } else { padding_keystreams[lane - 1][byte_idx] }
+            }))
+        });
+        let input = AESCtrInput { nonce, counters, plaintext: plaintext_simd, ciphertext: ciphertext_simd };
+
+        // Generate valid proof
+        let mut proof = prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(
+            log_size, config, &key, &nonce, counter, &plaintext, &ciphertext, &[input]
+        ).expect("Valid proof should succeed");
+
+        // Tamper with public inputs - claim different plaintext
+        let fake_plaintext: [u8; 16] = [0xff; 16];
+        proof.stmt0.public_inputs = AESCtrPublicInputs::new(&nonce, counter, &fake_plaintext, &ciphertext);
+
+        // Verification should fail - the hash comparison catches the tampering
+        let result = verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+            proof.clone(), &nonce, counter, &fake_plaintext, &ciphertext
+        );
+        // This fails because the proof's Fiat-Shamir transcript used the original plaintext hash,
+        // so even though we tampered with stmt0.public_inputs, the STARK verification fails
+        // because challenges are derived from a different transcript.
+        //
+        // Note: If we pass the REAL plaintext to verify_with_public_inputs, the hash check
+        // catches it immediately (fast-fail). If we pass the FAKE plaintext, the hash check
+        // passes but STARK verification fails.
+        assert!(result.is_err(), "Tampered proof should fail verification");
+        println!("Security test passed: tampered public inputs detected");
+    }
+
+    /// Security test: Verify that a valid proof fails when verifier supplies
+    /// different public inputs than what was proven.
+    ///
+    /// This tests the verify_*_with_public_inputs API which is the secure
+    /// verification path for production use.
+    #[test]
+    fn test_security_aes_verify_with_wrong_public_inputs() {
+        use std::simd::Simd;
+        use crate::aes::aes128_ctr_block;
+        use crate::aes::lookup::gen_ctr::AESCtrInput;
+
+        let key: [u8; 16] = [0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
+                            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        let nonce: [u8; 12] = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55];
+        let counter: u32 = 1;
+        let log_size = 8;
+        let config = PcsConfig::default();
+
+        let plaintext: [u8; 16] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10];
+        let ciphertext = aes128_ctr_block(&key, &nonce, counter, &plaintext);
+
+        // Build valid input
+        let counters = Simd::from_array(std::array::from_fn(|lane| counter + lane as u32));
+        let plaintext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+            Simd::from_array(std::array::from_fn(|lane| {
+                if lane == 0 { plaintext[byte_idx] } else { 0 }
+            }))
+        });
+        let padding_keystreams: Vec<[u8; 16]> = (1..16)
+            .map(|lane| aes128_ctr_block(&key, &nonce, counter + lane as u32, &[0u8; 16]))
+            .collect();
+        let ciphertext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+            Simd::from_array(std::array::from_fn(|lane| {
+                if lane == 0 { ciphertext[byte_idx] } else { padding_keystreams[lane - 1][byte_idx] }
+            }))
+        });
+        let input = AESCtrInput { nonce, counters, plaintext: plaintext_simd, ciphertext: ciphertext_simd };
+
+        // Generate valid proof
+        let proof = prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(
+            log_size, config, &key, &nonce, counter, &plaintext, &ciphertext, &[input]
+        ).expect("Valid proof should succeed");
+
+        // Verify with correct inputs should succeed
+        assert!(
+            verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(), &nonce, counter, &plaintext, &ciphertext
+            ).is_ok(),
+            "Verification with correct inputs should succeed"
+        );
+
+        // Verify with wrong plaintext should fail (fast-fail on hash check)
+        let wrong_plaintext: [u8; 16] = [0xff; 16];
+        assert!(
+            verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(), &nonce, counter, &wrong_plaintext, &ciphertext
+            ).is_err(),
+            "Verification with wrong plaintext should fail"
+        );
+
+        // Verify with wrong nonce should fail
+        let wrong_nonce: [u8; 12] = [0xff; 12];
+        assert!(
+            verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(), &wrong_nonce, counter, &plaintext, &ciphertext
+            ).is_err(),
+            "Verification with wrong nonce should fail"
+        );
+
+        // Verify with wrong counter should fail
+        assert!(
+            verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(), &nonce, counter + 1, &plaintext, &ciphertext
+            ).is_err(),
+            "Verification with wrong counter should fail"
+        );
+
+        // Verify with wrong ciphertext should fail
+        let wrong_ciphertext: [u8; 16] = [0xff; 16];
+        assert!(
+            verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+                proof, &nonce, counter, &plaintext, &wrong_ciphertext
+            ).is_err(),
+            "Verification with wrong ciphertext should fail"
+        );
+
+        println!("Security test passed: wrong public inputs correctly rejected");
+    }
+
     #[test]
     #[ignore]
     fn bench_aes_ctr() {

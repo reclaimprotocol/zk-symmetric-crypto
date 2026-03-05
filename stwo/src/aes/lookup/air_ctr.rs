@@ -217,12 +217,18 @@ fn prove_aes_ctr_with_inputs_internal<MC: MerkleChannel>(
 where
     SimdBackend: BackendForChannel<MC>,
 {
-    assert!(
-        log_size >= SBOX_BITS,
-        "log_size must be >= {} for S-box table",
-        SBOX_BITS
-    );
-    assert!(log_size >= LOG_N_LANES);
+    if log_size < SBOX_BITS {
+        return Err(format!(
+            "log_size ({}) must be >= {} for S-box table",
+            log_size, SBOX_BITS
+        ));
+    }
+    if log_size < LOG_N_LANES {
+        return Err(format!(
+            "log_size ({}) must be >= LOG_N_LANES ({})",
+            log_size, LOG_N_LANES
+        ));
+    }
 
     // Precompute twiddles
     let twiddles = SimdBackend::precompute_twiddles(

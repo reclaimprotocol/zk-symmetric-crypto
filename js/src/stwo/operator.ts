@@ -49,6 +49,10 @@ async function ensureWasmInitialized(fetcher: FileFetch, logger?: Logger): Promi
 }
 
 function serializeWitness(algorithm: EncryptionAlgorithm, input: ZKProofInput): Uint8Array {
+	if(!input.noncesAndCounters?.length) {
+		throw new Error('noncesAndCounters must be a non-empty array')
+	}
+
 	const { noncesAndCounters: [{ nonce, counter }] } = input
 	// Note: In the JS library, 'in' is ciphertext and 'out' is plaintext
 	// Stwo expects (key, nonce, counter, plaintext, ciphertext)
@@ -143,7 +147,9 @@ export function makeStwoZkOperator({
 
 		release() {
 			// WASM module cannot be easily unloaded, but we can reset the init state
-			// so it will be re-fetched on next use
+			// so it will be re-fetched on next use.
+			// Note: This affects all operator instances since wasmInitialized/initPromise
+			// are module-level. This is intentional - the WASM module is shared.
 			wasmInitialized = false
 			initPromise = undefined
 		}

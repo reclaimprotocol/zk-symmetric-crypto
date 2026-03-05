@@ -62,7 +62,12 @@ pub fn prove_stream_with_inputs<MC: MerkleChannel>(
 where
     SimdBackend: BackendForChannel<MC>,
 {
-    assert!(log_size >= LOG_N_LANES);
+    if log_size < LOG_N_LANES {
+        return Err(format!(
+            "log_size ({}) must be >= LOG_N_LANES ({})",
+            log_size, LOG_N_LANES
+        ));
+    }
 
     // Precompute twiddles
     let twiddles = SimdBackend::precompute_twiddles(
@@ -171,6 +176,11 @@ where
 pub fn verify_stream<MC: MerkleChannel>(
     StreamProof { stmt, stark_proof }: StreamProof<MC::H>,
 ) -> Result<(), VerificationError> {
+    // Validate commitment count before indexing
+    if stark_proof.commitments.len() < 2 {
+        return Err(VerificationError::OodsNotMatching);
+    }
+
     let channel = &mut MC::C::default();
     let commitment_scheme = &mut CommitmentSchemeVerifier::<MC>::new(stark_proof.config);
 

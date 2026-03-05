@@ -2,6 +2,7 @@
 
 use std::simd::u32x16;
 
+use blake2::{Blake2s256, Digest};
 use itertools::Itertools;
 use num_traits::Zero;
 use serde::{Serialize, Deserialize};
@@ -25,10 +26,85 @@ use super::{
     ChaChaStreamInput,
 };
 
+/// Public inputs for ChaCha20 proof - cryptographically bound to the proof via Fiat-Shamir.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChaChaPublicInputs {
+    /// 12-byte nonce (as 3 u32s in little-endian)
+    pub nonce: [u8; 12],
+    /// Starting counter value
+    pub counter: u32,
+    /// Blake2s hash of plaintext (for binding without storing full plaintext)
+    pub plaintext_hash: [u8; 32],
+    /// Blake2s hash of ciphertext
+    pub ciphertext_hash: [u8; 32],
+}
+
+impl ChaChaPublicInputs {
+    /// Create public inputs from raw data.
+    pub fn new(nonce: &[u8; 12], counter: u32, plaintext: &[u8], ciphertext: &[u8]) -> Self {
+        let plaintext_hash: [u8; 32] = Blake2s256::digest(plaintext).into();
+        let ciphertext_hash: [u8; 32] = Blake2s256::digest(ciphertext).into();
+        Self {
+            nonce: *nonce,
+            counter,
+            plaintext_hash,
+            ciphertext_hash,
+        }
+    }
+
+    /// Verify that the provided data matches this public input commitment.
+    pub fn verify(&self, nonce: &[u8; 12], counter: u32, plaintext: &[u8], ciphertext: &[u8]) -> bool {
+        if self.nonce != *nonce || self.counter != counter {
+            return false;
+        }
+        let plaintext_hash: [u8; 32] = Blake2s256::digest(plaintext).into();
+        let ciphertext_hash: [u8; 32] = Blake2s256::digest(ciphertext).into();
+        self.plaintext_hash == plaintext_hash && self.ciphertext_hash == ciphertext_hash
+    }
+
+    /// Mix into Fiat-Shamir channel.
+    fn mix_into(&self, channel: &mut impl Channel) {
+        // Mix nonce (as 3 u32s)
+        for i in 0..3 {
+            let val = u32::from_le_bytes([
+                self.nonce[i * 4],
+                self.nonce[i * 4 + 1],
+                self.nonce[i * 4 + 2],
+                self.nonce[i * 4 + 3],
+            ]);
+            channel.mix_u64(val as u64);
+        }
+        // Mix counter
+        channel.mix_u64(self.counter as u64);
+        // Mix plaintext hash (as 8 u32s)
+        for i in 0..8 {
+            let val = u32::from_le_bytes([
+                self.plaintext_hash[i * 4],
+                self.plaintext_hash[i * 4 + 1],
+                self.plaintext_hash[i * 4 + 2],
+                self.plaintext_hash[i * 4 + 3],
+            ]);
+            channel.mix_u64(val as u64);
+        }
+        // Mix ciphertext hash (as 8 u32s)
+        for i in 0..8 {
+            let val = u32::from_le_bytes([
+                self.ciphertext_hash[i * 4],
+                self.ciphertext_hash[i * 4 + 1],
+                self.ciphertext_hash[i * 4 + 2],
+                self.ciphertext_hash[i * 4 + 3],
+            ]);
+            channel.mix_u64(val as u64);
+        }
+    }
+}
+
 /// Statement for ChaCha20 stream.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StreamStatement {
     pub log_size: u32,
+    /// Public inputs bound to the proof
+    pub public_inputs: ChaChaPublicInputs,
 }
 
 impl StreamStatement {
@@ -43,6 +119,7 @@ impl StreamStatement {
 
     fn mix_into(&self, channel: &mut impl Channel) {
         channel.mix_u64(self.log_size as u64);
+        self.public_inputs.mix_into(channel);
     }
 }
 
@@ -54,10 +131,37 @@ pub struct StreamProof<H: MerkleHasherLifted> {
 }
 
 /// Prove ChaCha20 stream encryption with provided inputs.
+///
+/// # Arguments
+/// * `log_size` - Log2 of the number of ChaCha20 blocks to prove
+/// * `config` - PCS configuration
+/// * `nonce` - 12-byte nonce
+/// * `counter` - Starting counter value
+/// * `plaintext` - Plaintext bytes (must be multiple of 64)
+/// * `ciphertext` - Ciphertext bytes (same length as plaintext)
+/// * `inputs` - SIMD-packed trace inputs
 pub fn prove_stream_with_inputs<MC: MerkleChannel>(
     log_size: u32,
     config: PcsConfig,
+    nonce: &[u8; 12],
+    counter: u32,
+    plaintext: &[u8],
+    ciphertext: &[u8],
     inputs: &[ChaChaStreamInput],
+) -> Result<StreamProof<MC::H>, String>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
+    let public_inputs = ChaChaPublicInputs::new(nonce, counter, plaintext, ciphertext);
+    prove_stream_internal::<MC>(log_size, config, inputs, public_inputs)
+}
+
+/// Internal prove function for ChaCha20 stream.
+fn prove_stream_internal<MC: MerkleChannel>(
+    log_size: u32,
+    config: PcsConfig,
+    inputs: &[ChaChaStreamInput],
+    public_inputs: ChaChaPublicInputs,
 ) -> Result<StreamProof<MC::H>, String>
 where
     SimdBackend: BackendForChannel<MC>,
@@ -90,8 +194,8 @@ where
         return Err("Ciphertext does not match encryption - invalid witness".to_string());
     }
 
-    // Statement
-    let stmt = StreamStatement { log_size };
+    // Statement with cryptographically bound public inputs
+    let stmt = StreamStatement { log_size, public_inputs };
     stmt.mix_into(channel);
 
     // Commit trace
@@ -168,12 +272,59 @@ where
         })
         .collect();
 
-    prove_stream_with_inputs::<MC>(log_size, config, &inputs)
+    // For test data, create dummy public inputs
+    let nonce_bytes: [u8; 12] = [0x00; 12];
+    let public_inputs = ChaChaPublicInputs::new(&nonce_bytes, 1, &[], &[]);
+
+    prove_stream_internal::<MC>(log_size, config, &inputs, public_inputs)
         .expect("Test data should produce valid proof")
 }
 
-/// Verify ChaCha20 stream proof.
+/// Verify ChaCha20 stream proof with verifier-supplied public inputs.
+///
+/// This is the secure verification function that ensures the proof is bound to the
+/// claimed public data (nonce, counter, plaintext, ciphertext).
+///
+/// # Arguments
+/// * `proof` - The proof to verify
+/// * `nonce` - The 12-byte nonce the verifier claims was used
+/// * `counter` - The starting counter the verifier claims was used
+/// * `plaintext` - The plaintext the verifier claims corresponds to the ciphertext
+/// * `ciphertext` - The ciphertext the verifier claims was encrypted
+///
+/// # Security
+/// The public inputs are cryptographically bound to the proof via Fiat-Shamir.
+/// If the verifier-supplied inputs don't match what was proven, verification fails.
+pub fn verify_stream_with_public_inputs<MC: MerkleChannel>(
+    proof: StreamProof<MC::H>,
+    nonce: &[u8; 12],
+    counter: u32,
+    plaintext: &[u8],
+    ciphertext: &[u8],
+) -> Result<(), VerificationError> {
+    // Verify the proof's public inputs match the verifier's claimed data
+    // This ensures the proof is bound to the specific data the verifier expects
+    if !proof.stmt.public_inputs.verify(nonce, counter, plaintext, ciphertext) {
+        // Public inputs don't match - the proof is for different data
+        return Err(VerificationError::OodsNotMatching);
+    }
+
+    // Proceed with STARK verification (the channel will mix the same values)
+    verify_stream_internal::<MC>(proof)
+}
+
+/// Verify ChaCha20 stream proof without external public input validation.
+///
+/// WARNING: This function trusts the public inputs embedded in the proof.
+/// For production use with untrusted provers, use `verify_stream_with_public_inputs` instead.
 pub fn verify_stream<MC: MerkleChannel>(
+    proof: StreamProof<MC::H>,
+) -> Result<(), VerificationError> {
+    verify_stream_internal::<MC>(proof)
+}
+
+/// Internal verification function.
+fn verify_stream_internal<MC: MerkleChannel>(
     StreamProof { stmt, stark_proof }: StreamProof<MC::H>,
 ) -> Result<(), VerificationError> {
     // Validate commitment count before indexing

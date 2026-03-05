@@ -14,10 +14,10 @@ use serde_json::json;
 use stwo::core::pcs::PcsConfig;
 use stwo::core::vcs_lifted::blake2_merkle::Blake2sMerkleChannel;
 
-use crate::chacha::bitwise::air_stream::{prove_stream_with_inputs, verify_stream, StreamProof};
+use crate::chacha::bitwise::air_stream::{prove_stream_with_inputs, verify_stream_with_public_inputs, StreamProof};
 use crate::chacha::bitwise::gen_stream::ChaChaStreamInput;
 use crate::chacha::block::chacha20_block_from_key;
-use crate::aes::lookup::air_ctr::{prove_aes128_ctr_with_inputs, prove_aes256_ctr_with_inputs, verify_aes_ctr, AESCtrProof};
+use crate::aes::lookup::air_ctr::{prove_aes128_ctr_with_inputs, prove_aes256_ctr_with_inputs, verify_aes_ctr_with_public_inputs, AESCtrProof};
 use crate::aes::lookup::gen_ctr::AESCtrInput;
 use crate::aes::{AesKeySize, aes128_ctr_block, aes256_ctr_block};
 
@@ -158,12 +158,17 @@ pub fn prove_chacha20_encrypt(
     }
 
     let config = PcsConfig::default();
-    let proof = match prove_stream_with_inputs::<Blake2sMerkleChannel>(log_size, config, &inputs) {
+    let nonce_arr: [u8; 12] = nonce.try_into().unwrap();
+    let proof = match prove_stream_with_inputs::<Blake2sMerkleChannel>(
+        log_size, config, &nonce_arr, counter, plaintext, ciphertext, &inputs
+    ) {
         Ok(p) => p,
         Err(e) => return json_error(e),
     };
 
-    match verify_stream::<Blake2sMerkleChannel>(proof) {
+    match verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+        proof, &nonce_arr, counter, plaintext, ciphertext
+    ) {
         Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "chacha20"}).to_string(),
         Err(e) => json_error(format!("Verification failed: {:?}", e)),
     }
@@ -285,12 +290,16 @@ pub fn prove_aes128_ctr_encrypt(
     }
 
     let config = PcsConfig::default();
-    let proof = match prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key_arr, &inputs) {
+    let proof = match prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(
+        log_size, config, &key_arr, &nonce_arr, counter, plaintext, ciphertext, &inputs
+    ) {
         Ok(p) => p,
         Err(e) => return json_error(e),
     };
 
-    match verify_aes_ctr::<Blake2sMerkleChannel>(proof) {
+    match verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+        proof, &nonce_arr, counter, plaintext, ciphertext
+    ) {
         Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "aes128-ctr"}).to_string(),
         Err(e) => json_error(format!("Verification failed: {:?}", e)),
     }
@@ -408,12 +417,16 @@ pub fn prove_aes256_ctr_encrypt(
     }
 
     let config = PcsConfig::default();
-    let proof = match prove_aes256_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key_arr, &inputs) {
+    let proof = match prove_aes256_ctr_with_inputs::<Blake2sMerkleChannel>(
+        log_size, config, &key_arr, &nonce_arr, counter, plaintext, ciphertext, &inputs
+    ) {
         Ok(p) => p,
         Err(e) => return json_error(e),
     };
 
-    match verify_aes_ctr::<Blake2sMerkleChannel>(proof) {
+    match verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+        proof, &nonce_arr, counter, plaintext, ciphertext
+    ) {
         Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "aes256-ctr"}).to_string(),
         Err(e) => json_error(format!("Verification failed: {:?}", e)),
     }
@@ -531,12 +544,16 @@ pub fn generate_chacha20_proof(
     }
 
     let config = PcsConfig::default();
-    let proof = match prove_stream_with_inputs::<Blake2sMerkleChannel>(log_size, config, &inputs) {
+    let nonce_arr: [u8; 12] = nonce.try_into().unwrap();
+    let proof = match prove_stream_with_inputs::<Blake2sMerkleChannel>(
+        log_size, config, &nonce_arr, counter, plaintext, ciphertext, &inputs
+    ) {
         Ok(p) => p,
         Err(e) => return json_error(e),
     };
 
-    // Serialize proof
+    // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
+    // inside stmt.public_inputs, so we don't need to send raw data separately
     let proof_bytes = match serde_json::to_vec(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
@@ -553,13 +570,32 @@ pub fn generate_chacha20_proof(
     }).to_string()
 }
 
-/// Verify a ChaCha20 proof (base64-encoded).
+/// Verify a ChaCha20 proof (base64-encoded) against verifier-supplied public inputs.
+///
+/// The verifier must provide the expected nonce, counter, plaintext, and ciphertext.
+/// Verification fails if the proof was generated for different data.
 #[wasm_bindgen]
-pub fn verify_chacha20_proof(proof_b64: &str) -> String {
+pub fn verify_chacha20_proof(
+    proof_b64: &str,
+    nonce: &[u8],
+    counter: u32,
+    plaintext: &[u8],
+    ciphertext: &[u8],
+) -> String {
     // Check proof size to prevent memory DoS
     if proof_b64.len() > MAX_PROOF_B64_LEN {
         return json_error("Proof payload too large");
     }
+
+    // Validate inputs
+    if nonce.len() != 12 {
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
+    }
+
+    let nonce_arr: [u8; 12] = match nonce.try_into() {
+        Ok(n) => n,
+        Err(_) => return json_error("Invalid nonce length"),
+    };
 
     let proof_bytes = match BASE64.decode(proof_b64) {
         Ok(b) => b,
@@ -571,7 +607,10 @@ pub fn verify_chacha20_proof(proof_b64: &str) -> String {
         Err(e) => return json_error(format!("Invalid proof format: {}", e)),
     };
 
-    match verify_stream::<Blake2sMerkleChannel>(proof) {
+    // Verify with verifier-supplied public inputs
+    match verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+        proof, &nonce_arr, counter, plaintext, ciphertext
+    ) {
         Ok(_) => json!({"valid": true, "algorithm": "chacha20"}).to_string(),
         Err(e) => json!({"valid": false, "error": format!("{:?}", e)}).to_string(),
     }
@@ -670,11 +709,15 @@ pub fn generate_aes128_ctr_proof(
     }
 
     let config = PcsConfig::default();
-    let proof = match prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key_arr, &inputs) {
+    let proof = match prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(
+        log_size, config, &key_arr, &nonce_arr, counter, plaintext, ciphertext, &inputs
+    ) {
         Ok(p) => p,
         Err(e) => return json_error(e),
     };
 
+    // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
+    // inside stmt0.public_inputs, so we don't need to send raw data separately
     let proof_bytes = match serde_json::to_vec(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
@@ -784,11 +827,15 @@ pub fn generate_aes256_ctr_proof(
     }
 
     let config = PcsConfig::default();
-    let proof = match prove_aes256_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key_arr, &inputs) {
+    let proof = match prove_aes256_ctr_with_inputs::<Blake2sMerkleChannel>(
+        log_size, config, &key_arr, &nonce_arr, counter, plaintext, ciphertext, &inputs
+    ) {
         Ok(p) => p,
         Err(e) => return json_error(e),
     };
 
+    // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
+    // inside stmt0.public_inputs, so we don't need to send raw data separately
     let proof_bytes = match serde_json::to_vec(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
@@ -805,13 +852,33 @@ pub fn generate_aes256_ctr_proof(
     }).to_string()
 }
 
-/// Verify an AES-CTR proof (base64-encoded). Works for both AES-128 and AES-256.
+/// Verify an AES-CTR proof (base64-encoded) against verifier-supplied public inputs.
+/// Works for both AES-128 and AES-256.
+///
+/// The verifier must provide the expected nonce, counter, plaintext, and ciphertext.
+/// Verification fails if the proof was generated for different data.
 #[wasm_bindgen]
-pub fn verify_aes_ctr_proof(proof_b64: &str) -> String {
+pub fn verify_aes_ctr_proof(
+    proof_b64: &str,
+    nonce: &[u8],
+    counter: u32,
+    plaintext: &[u8],
+    ciphertext: &[u8],
+) -> String {
     // Check proof size to prevent memory DoS
     if proof_b64.len() > MAX_PROOF_B64_LEN {
         return json_error("Proof payload too large");
     }
+
+    // Validate inputs
+    if nonce.len() != 12 {
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
+    }
+
+    let nonce_arr: [u8; 12] = match nonce.try_into() {
+        Ok(n) => n,
+        Err(_) => return json_error("Invalid nonce length"),
+    };
 
     let proof_bytes = match BASE64.decode(proof_b64) {
         Ok(b) => b,
@@ -825,7 +892,10 @@ pub fn verify_aes_ctr_proof(proof_b64: &str) -> String {
 
     let algorithm = if proof.stmt0.key_size == AesKeySize::Aes128 { "aes128-ctr" } else { "aes256-ctr" };
 
-    match verify_aes_ctr::<Blake2sMerkleChannel>(proof) {
+    // Verify with verifier-supplied public inputs
+    match verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+        proof, &nonce_arr, counter, plaintext, ciphertext
+    ) {
         Ok(_) => json!({"valid": true, "algorithm": algorithm}).to_string(),
         Err(e) => json!({"valid": false, "error": format!("{:?}", e)}).to_string(),
     }

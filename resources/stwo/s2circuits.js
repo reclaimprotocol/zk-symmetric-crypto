@@ -265,42 +265,69 @@ export function prove_chacha20_encrypt(key, nonce, counter, plaintext, ciphertex
 }
 
 /**
- * Verify an AES-CTR proof (base64-encoded). Works for both AES-128 and AES-256.
+ * Verify an AES-CTR proof (base64-encoded) against verifier-supplied public inputs.
+ * Works for both AES-128 and AES-256.
+ *
+ * The verifier must provide the expected nonce, counter, plaintext, and ciphertext.
+ * Verification fails if the proof was generated for different data.
  * @param {string} proof_b64
+ * @param {Uint8Array} nonce
+ * @param {number} counter
+ * @param {Uint8Array} plaintext
+ * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-export function verify_aes_ctr_proof(proof_b64) {
-    let deferred2_0;
-    let deferred2_1;
+export function verify_aes_ctr_proof(proof_b64, nonce, counter, plaintext, ciphertext) {
+    let deferred5_0;
+    let deferred5_1;
     try {
         const ptr0 = passStringToWasm0(proof_b64, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.verify_aes_ctr_proof(ptr0, len0);
-        deferred2_0 = ret[0];
-        deferred2_1 = ret[1];
+        const ptr1 = passArray8ToWasm0(nonce, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArray8ToWasm0(plaintext, wasm.__wbindgen_malloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passArray8ToWasm0(ciphertext, wasm.__wbindgen_malloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.verify_aes_ctr_proof(ptr0, len0, ptr1, len1, counter, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
 
 /**
- * Verify a ChaCha20 proof (base64-encoded).
+ * Verify a ChaCha20 proof (base64-encoded) against verifier-supplied public inputs.
+ *
+ * The verifier must provide the expected nonce, counter, plaintext, and ciphertext.
+ * Verification fails if the proof was generated for different data.
  * @param {string} proof_b64
+ * @param {Uint8Array} nonce
+ * @param {number} counter
+ * @param {Uint8Array} plaintext
+ * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-export function verify_chacha20_proof(proof_b64) {
-    let deferred2_0;
-    let deferred2_1;
+export function verify_chacha20_proof(proof_b64, nonce, counter, plaintext, ciphertext) {
+    let deferred5_0;
+    let deferred5_1;
     try {
         const ptr0 = passStringToWasm0(proof_b64, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.verify_chacha20_proof(ptr0, len0);
-        deferred2_0 = ret[0];
-        deferred2_1 = ret[1];
+        const ptr1 = passArray8ToWasm0(nonce, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArray8ToWasm0(plaintext, wasm.__wbindgen_malloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passArray8ToWasm0(ciphertext, wasm.__wbindgen_malloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.verify_chacha20_proof(ptr0, len0, ptr1, len1, counter, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
 

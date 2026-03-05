@@ -610,6 +610,7 @@ name = "s2circuits"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "blake2",
  "getrandom",
  "itertools 0.13.0",
  "num-traits",

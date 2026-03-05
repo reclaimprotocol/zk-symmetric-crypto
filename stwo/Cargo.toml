@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 num-traits = "0.2"
 itertools = "0.13"
+blake2 = "0.10"
 stwo = { git = "https://github.com/starkware-libs/stwo", rev = "f117d487b39cd4441c2dbbdd7127b186f9c23564", features = ["prover"] }
 stwo-constraint-framework = { git = "https://github.com/starkware-libs/stwo", rev = "f117d487b39cd4441c2dbbdd7127b186f9c23564", features = ["prover"] }
 serde = { version = "1.0", features = ["derive"] }

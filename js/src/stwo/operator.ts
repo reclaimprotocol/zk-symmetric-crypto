@@ -123,29 +123,53 @@ export function makeStwoZkOperator({
 				throw new Error('Stwo proof generation failed: no proof returned')
 			}
 
-			// Return proof as base64 string (stwo already returns it as base64)
+			// Return the STARK proof directly - public inputs are cryptographically
+			// bound via Fiat-Shamir hashes inside the proof
 			return { proof: result.proof }
 		},
 
 		async groth16Verify(publicSignals, proof, logger) {
 			await ensureWasmInitialized(fetcher, logger)
 
-			// proof is either string (base64) or Uint8Array
-			const proofB64 = typeof proof === 'string'
-				? proof
-				: Base64.fromUint8Array(proof)
+			// Get verifier's expected public inputs
+			const expectedNonce = publicSignals.noncesAndCounters[0]?.nonce
+			const expectedCounter = publicSignals.noncesAndCounters[0]?.counter
+			// Note: in JS library, 'in' is ciphertext, 'out' is plaintext
+			const expectedCiphertext = publicSignals.in
+			const expectedPlaintext = publicSignals.out
 
+			if(!expectedNonce || expectedCounter === undefined) {
+				logger?.warn('Invalid publicSignals: missing nonce or counter')
+				return false
+			}
+
+			assertU32Counter(expectedCounter)
+
+			// The proof is the raw base64-encoded STARK proof
+			const proofStr = typeof proof === 'string'
+				? proof
+				: new TextDecoder().decode(proof)
+
+			// Verify the STARK proof with verifier-supplied public inputs.
+			// Security: Public inputs (nonce, counter, plaintext/ciphertext hashes) are
+			// cryptographically bound to the proof via Fiat-Shamir transformation.
+			// The WASM verify function recomputes the hashes from verifier's data and
+			// compares with the proof's embedded hashes. If they don't match, or if
+			// the STARK proof is invalid, verification fails.
 			let resultJson: string
-			// Determine verification function based on algorithm
 			if(algorithm === 'chacha20') {
-				resultJson = stwo.verify_chacha20_proof(proofB64)
+				resultJson = stwo.verify_chacha20_proof(
+					proofStr, expectedNonce, expectedCounter, expectedPlaintext, expectedCiphertext
+				)
 			} else {
-				resultJson = stwo.verify_aes_ctr_proof(proofB64)
+				resultJson = stwo.verify_aes_ctr_proof(
+					proofStr, expectedNonce, expectedCounter, expectedPlaintext, expectedCiphertext
+				)
 			}
 
 			const result: VerifyResult = JSON.parse(resultJson)
 			if(result.error) {
-				logger?.warn({ error: result.error }, 'Stwo verification failed')
+				logger?.warn({ error: result.error }, 'Stwo STARK verification failed')
 				return false
 			}
 

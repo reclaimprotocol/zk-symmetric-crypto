@@ -143,5 +143,58 @@ for(const algorithm of ['chacha20', 'aes-256-ctr', 'aes-128-ctr'] as EncryptionA
 			)
 			assert.strictEqual(verified, false, 'verification should fail with corrupted proof')
 		})
+
+		it('should fail verification with mismatched public inputs', async() => {
+			const plaintext = new Uint8Array(randomBytes(blockSize))
+			const key = new Uint8Array(randomBytes(keySizeBytes))
+			const nonce = new Uint8Array(randomBytes(12))
+
+			const ciphertext = await encrypt({ in: plaintext, key, iv: nonce })
+
+			// Generate a valid proof
+			const witness = await operator.generateWitness({
+				key,
+				noncesAndCounters: [{ nonce, counter: startCounter, boundary: undefined }],
+				in: ciphertext.slice(0, blockSize),
+				out: plaintext,
+			})
+
+			const { proof } = await operator.groth16Prove(witness)
+
+			// Try to verify with different plaintext - should fail
+			const differentPlaintext = new Uint8Array(randomBytes(blockSize))
+			const verifiedWrongPlaintext = await operator.groth16Verify(
+				{
+					noncesAndCounters: [{ nonce, counter: startCounter, boundary: undefined }],
+					in: ciphertext.slice(0, blockSize),
+					out: differentPlaintext,
+				},
+				proof
+			)
+			assert.strictEqual(verifiedWrongPlaintext, false, 'verification should fail with wrong plaintext')
+
+			// Try to verify with different nonce - should fail
+			const differentNonce = new Uint8Array(randomBytes(12))
+			const verifiedWrongNonce = await operator.groth16Verify(
+				{
+					noncesAndCounters: [{ nonce: differentNonce, counter: startCounter, boundary: undefined }],
+					in: ciphertext.slice(0, blockSize),
+					out: plaintext,
+				},
+				proof
+			)
+			assert.strictEqual(verifiedWrongNonce, false, 'verification should fail with wrong nonce')
+
+			// Try to verify with different counter - should fail
+			const verifiedWrongCounter = await operator.groth16Verify(
+				{
+					noncesAndCounters: [{ nonce, counter: startCounter + 1, boundary: undefined }],
+					in: ciphertext.slice(0, blockSize),
+					out: plaintext,
+				},
+				proof
+			)
+			assert.strictEqual(verifiedWrongCounter, false, 'verification should fail with wrong counter')
+		})
 	})
 }

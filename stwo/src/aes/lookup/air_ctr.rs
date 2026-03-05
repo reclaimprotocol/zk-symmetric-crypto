@@ -2,6 +2,7 @@
 //!
 //! Supports both AES-128-CTR and AES-256-CTR.
 
+use blake2::{Blake2s256, Digest};
 use itertools::{chain, Itertools};
 use num_traits::Zero;
 use serde::{Serialize, Deserialize};
@@ -39,11 +40,86 @@ fn preprocessed_sbox_columns() -> [PreProcessedColumnId; 2] {
     [sbox_column_id(0), sbox_column_id(1)]
 }
 
+/// Public inputs for AES-CTR proof - cryptographically bound to the proof via Fiat-Shamir.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AESCtrPublicInputs {
+    /// 12-byte nonce
+    pub nonce: [u8; 12],
+    /// Starting counter value
+    pub counter: u32,
+    /// Blake2s hash of plaintext (for binding without storing full plaintext)
+    pub plaintext_hash: [u8; 32],
+    /// Blake2s hash of ciphertext
+    pub ciphertext_hash: [u8; 32],
+}
+
+impl AESCtrPublicInputs {
+    /// Create public inputs from raw data.
+    pub fn new(nonce: &[u8; 12], counter: u32, plaintext: &[u8], ciphertext: &[u8]) -> Self {
+        let plaintext_hash: [u8; 32] = Blake2s256::digest(plaintext).into();
+        let ciphertext_hash: [u8; 32] = Blake2s256::digest(ciphertext).into();
+        Self {
+            nonce: *nonce,
+            counter,
+            plaintext_hash,
+            ciphertext_hash,
+        }
+    }
+
+    /// Verify that the provided data matches this public input commitment.
+    pub fn verify(&self, nonce: &[u8; 12], counter: u32, plaintext: &[u8], ciphertext: &[u8]) -> bool {
+        if self.nonce != *nonce || self.counter != counter {
+            return false;
+        }
+        let plaintext_hash: [u8; 32] = Blake2s256::digest(plaintext).into();
+        let ciphertext_hash: [u8; 32] = Blake2s256::digest(ciphertext).into();
+        self.plaintext_hash == plaintext_hash && self.ciphertext_hash == ciphertext_hash
+    }
+
+    /// Mix into Fiat-Shamir channel.
+    fn mix_into(&self, channel: &mut impl Channel) {
+        // Mix nonce (as 3 u32s)
+        for i in 0..3 {
+            let val = u32::from_le_bytes([
+                self.nonce[i * 4],
+                self.nonce[i * 4 + 1],
+                self.nonce[i * 4 + 2],
+                self.nonce[i * 4 + 3],
+            ]);
+            channel.mix_u64(val as u64);
+        }
+        // Mix counter
+        channel.mix_u64(self.counter as u64);
+        // Mix plaintext hash (as 8 u32s)
+        for i in 0..8 {
+            let val = u32::from_le_bytes([
+                self.plaintext_hash[i * 4],
+                self.plaintext_hash[i * 4 + 1],
+                self.plaintext_hash[i * 4 + 2],
+                self.plaintext_hash[i * 4 + 3],
+            ]);
+            channel.mix_u64(val as u64);
+        }
+        // Mix ciphertext hash (as 8 u32s)
+        for i in 0..8 {
+            let val = u32::from_le_bytes([
+                self.ciphertext_hash[i * 4],
+                self.ciphertext_hash[i * 4 + 1],
+                self.ciphertext_hash[i * 4 + 2],
+                self.ciphertext_hash[i * 4 + 3],
+            ]);
+            channel.mix_u64(val as u64);
+        }
+    }
+}
+
 /// Statement for AES-CTR (before interaction).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AESCtrStatement0 {
     pub log_size: u32,
     pub key_size: AesKeySize,
+    /// Public inputs bound to the proof
+    pub public_inputs: AESCtrPublicInputs,
 }
 
 impl AESCtrStatement0 {
@@ -80,6 +156,7 @@ impl AESCtrStatement0 {
     fn mix_into(&self, channel: &mut impl Channel) {
         channel.mix_u64(self.log_size as u64);
         channel.mix_u64(self.key_size as u64);
+        self.public_inputs.mix_into(channel);
     }
 }
 
@@ -163,12 +240,17 @@ pub fn prove_aes128_ctr_with_inputs<MC: MerkleChannel>(
     log_size: u32,
     config: PcsConfig,
     key: &[u8; 16],
+    nonce: &[u8; 12],
+    counter: u32,
+    plaintext: &[u8],
+    ciphertext: &[u8],
     inputs: &[AESCtrInput],
 ) -> Result<AESCtrProof<MC::H>, String>
 where
     SimdBackend: BackendForChannel<MC>,
 {
-    prove_aes_ctr_with_inputs_internal::<MC>(log_size, AesKeySize::Aes128, config, key.as_slice(), inputs)
+    let public_inputs = AESCtrPublicInputs::new(nonce, counter, plaintext, ciphertext);
+    prove_aes_ctr_with_inputs_internal::<MC>(log_size, AesKeySize::Aes128, config, key.as_slice(), inputs, public_inputs)
 }
 
 /// Prove AES-256-CTR with provided inputs.
@@ -176,12 +258,17 @@ pub fn prove_aes256_ctr_with_inputs<MC: MerkleChannel>(
     log_size: u32,
     config: PcsConfig,
     key: &[u8; 32],
+    nonce: &[u8; 12],
+    counter: u32,
+    plaintext: &[u8],
+    ciphertext: &[u8],
     inputs: &[AESCtrInput],
 ) -> Result<AESCtrProof<MC::H>, String>
 where
     SimdBackend: BackendForChannel<MC>,
 {
-    prove_aes_ctr_with_inputs_internal::<MC>(log_size, AesKeySize::Aes256, config, key.as_slice(), inputs)
+    let public_inputs = AESCtrPublicInputs::new(nonce, counter, plaintext, ciphertext);
+    prove_aes_ctr_with_inputs_internal::<MC>(log_size, AesKeySize::Aes256, config, key.as_slice(), inputs, public_inputs)
 }
 
 /// Prove AES-128-CTR with full S-box verification (test data).
@@ -213,6 +300,7 @@ fn prove_aes_ctr_with_inputs_internal<MC: MerkleChannel>(
     config: PcsConfig,
     key: &[u8],
     inputs: &[AESCtrInput],
+    public_inputs: AESCtrPublicInputs,
 ) -> Result<AESCtrProof<MC::H>, String>
 where
     SimdBackend: BackendForChannel<MC>,
@@ -270,8 +358,8 @@ where
         sbox_mult_col,
     );
 
-    // Statement0
-    let stmt0 = AESCtrStatement0 { log_size, key_size };
+    // Statement0 with cryptographically bound public inputs
+    let stmt0 = AESCtrStatement0 { log_size, key_size, public_inputs };
     stmt0.mix_into(channel);
 
     // Commit main trace (CTR component + S-box multiplicities)
@@ -375,6 +463,9 @@ where
         }
     };
 
+    // For test data, create dummy public inputs (counter 0, empty plaintext/ciphertext hashes)
+    let public_inputs = AESCtrPublicInputs::new(&nonce, 0, &[], &[]);
+
     // Setup protocol
     let channel = &mut MC::C::default();
     let mut commitment_scheme = CommitmentSchemeProver::new(config, &twiddles);
@@ -392,8 +483,8 @@ where
         sbox_mult_col,
     );
 
-    // Statement0
-    let stmt0 = AESCtrStatement0 { log_size, key_size };
+    // Statement0 with cryptographically bound public inputs
+    let stmt0 = AESCtrStatement0 { log_size, key_size, public_inputs };
     stmt0.mix_into(channel);
 
     // Commit main trace (CTR component + S-box multiplicities)
@@ -454,8 +545,51 @@ where
 /// Maximum allowed interaction columns to prevent memory DoS from malformed proofs.
 const MAX_INTERACTION_COLS: usize = 1 << 16;
 
-/// Verify AES-CTR proof (works for both AES-128-CTR and AES-256-CTR).
+/// Verify AES-CTR proof with verifier-supplied public inputs.
+///
+/// This is the secure verification function that ensures the proof is bound to the
+/// claimed public data (nonce, counter, plaintext, ciphertext).
+///
+/// # Arguments
+/// * `proof` - The proof to verify
+/// * `nonce` - The 12-byte nonce the verifier claims was used
+/// * `counter` - The starting counter the verifier claims was used
+/// * `plaintext` - The plaintext the verifier claims corresponds to the ciphertext
+/// * `ciphertext` - The ciphertext the verifier claims was encrypted
+///
+/// # Security
+/// The public inputs are cryptographically bound to the proof via Fiat-Shamir.
+/// If the verifier-supplied inputs don't match what was proven, verification fails.
+pub fn verify_aes_ctr_with_public_inputs<MC: MerkleChannel>(
+    proof: AESCtrProof<MC::H>,
+    nonce: &[u8; 12],
+    counter: u32,
+    plaintext: &[u8],
+    ciphertext: &[u8],
+) -> Result<(), VerificationError> {
+    // Verify the proof's public inputs match the verifier's claimed data
+    // This ensures the proof is bound to the specific data the verifier expects
+    if !proof.stmt0.public_inputs.verify(nonce, counter, plaintext, ciphertext) {
+        // Public inputs don't match - the proof is for different data
+        return Err(VerificationError::OodsNotMatching);
+    }
+
+    // Proceed with STARK verification (the channel will mix the same values)
+    verify_aes_ctr_internal::<MC>(proof)
+}
+
+/// Verify AES-CTR proof without external public input validation.
+///
+/// WARNING: This function trusts the public inputs embedded in the proof.
+/// For production use with untrusted provers, use `verify_aes_ctr_with_public_inputs` instead.
 pub fn verify_aes_ctr<MC: MerkleChannel>(
+    proof: AESCtrProof<MC::H>,
+) -> Result<(), VerificationError> {
+    verify_aes_ctr_internal::<MC>(proof)
+}
+
+/// Internal verification function.
+fn verify_aes_ctr_internal<MC: MerkleChannel>(
     AESCtrProof {
         stmt0,
         stmt1,
@@ -641,7 +775,9 @@ mod tests {
         };
 
         println!("Testing single block with padding...");
-        let result = prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key, &[input]);
+        let result = prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(
+            log_size, config, &key, &nonce, counter, &plaintext, &ciphertext, &[input]
+        );
 
         match result {
             Ok(proof) => {

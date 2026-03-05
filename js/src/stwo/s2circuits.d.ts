@@ -85,14 +85,21 @@ export function prove_aes256_ctr_encrypt(key: Uint8Array, nonce: Uint8Array, cou
 export function prove_chacha20_encrypt(key: Uint8Array, nonce: Uint8Array, counter: number, plaintext: Uint8Array, ciphertext: Uint8Array): string;
 
 /**
- * Verify an AES-CTR proof (base64-encoded). Works for both AES-128 and AES-256.
+ * Verify an AES-CTR proof (base64-encoded) against verifier-supplied public inputs.
+ * Works for both AES-128 and AES-256.
+ *
+ * The verifier must provide the expected nonce, counter, plaintext, and ciphertext.
+ * Verification fails if the proof was generated for different data.
  */
-export function verify_aes_ctr_proof(proof_b64: string): string;
+export function verify_aes_ctr_proof(proof_b64: string, nonce: Uint8Array, counter: number, plaintext: Uint8Array, ciphertext: Uint8Array): string;
 
 /**
- * Verify a ChaCha20 proof (base64-encoded).
+ * Verify a ChaCha20 proof (base64-encoded) against verifier-supplied public inputs.
+ *
+ * The verifier must provide the expected nonce, counter, plaintext, and ciphertext.
+ * Verification fails if the proof was generated for different data.
  */
-export function verify_chacha20_proof(proof_b64: string): string;
+export function verify_chacha20_proof(proof_b64: string, nonce: Uint8Array, counter: number, plaintext: Uint8Array, ciphertext: Uint8Array): string;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -102,10 +109,10 @@ export interface InitOutput {
     readonly prove_aes128_ctr_encrypt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly prove_aes256_ctr_encrypt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly generate_chacha20_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
-    readonly verify_chacha20_proof: (a: number, b: number) => [number, number];
+    readonly verify_chacha20_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly generate_aes128_ctr_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly generate_aes256_ctr_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
-    readonly verify_aes_ctr_proof: (a: number, b: number) => [number, number];
+    readonly verify_aes_ctr_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly debug_chacha20_keystream: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly get_circuits_info: () => [number, number];
     readonly __wbindgen_externrefs: WebAssembly.Table;

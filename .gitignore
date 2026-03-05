@@ -8,3 +8,4 @@ lib
 .idea
 .DS_Store
 target
+/stwo/pkg/

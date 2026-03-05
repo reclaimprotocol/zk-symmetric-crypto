@@ -15,6 +15,10 @@
     "./gnark": {
       "types": "./lib/gnark/index.d.ts",
       "default": "./lib/gnark/index.js"
+    },
+    "./stwo": {
+      "types": "./lib/stwo/index.d.ts",
+      "default": "./lib/stwo/index.js"
     }
   },
   "repository": {

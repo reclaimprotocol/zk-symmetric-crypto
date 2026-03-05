@@ -15,9 +15,10 @@ use stwo::core::vcs_lifted::blake2_merkle::Blake2sMerkleChannel;
 
 use crate::chacha::bitwise::air_stream::{prove_stream_with_inputs, verify_stream, StreamProof};
 use crate::chacha::bitwise::gen_stream::ChaChaStreamInput;
+use crate::chacha::block::chacha20_block_from_key;
 use crate::aes::lookup::air_ctr::{prove_aes128_ctr_with_inputs, prove_aes256_ctr_with_inputs, verify_aes_ctr, AESCtrProof};
 use crate::aes::lookup::gen_ctr::AESCtrInput;
-use crate::aes::AesKeySize;
+use crate::aes::{AesKeySize, aes128_ctr_block, aes256_ctr_block};
 
 type Blake2sMerkleHasher = stwo::core::vcs_lifted::blake2_merkle::Blake2sMerkleHasher;
 
@@ -103,6 +104,21 @@ pub fn prove_chacha20_encrypt(
             }))
         });
 
+        // For padding lanes (block_idx >= num_blocks), we need ciphertext = keystream
+        // since plaintext is 0 and validation checks: keystream XOR plaintext == ciphertext
+        // Pre-compute keystreams for padding lanes in this row
+        let padding_keystreams: Vec<[u32; 16]> = (0..16)
+            .filter_map(|lane| {
+                let block_idx = base_block + lane;
+                if block_idx >= num_blocks {
+                    let padding_counter = counter + block_idx as u32;
+                    Some(chacha20_block_from_key(&key_u32, padding_counter, &nonce_u32))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         // Parse ciphertext for this row
         let ciphertext_u32: [u32x16; 16] = std::array::from_fn(|word_idx| {
             u32x16::from_array(std::array::from_fn(|lane| {
@@ -116,7 +132,9 @@ pub fn prove_chacha20_encrypt(
                         ciphertext[byte_offset + 3],
                     ])
                 } else {
-                    0
+                    // Use keystream as ciphertext for padding (since plaintext is 0)
+                    let padding_idx = block_idx - num_blocks;
+                    padding_keystreams[padding_idx][word_idx]
                 }
             }))
         });
@@ -207,6 +225,22 @@ pub fn prove_aes128_ctr_encrypt(
             counter + (base_block + lane) as u32
         }));
 
+        // For padding lanes (block_idx >= num_blocks), we need ciphertext = keystream
+        // since plaintext is 0 and validation checks: keystream XOR plaintext == ciphertext
+        // Pre-compute keystreams for padding lanes in this row
+        let padding_keystreams: Vec<[u8; 16]> = (0..16)
+            .filter_map(|lane| {
+                let block_idx = base_block + lane;
+                if block_idx >= num_blocks {
+                    let padding_counter = counter + block_idx as u32;
+                    // plaintext = 0, so ciphertext = keystream
+                    Some(aes128_ctr_block(&key_arr, &nonce_arr, padding_counter, &[0u8; 16]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         // Parse plaintext for this row (16 bytes per block, 16 parallel blocks)
         let plaintext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
             Simd::from_array(std::array::from_fn(|lane| {
@@ -226,7 +260,9 @@ pub fn prove_aes128_ctr_encrypt(
                 if block_idx < num_blocks {
                     ciphertext[block_idx * 16 + byte_idx]
                 } else {
-                    0
+                    // Use keystream as ciphertext for padding (since plaintext is 0)
+                    let padding_idx = block_idx - num_blocks;
+                    padding_keystreams[padding_idx][byte_idx]
                 }
             }))
         });
@@ -312,6 +348,22 @@ pub fn prove_aes256_ctr_encrypt(
             counter + (base_block + lane) as u32
         }));
 
+        // For padding lanes (block_idx >= num_blocks), we need ciphertext = keystream
+        // since plaintext is 0 and validation checks: keystream XOR plaintext == ciphertext
+        // Pre-compute keystreams for padding lanes in this row
+        let padding_keystreams: Vec<[u8; 16]> = (0..16)
+            .filter_map(|lane| {
+                let block_idx = base_block + lane;
+                if block_idx >= num_blocks {
+                    let padding_counter = counter + block_idx as u32;
+                    // plaintext = 0, so ciphertext = keystream
+                    Some(aes256_ctr_block(&key_arr, &nonce_arr, padding_counter, &[0u8; 16]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         // Parse plaintext for this row (16 bytes per block, 16 parallel blocks)
         let plaintext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
             Simd::from_array(std::array::from_fn(|lane| {
@@ -331,7 +383,9 @@ pub fn prove_aes256_ctr_encrypt(
                 if block_idx < num_blocks {
                     ciphertext[block_idx * 16 + byte_idx]
                 } else {
-                    0
+                    // Use keystream as ciphertext for padding (since plaintext is 0)
+                    let padding_idx = block_idx - num_blocks;
+                    padding_keystreams[padding_idx][byte_idx]
                 }
             }))
         });
@@ -424,6 +478,21 @@ pub fn generate_chacha20_proof(
             }))
         });
 
+        // For padding lanes (block_idx >= num_blocks), we need ciphertext = keystream
+        // since plaintext is 0 and validation checks: keystream XOR plaintext == ciphertext
+        // Pre-compute keystreams for padding lanes in this row
+        let padding_keystreams: Vec<[u32; 16]> = (0..16)
+            .filter_map(|lane| {
+                let block_idx = base_block + lane;
+                if block_idx >= num_blocks {
+                    let padding_counter = counter + block_idx as u32;
+                    Some(chacha20_block_from_key(&key_u32, padding_counter, &nonce_u32))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         let ciphertext_u32: [u32x16; 16] = std::array::from_fn(|word_idx| {
             u32x16::from_array(std::array::from_fn(|lane| {
                 let block_idx = base_block + lane;
@@ -436,7 +505,9 @@ pub fn generate_chacha20_proof(
                         ciphertext[byte_offset + 3],
                     ])
                 } else {
-                    0
+                    // Use keystream as ciphertext for padding (since plaintext is 0)
+                    let padding_idx = block_idx - num_blocks;
+                    padding_keystreams[padding_idx][word_idx]
                 }
             }))
         });
@@ -533,6 +604,22 @@ pub fn generate_aes128_ctr_proof(
             counter + (base_block + lane) as u32
         }));
 
+        // For padding lanes (block_idx >= num_blocks), we need ciphertext = keystream
+        // since plaintext is 0 and validation checks: keystream XOR plaintext == ciphertext
+        // Pre-compute keystreams for padding lanes in this row
+        let padding_keystreams: Vec<[u8; 16]> = (0..16)
+            .filter_map(|lane| {
+                let block_idx = base_block + lane;
+                if block_idx >= num_blocks {
+                    let padding_counter = counter + block_idx as u32;
+                    // plaintext = 0, so ciphertext = keystream
+                    Some(aes128_ctr_block(&key_arr, &nonce_arr, padding_counter, &[0u8; 16]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         let plaintext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
             Simd::from_array(std::array::from_fn(|lane| {
                 let block_idx = base_block + lane;
@@ -550,7 +637,9 @@ pub fn generate_aes128_ctr_proof(
                 if block_idx < num_blocks {
                     ciphertext[block_idx * 16 + byte_idx]
                 } else {
-                    0
+                    // Use keystream as ciphertext for padding (since plaintext is 0)
+                    let padding_idx = block_idx - num_blocks;
+                    padding_keystreams[padding_idx][byte_idx]
                 }
             }))
         });
@@ -626,6 +715,22 @@ pub fn generate_aes256_ctr_proof(
             counter + (base_block + lane) as u32
         }));
 
+        // For padding lanes (block_idx >= num_blocks), we need ciphertext = keystream
+        // since plaintext is 0 and validation checks: keystream XOR plaintext == ciphertext
+        // Pre-compute keystreams for padding lanes in this row
+        let padding_keystreams: Vec<[u8; 16]> = (0..16)
+            .filter_map(|lane| {
+                let block_idx = base_block + lane;
+                if block_idx >= num_blocks {
+                    let padding_counter = counter + block_idx as u32;
+                    // plaintext = 0, so ciphertext = keystream
+                    Some(aes256_ctr_block(&key_arr, &nonce_arr, padding_counter, &[0u8; 16]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         let plaintext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
             Simd::from_array(std::array::from_fn(|lane| {
                 let block_idx = base_block + lane;
@@ -643,7 +748,9 @@ pub fn generate_aes256_ctr_proof(
                 if block_idx < num_blocks {
                     ciphertext[block_idx * 16 + byte_idx]
                 } else {
-                    0
+                    // Use keystream as ciphertext for padding (since plaintext is 0)
+                    let padding_idx = block_idx - num_blocks;
+                    padding_keystreams[padding_idx][byte_idx]
                 }
             }))
         });
@@ -699,6 +806,45 @@ pub fn verify_aes_ctr_proof(proof_b64: &str) -> String {
 // ============================================================================
 // Utility
 // ============================================================================
+
+/// Debug: compute ChaCha20 keystream and return it (for debugging WASM issues).
+#[wasm_bindgen]
+pub fn debug_chacha20_keystream(
+    key: &[u8],
+    nonce: &[u8],
+    counter: u32,
+) -> String {
+    use crate::chacha::block::{chacha20_block_from_key, state_to_bytes};
+
+    if key.len() != 32 {
+        return format!(r#"{{"error": "Key must be 32 bytes, got {}"}}"#, key.len());
+    }
+    if nonce.len() != 12 {
+        return format!(r#"{{"error": "Nonce must be 12 bytes, got {}"}}"#, nonce.len());
+    }
+
+    // Parse key as 8 little-endian u32s
+    let key_u32: [u32; 8] = std::array::from_fn(|i| {
+        u32::from_le_bytes([key[i*4], key[i*4+1], key[i*4+2], key[i*4+3]])
+    });
+
+    // Parse nonce as 3 little-endian u32s
+    let nonce_u32: [u32; 3] = std::array::from_fn(|i| {
+        u32::from_le_bytes([nonce[i*4], nonce[i*4+1], nonce[i*4+2], nonce[i*4+3]])
+    });
+
+    // Compute keystream
+    let keystream_u32 = chacha20_block_from_key(&key_u32, counter, &nonce_u32);
+    let keystream_bytes = state_to_bytes(&keystream_u32);
+
+    // Return as hex
+    let hex: String = keystream_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+
+    format!(
+        r#"{{"keystream_hex": "{}", "key_u32": {:?}, "nonce_u32": {:?}, "counter": {}}}"#,
+        hex, key_u32, nonce_u32, counter
+    )
+}
 
 /// Get circuit information as JSON.
 #[wasm_bindgen]

@@ -23,6 +23,8 @@ const ALL_ALGOS: EncryptionAlgorithm[] = [
 const SUPPORTED_ALGO_MAP: { [T in ZKEngine]: EncryptionAlgorithm[] } = {
 	'gnark': ALL_ALGOS,
 	'snarkjs': ALL_ALGOS,
+	// stwo uses different witness format - see stwo.test.ts
+	'stwo': [],
 }
 
 const ALG_TEST_CONFIG: { [E in EncryptionAlgorithm]: { encLength: number } } = {

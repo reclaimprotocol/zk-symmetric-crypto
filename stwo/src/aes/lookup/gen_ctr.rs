@@ -19,7 +19,7 @@ use stwo_constraint_framework::LogupTraceGenerator;
 use stwo_constraint_framework::Relation;
 
 use crate::aes::sbox_table::{SboxAccumulator, SboxElements};
-use crate::aes::{expand_key_128, expand_key_256, AesKeySize, SBOX};
+use crate::aes::{expand_key_128, expand_key_256, AesKeySize, SBOX, aes128_ctr_block, aes256_ctr_block};
 
 /// Input for AES-CTR block (SIMD-packed).
 #[derive(Clone)]
@@ -405,6 +405,12 @@ pub fn generate_aes128_ctr_trace_with_inputs(
         inputs.len(),
         num_rows
     );
+    // Pre-compute keystream for default padding rows (nonce=0, plaintext=0)
+    // so that ciphertext = keystream and validation passes
+    let default_keystreams: [[u8; 16]; 16] = std::array::from_fn(|lane| {
+        aes128_ctr_block(key, &[0; 12], lane as u32, &[0; 16])
+    });
+
     for row in 0..num_rows {
         if let Some(input) = inputs.get(row) {
             let valid = gen.process_ctr_block(input, &round_keys_slice);
@@ -412,12 +418,17 @@ pub fn generate_aes128_ctr_trace_with_inputs(
                 all_valid = false;
             }
         } else {
-            // Use default input for padding
+            // Use default input for padding with correct ciphertext = keystream
+            let default_ciphertext: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+                Simd::from_array(std::array::from_fn(|lane| {
+                    default_keystreams[lane][byte_idx]
+                }))
+            });
             let default_input = AESCtrInput {
                 nonce: [0; 12],
-                counters: Simd::splat(0),
+                counters: Simd::from_array(std::array::from_fn(|lane| lane as u32)),
                 plaintext: [Simd::splat(0); 16],
-                ciphertext: [Simd::splat(0); 16],
+                ciphertext: default_ciphertext,
             };
             gen.process_ctr_block(&default_input, &round_keys_slice);
         }
@@ -499,6 +510,12 @@ pub fn generate_aes256_ctr_trace_with_inputs(
         inputs.len(),
         num_rows
     );
+    // Pre-compute keystream for default padding rows (nonce=0, plaintext=0)
+    // so that ciphertext = keystream and validation passes
+    let default_keystreams: [[u8; 16]; 16] = std::array::from_fn(|lane| {
+        aes256_ctr_block(key, &[0; 12], lane as u32, &[0; 16])
+    });
+
     for row in 0..num_rows {
         if let Some(input) = inputs.get(row) {
             let valid = gen.process_ctr_block(input, &round_keys_slice);
@@ -506,11 +523,17 @@ pub fn generate_aes256_ctr_trace_with_inputs(
                 all_valid = false;
             }
         } else {
+            // Use default input for padding with correct ciphertext = keystream
+            let default_ciphertext: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+                Simd::from_array(std::array::from_fn(|lane| {
+                    default_keystreams[lane][byte_idx]
+                }))
+            });
             let default_input = AESCtrInput {
                 nonce: [0; 12],
-                counters: Simd::splat(0),
+                counters: Simd::from_array(std::array::from_fn(|lane| lane as u32)),
                 plaintext: [Simd::splat(0); 16],
-                ciphertext: [Simd::splat(0); 16],
+                ciphertext: default_ciphertext,
             };
             gen.process_ctr_block(&default_input, &round_keys_slice);
         }
@@ -691,5 +714,75 @@ mod tests {
         println!("AES-256-CTR trace columns: {}", trace.len());
         println!("S-box lookups recorded: {}", lookup_data.sbox_lookups.len());
         println!("Total S-box uses: {}", sbox_accum.mults.iter().sum::<u32>());
+    }
+
+    /// Test single block with padding lanes - simulates WASM API scenario
+    #[test]
+    fn test_aes128_ctr_single_block_with_padding() {
+        use crate::aes::aes128_ctr_block;
+
+        let key: [u8; 16] = [0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
+                            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        let nonce: [u8; 12] = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55];
+        let counter: u32 = 1;
+        let num_blocks = 1;
+        let log_size = 8; // Needs log_size >= 4 for AES
+
+        // Create plaintext
+        let plaintext: [u8; 16] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10];
+
+        // Compute expected ciphertext using native function
+        let ciphertext = aes128_ctr_block(&key, &nonce, counter, &plaintext);
+
+        // Build counters (16 parallel blocks starting at counter)
+        let counters = Simd::from_array(std::array::from_fn(|lane| counter + lane as u32));
+
+        // Build plaintext SIMD - only lane 0 has real data
+        let plaintext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+            Simd::from_array(std::array::from_fn(|lane| {
+                if lane == 0 {
+                    plaintext[byte_idx]
+                } else {
+                    0
+                }
+            }))
+        });
+
+        // Compute padding keystreams using native function
+        let padding_keystreams: Vec<[u8; 16]> = (1..16)
+            .map(|lane| {
+                let padding_counter = counter + lane as u32;
+                aes128_ctr_block(&key, &nonce, padding_counter, &[0u8; 16])
+            })
+            .collect();
+
+        // Build ciphertext SIMD - lane 0 has real ciphertext, others have keystreams
+        let ciphertext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+            Simd::from_array(std::array::from_fn(|lane| {
+                if lane == 0 {
+                    ciphertext[byte_idx]
+                } else {
+                    padding_keystreams[lane - 1][byte_idx]
+                }
+            }))
+        });
+
+        // Create input
+        let input = AESCtrInput {
+            nonce,
+            counters,
+            plaintext: plaintext_simd,
+            ciphertext: ciphertext_simd,
+        };
+
+        // Generate trace
+        let (trace, sbox_accum, lookup_data, valid) =
+            generate_aes128_ctr_trace_with_inputs(log_size, &key, &[input]);
+
+        println!("Single block with padding test: valid = {}", valid);
+        println!("Trace columns: {}", trace.len());
+
+        assert!(valid, "Single block with padding should validate");
     }
 }

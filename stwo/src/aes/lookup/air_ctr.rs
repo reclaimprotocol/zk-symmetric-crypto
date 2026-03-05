@@ -557,6 +557,83 @@ mod tests {
         println!("Verify time: {:?}", verify_time);
     }
 
+    /// Test proving with a single block (simulating WASM API scenario)
+    #[test]
+    fn test_aes128_ctr_single_block_prove_verify() {
+        use std::simd::Simd;
+        use crate::aes::aes128_ctr_block;
+        use crate::aes::lookup::gen_ctr::AESCtrInput;
+
+        let key: [u8; 16] = [0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
+                            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        let nonce: [u8; 12] = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55];
+        let counter: u32 = 2; // Match AES-CTR startCounter
+        let log_size = 8; // Minimum for S-box table
+        let config = PcsConfig::default();
+
+        // Create plaintext
+        let plaintext: [u8; 16] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10];
+
+        // Compute expected ciphertext using native function
+        let ciphertext = aes128_ctr_block(&key, &nonce, counter, &plaintext);
+
+        // Build counters (16 parallel blocks starting at counter)
+        let counters = Simd::from_array(std::array::from_fn(|lane| counter + lane as u32));
+
+        // Build plaintext SIMD - only lane 0 has real data
+        let plaintext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+            Simd::from_array(std::array::from_fn(|lane| {
+                if lane == 0 {
+                    plaintext[byte_idx]
+                } else {
+                    0
+                }
+            }))
+        });
+
+        // Compute padding keystreams using native function
+        let padding_keystreams: Vec<[u8; 16]> = (1..16)
+            .map(|lane| {
+                let padding_counter = counter + lane as u32;
+                aes128_ctr_block(&key, &nonce, padding_counter, &[0u8; 16])
+            })
+            .collect();
+
+        // Build ciphertext SIMD - lane 0 has real ciphertext, others have keystreams
+        let ciphertext_simd: [Simd<u8, 16>; 16] = std::array::from_fn(|byte_idx| {
+            Simd::from_array(std::array::from_fn(|lane| {
+                if lane == 0 {
+                    ciphertext[byte_idx]
+                } else {
+                    padding_keystreams[lane - 1][byte_idx]
+                }
+            }))
+        });
+
+        // Create input
+        let input = AESCtrInput {
+            nonce,
+            counters,
+            plaintext: plaintext_simd,
+            ciphertext: ciphertext_simd,
+        };
+
+        println!("Testing single block with padding...");
+        let result = prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key, &[input]);
+
+        match result {
+            Ok(proof) => {
+                println!("Proof generated successfully");
+                verify_aes_ctr::<Blake2sMerkleChannel>(proof).unwrap();
+                println!("Verification passed!");
+            }
+            Err(e) => {
+                panic!("Proof generation failed: {}", e);
+            }
+        }
+    }
+
     #[test]
     #[ignore]
     fn bench_aes_ctr() {

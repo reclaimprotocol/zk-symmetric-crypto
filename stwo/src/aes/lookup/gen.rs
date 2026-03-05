@@ -299,8 +299,14 @@ impl TraceGenerator {
             .into_iter()
             .map(|col| {
                 let mut base_col = BaseColumn::zeros(1 << self.log_size);
-                for (i, val) in col.into_iter().enumerate() {
-                    base_col.data[i] = val;
+                assert!(
+                    col.len() <= base_col.data.len(),
+                    "column has {} rows but domain only supports {}",
+                    col.len(),
+                    base_col.data.len()
+                );
+                for (slot, val) in base_col.data.iter_mut().zip(col.into_iter()) {
+                    *slot = val;
                 }
                 CircleEvaluation::new(domain, base_col)
             })
@@ -313,9 +319,17 @@ impl TraceGenerator {
             .map(|[inputs, outputs]| {
                 let mut input_col = BaseColumn::zeros(1 << self.log_size);
                 let mut output_col = BaseColumn::zeros(1 << self.log_size);
-                for (i, (inp, out)) in inputs.into_iter().zip(outputs.into_iter()).enumerate() {
-                    input_col.data[i] = inp;
-                    output_col.data[i] = out;
+                assert!(
+                    inputs.len() <= input_col.data.len(),
+                    "sbox inputs has {} rows but domain only supports {}",
+                    inputs.len(),
+                    input_col.data.len()
+                );
+                for (slot, val) in input_col.data.iter_mut().zip(inputs.into_iter()) {
+                    *slot = val;
+                }
+                for (slot, val) in output_col.data.iter_mut().zip(outputs.into_iter()) {
+                    *slot = val;
                 }
                 [input_col, output_col]
             })

@@ -445,6 +445,9 @@ where
     }
 }
 
+/// Maximum allowed interaction columns to prevent memory DoS from malformed proofs.
+const MAX_INTERACTION_COLS: usize = 1 << 16;
+
 /// Verify AES-CTR proof (works for both AES-128-CTR and AES-256-CTR).
 pub fn verify_aes_ctr<MC: MerkleChannel>(
     AESCtrProof {
@@ -453,6 +456,18 @@ pub fn verify_aes_ctr<MC: MerkleChannel>(
         stark_proof,
     }: AESCtrProof<MC::H>,
 ) -> Result<(), VerificationError> {
+    // Validate interaction column counts to prevent memory DoS
+    if stmt1.n_ctr_interaction_cols > MAX_INTERACTION_COLS
+        || stmt1.n_sbox_interaction_cols > MAX_INTERACTION_COLS
+    {
+        return Err(VerificationError::OodsNotMatching);
+    }
+
+    // Validate commitment count before indexing
+    if stark_proof.commitments.len() < 3 {
+        return Err(VerificationError::OodsNotMatching);
+    }
+
     let channel = &mut MC::C::default();
     let commitment_scheme = &mut CommitmentSchemeVerifier::<MC>::new(stark_proof.config);
 

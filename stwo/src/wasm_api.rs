@@ -10,6 +10,7 @@ use wasm_bindgen::prelude::*;
 use std::simd::Simd;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use serde_json::json;
 use stwo::core::pcs::PcsConfig;
 use stwo::core::vcs_lifted::blake2_merkle::Blake2sMerkleChannel;
 
@@ -21,6 +22,14 @@ use crate::aes::lookup::gen_ctr::AESCtrInput;
 use crate::aes::{AesKeySize, aes128_ctr_block, aes256_ctr_block};
 
 type Blake2sMerkleHasher = stwo::core::vcs_lifted::blake2_merkle::Blake2sMerkleHasher;
+
+/// Maximum proof size in base64 (8 MB) to prevent memory DoS.
+const MAX_PROOF_B64_LEN: usize = 8 * 1024 * 1024;
+
+/// Build a JSON error response with proper escaping.
+fn json_error(msg: impl std::fmt::Display) -> String {
+    json!({ "error": msg.to_string() }).to_string()
+}
 
 // ============================================================================
 // ChaCha20 API
@@ -51,16 +60,16 @@ pub fn prove_chacha20_encrypt(
 ) -> String {
     // Validate inputs
     if key.len() != 32 {
-        return format!(r#"{{"error": "Key must be 32 bytes, got {}"}}"#, key.len());
+        return json_error(format!("Key must be 32 bytes, got {}", key.len()));
     }
     if nonce.len() != 12 {
-        return format!(r#"{{"error": "Nonce must be 12 bytes, got {}"}}"#, nonce.len());
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
     }
     if plaintext.is_empty() || plaintext.len() % 64 != 0 {
-        return format!(r#"{{"error": "Plaintext must be non-empty multiple of 64 bytes, got {}"}}"#, plaintext.len());
+        return json_error(format!("Plaintext must be non-empty multiple of 64 bytes, got {}", plaintext.len()));
     }
     if ciphertext.len() != plaintext.len() {
-        return format!(r#"{{"error": "Ciphertext must be same length as plaintext, got {} vs {}"}}"#, ciphertext.len(), plaintext.len());
+        return json_error(format!("Ciphertext must be same length as plaintext, got {} vs {}", ciphertext.len(), plaintext.len()));
     }
 
     let num_blocks = plaintext.len() / 64;
@@ -151,12 +160,12 @@ pub fn prove_chacha20_encrypt(
     let config = PcsConfig::default();
     let proof = match prove_stream_with_inputs::<Blake2sMerkleChannel>(log_size, config, &inputs) {
         Ok(p) => p,
-        Err(e) => return format!(r#"{{"error": "{}"}}"#, e),
+        Err(e) => return json_error(e),
     };
 
     match verify_stream::<Blake2sMerkleChannel>(proof) {
-        Ok(_) => format!(r#"{{"success": true, "blocks": {}, "algorithm": "chacha20"}}"#, num_blocks),
-        Err(e) => format!(r#"{{"error": "Verification failed: {:?}"}}"#, e),
+        Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "chacha20"}).to_string(),
+        Err(e) => json_error(format!("Verification failed: {:?}", e)),
     }
 }
 
@@ -188,16 +197,16 @@ pub fn prove_aes128_ctr_encrypt(
     ciphertext: &[u8],
 ) -> String {
     if key.len() != 16 {
-        return format!(r#"{{"error": "Key must be 16 bytes, got {}"}}"#, key.len());
+        return json_error(format!("Key must be 16 bytes, got {}", key.len()));
     }
     if nonce.len() != 12 {
-        return format!(r#"{{"error": "Nonce must be 12 bytes, got {}"}}"#, nonce.len());
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
     }
     if plaintext.is_empty() || plaintext.len() % 16 != 0 {
-        return format!(r#"{{"error": "Plaintext must be non-empty multiple of 16 bytes, got {}"}}"#, plaintext.len());
+        return json_error(format!("Plaintext must be non-empty multiple of 16 bytes, got {}", plaintext.len()));
     }
     if ciphertext.len() != plaintext.len() {
-        return format!(r#"{{"error": "Ciphertext must be same length as plaintext, got {} vs {}"}}"#, ciphertext.len(), plaintext.len());
+        return json_error(format!("Ciphertext must be same length as plaintext, got {} vs {}", ciphertext.len(), plaintext.len()));
     }
 
     let num_blocks = plaintext.len() / 16;
@@ -206,13 +215,13 @@ pub fn prove_aes128_ctr_encrypt(
     // Parse key
     let key_arr: [u8; 16] = match key.try_into() {
         Ok(k) => k,
-        Err(_) => return format!(r#"{{"error": "Invalid key length"}}"#),
+        Err(_) => return json_error("Invalid key length"),
     };
 
     // Parse nonce
     let nonce_arr: [u8; 12] = match nonce.try_into() {
         Ok(n) => n,
-        Err(_) => return format!(r#"{{"error": "Invalid nonce length"}}"#),
+        Err(_) => return json_error("Invalid nonce length"),
     };
 
     // Build inputs - each row processes 16 blocks in parallel
@@ -278,12 +287,12 @@ pub fn prove_aes128_ctr_encrypt(
     let config = PcsConfig::default();
     let proof = match prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key_arr, &inputs) {
         Ok(p) => p,
-        Err(e) => return format!(r#"{{"error": "{}"}}"#, e),
+        Err(e) => return json_error(e),
     };
 
     match verify_aes_ctr::<Blake2sMerkleChannel>(proof) {
-        Ok(_) => format!(r#"{{"success": true, "blocks": {}, "algorithm": "aes128-ctr"}}"#, num_blocks),
-        Err(e) => format!(r#"{{"error": "Verification failed: {:?}"}}"#, e),
+        Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "aes128-ctr"}).to_string(),
+        Err(e) => json_error(format!("Verification failed: {:?}", e)),
     }
 }
 
@@ -311,16 +320,16 @@ pub fn prove_aes256_ctr_encrypt(
     ciphertext: &[u8],
 ) -> String {
     if key.len() != 32 {
-        return format!(r#"{{"error": "Key must be 32 bytes, got {}"}}"#, key.len());
+        return json_error(format!("Key must be 32 bytes, got {}", key.len()));
     }
     if nonce.len() != 12 {
-        return format!(r#"{{"error": "Nonce must be 12 bytes, got {}"}}"#, nonce.len());
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
     }
     if plaintext.is_empty() || plaintext.len() % 16 != 0 {
-        return format!(r#"{{"error": "Plaintext must be non-empty multiple of 16 bytes, got {}"}}"#, plaintext.len());
+        return json_error(format!("Plaintext must be non-empty multiple of 16 bytes, got {}", plaintext.len()));
     }
     if ciphertext.len() != plaintext.len() {
-        return format!(r#"{{"error": "Ciphertext must be same length as plaintext, got {} vs {}"}}"#, ciphertext.len(), plaintext.len());
+        return json_error(format!("Ciphertext must be same length as plaintext, got {} vs {}", ciphertext.len(), plaintext.len()));
     }
 
     let num_blocks = plaintext.len() / 16;
@@ -329,13 +338,13 @@ pub fn prove_aes256_ctr_encrypt(
     // Parse key
     let key_arr: [u8; 32] = match key.try_into() {
         Ok(k) => k,
-        Err(_) => return format!(r#"{{"error": "Invalid key length"}}"#),
+        Err(_) => return json_error("Invalid key length"),
     };
 
     // Parse nonce
     let nonce_arr: [u8; 12] = match nonce.try_into() {
         Ok(n) => n,
-        Err(_) => return format!(r#"{{"error": "Invalid nonce length"}}"#),
+        Err(_) => return json_error("Invalid nonce length"),
     };
 
     // Build inputs - each row processes 16 blocks in parallel
@@ -401,12 +410,12 @@ pub fn prove_aes256_ctr_encrypt(
     let config = PcsConfig::default();
     let proof = match prove_aes256_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key_arr, &inputs) {
         Ok(p) => p,
-        Err(e) => return format!(r#"{{"error": "{}"}}"#, e),
+        Err(e) => return json_error(e),
     };
 
     match verify_aes_ctr::<Blake2sMerkleChannel>(proof) {
-        Ok(_) => format!(r#"{{"success": true, "blocks": {}, "algorithm": "aes256-ctr"}}"#, num_blocks),
-        Err(e) => format!(r#"{{"error": "Verification failed: {:?}"}}"#, e),
+        Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "aes256-ctr"}).to_string(),
+        Err(e) => json_error(format!("Verification failed: {:?}", e)),
     }
 }
 
@@ -426,16 +435,16 @@ pub fn generate_chacha20_proof(
 ) -> String {
     // Validate inputs
     if key.len() != 32 {
-        return format!(r#"{{"error": "Key must be 32 bytes, got {}"}}"#, key.len());
+        return json_error(format!("Key must be 32 bytes, got {}", key.len()));
     }
     if nonce.len() != 12 {
-        return format!(r#"{{"error": "Nonce must be 12 bytes, got {}"}}"#, nonce.len());
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
     }
     if plaintext.is_empty() || plaintext.len() % 64 != 0 {
-        return format!(r#"{{"error": "Plaintext must be non-empty multiple of 64 bytes, got {}"}}"#, plaintext.len());
+        return json_error(format!("Plaintext must be non-empty multiple of 64 bytes, got {}", plaintext.len()));
     }
     if ciphertext.len() != plaintext.len() {
-        return format!(r#"{{"error": "Ciphertext must be same length as plaintext, got {} vs {}"}}"#, ciphertext.len(), plaintext.len());
+        return json_error(format!("Ciphertext must be same length as plaintext, got {} vs {}", ciphertext.len(), plaintext.len()));
     }
 
     let num_blocks = plaintext.len() / 64;
@@ -524,39 +533,47 @@ pub fn generate_chacha20_proof(
     let config = PcsConfig::default();
     let proof = match prove_stream_with_inputs::<Blake2sMerkleChannel>(log_size, config, &inputs) {
         Ok(p) => p,
-        Err(e) => return format!(r#"{{"error": "{}"}}"#, e),
+        Err(e) => return json_error(e),
     };
 
     // Serialize proof
     let proof_bytes = match serde_json::to_vec(&proof) {
         Ok(b) => b,
-        Err(e) => return format!(r#"{{"error": "Failed to serialize proof: {}"}}"#, e),
+        Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
     };
     let proof_b64 = BASE64.encode(&proof_bytes);
     let proof_size = proof.stark_proof.size_estimate();
 
-    format!(
-        r#"{{"success": true, "blocks": {}, "algorithm": "chacha20", "proof": "{}", "proof_size_bytes": {}}}"#,
-        num_blocks, proof_b64, proof_size
-    )
+    json!({
+        "success": true,
+        "blocks": num_blocks,
+        "algorithm": "chacha20",
+        "proof": proof_b64,
+        "proof_size_bytes": proof_size
+    }).to_string()
 }
 
 /// Verify a ChaCha20 proof (base64-encoded).
 #[wasm_bindgen]
 pub fn verify_chacha20_proof(proof_b64: &str) -> String {
+    // Check proof size to prevent memory DoS
+    if proof_b64.len() > MAX_PROOF_B64_LEN {
+        return json_error("Proof payload too large");
+    }
+
     let proof_bytes = match BASE64.decode(proof_b64) {
         Ok(b) => b,
-        Err(e) => return format!(r#"{{"error": "Invalid base64: {}"}}"#, e),
+        Err(e) => return json_error(format!("Invalid base64: {}", e)),
     };
 
     let proof: StreamProof<Blake2sMerkleHasher> = match serde_json::from_slice(&proof_bytes) {
         Ok(p) => p,
-        Err(e) => return format!(r#"{{"error": "Invalid proof format: {}"}}"#, e),
+        Err(e) => return json_error(format!("Invalid proof format: {}", e)),
     };
 
     match verify_stream::<Blake2sMerkleChannel>(proof) {
-        Ok(_) => r#"{"valid": true, "algorithm": "chacha20"}"#.to_string(),
-        Err(e) => format!(r#"{{"valid": false, "error": "{:?}"}}"#, e),
+        Ok(_) => json!({"valid": true, "algorithm": "chacha20"}).to_string(),
+        Err(e) => json!({"valid": false, "error": format!("{:?}", e)}).to_string(),
     }
 }
 
@@ -570,16 +587,16 @@ pub fn generate_aes128_ctr_proof(
     ciphertext: &[u8],
 ) -> String {
     if key.len() != 16 {
-        return format!(r#"{{"error": "Key must be 16 bytes, got {}"}}"#, key.len());
+        return json_error(format!("Key must be 16 bytes, got {}", key.len()));
     }
     if nonce.len() != 12 {
-        return format!(r#"{{"error": "Nonce must be 12 bytes, got {}"}}"#, nonce.len());
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
     }
     if plaintext.is_empty() || plaintext.len() % 16 != 0 {
-        return format!(r#"{{"error": "Plaintext must be non-empty multiple of 16 bytes, got {}"}}"#, plaintext.len());
+        return json_error(format!("Plaintext must be non-empty multiple of 16 bytes, got {}", plaintext.len()));
     }
     if ciphertext.len() != plaintext.len() {
-        return format!(r#"{{"error": "Ciphertext must be same length as plaintext, got {} vs {}"}}"#, ciphertext.len(), plaintext.len());
+        return json_error(format!("Ciphertext must be same length as plaintext, got {} vs {}", ciphertext.len(), plaintext.len()));
     }
 
     let num_blocks = plaintext.len() / 16;
@@ -587,12 +604,12 @@ pub fn generate_aes128_ctr_proof(
 
     let key_arr: [u8; 16] = match key.try_into() {
         Ok(k) => k,
-        Err(_) => return format!(r#"{{"error": "Invalid key length"}}"#),
+        Err(_) => return json_error("Invalid key length"),
     };
 
     let nonce_arr: [u8; 12] = match nonce.try_into() {
         Ok(n) => n,
-        Err(_) => return format!(r#"{{"error": "Invalid nonce length"}}"#),
+        Err(_) => return json_error("Invalid nonce length"),
     };
 
     let rows_needed = (num_blocks + 15) / 16;
@@ -655,20 +672,23 @@ pub fn generate_aes128_ctr_proof(
     let config = PcsConfig::default();
     let proof = match prove_aes128_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key_arr, &inputs) {
         Ok(p) => p,
-        Err(e) => return format!(r#"{{"error": "{}"}}"#, e),
+        Err(e) => return json_error(e),
     };
 
     let proof_bytes = match serde_json::to_vec(&proof) {
         Ok(b) => b,
-        Err(e) => return format!(r#"{{"error": "Failed to serialize proof: {}"}}"#, e),
+        Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
     };
     let proof_b64 = BASE64.encode(&proof_bytes);
     let proof_size = proof.stark_proof.size_estimate();
 
-    format!(
-        r#"{{"success": true, "blocks": {}, "algorithm": "aes128-ctr", "proof": "{}", "proof_size_bytes": {}}}"#,
-        num_blocks, proof_b64, proof_size
-    )
+    json!({
+        "success": true,
+        "blocks": num_blocks,
+        "algorithm": "aes128-ctr",
+        "proof": proof_b64,
+        "proof_size_bytes": proof_size
+    }).to_string()
 }
 
 /// Generate AES-256-CTR proof and return it serialized (base64).
@@ -681,16 +701,16 @@ pub fn generate_aes256_ctr_proof(
     ciphertext: &[u8],
 ) -> String {
     if key.len() != 32 {
-        return format!(r#"{{"error": "Key must be 32 bytes, got {}"}}"#, key.len());
+        return json_error(format!("Key must be 32 bytes, got {}", key.len()));
     }
     if nonce.len() != 12 {
-        return format!(r#"{{"error": "Nonce must be 12 bytes, got {}"}}"#, nonce.len());
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
     }
     if plaintext.is_empty() || plaintext.len() % 16 != 0 {
-        return format!(r#"{{"error": "Plaintext must be non-empty multiple of 16 bytes, got {}"}}"#, plaintext.len());
+        return json_error(format!("Plaintext must be non-empty multiple of 16 bytes, got {}", plaintext.len()));
     }
     if ciphertext.len() != plaintext.len() {
-        return format!(r#"{{"error": "Ciphertext must be same length as plaintext, got {} vs {}"}}"#, ciphertext.len(), plaintext.len());
+        return json_error(format!("Ciphertext must be same length as plaintext, got {} vs {}", ciphertext.len(), plaintext.len()));
     }
 
     let num_blocks = plaintext.len() / 16;
@@ -698,12 +718,12 @@ pub fn generate_aes256_ctr_proof(
 
     let key_arr: [u8; 32] = match key.try_into() {
         Ok(k) => k,
-        Err(_) => return format!(r#"{{"error": "Invalid key length"}}"#),
+        Err(_) => return json_error("Invalid key length"),
     };
 
     let nonce_arr: [u8; 12] = match nonce.try_into() {
         Ok(n) => n,
-        Err(_) => return format!(r#"{{"error": "Invalid nonce length"}}"#),
+        Err(_) => return json_error("Invalid nonce length"),
     };
 
     let rows_needed = (num_blocks + 15) / 16;
@@ -766,40 +786,48 @@ pub fn generate_aes256_ctr_proof(
     let config = PcsConfig::default();
     let proof = match prove_aes256_ctr_with_inputs::<Blake2sMerkleChannel>(log_size, config, &key_arr, &inputs) {
         Ok(p) => p,
-        Err(e) => return format!(r#"{{"error": "{}"}}"#, e),
+        Err(e) => return json_error(e),
     };
 
     let proof_bytes = match serde_json::to_vec(&proof) {
         Ok(b) => b,
-        Err(e) => return format!(r#"{{"error": "Failed to serialize proof: {}"}}"#, e),
+        Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
     };
     let proof_b64 = BASE64.encode(&proof_bytes);
     let proof_size = proof.stark_proof.size_estimate();
 
-    format!(
-        r#"{{"success": true, "blocks": {}, "algorithm": "aes256-ctr", "proof": "{}", "proof_size_bytes": {}}}"#,
-        num_blocks, proof_b64, proof_size
-    )
+    json!({
+        "success": true,
+        "blocks": num_blocks,
+        "algorithm": "aes256-ctr",
+        "proof": proof_b64,
+        "proof_size_bytes": proof_size
+    }).to_string()
 }
 
 /// Verify an AES-CTR proof (base64-encoded). Works for both AES-128 and AES-256.
 #[wasm_bindgen]
 pub fn verify_aes_ctr_proof(proof_b64: &str) -> String {
+    // Check proof size to prevent memory DoS
+    if proof_b64.len() > MAX_PROOF_B64_LEN {
+        return json_error("Proof payload too large");
+    }
+
     let proof_bytes = match BASE64.decode(proof_b64) {
         Ok(b) => b,
-        Err(e) => return format!(r#"{{"error": "Invalid base64: {}"}}"#, e),
+        Err(e) => return json_error(format!("Invalid base64: {}", e)),
     };
 
     let proof: AESCtrProof<Blake2sMerkleHasher> = match serde_json::from_slice(&proof_bytes) {
         Ok(p) => p,
-        Err(e) => return format!(r#"{{"error": "Invalid proof format: {}"}}"#, e),
+        Err(e) => return json_error(format!("Invalid proof format: {}", e)),
     };
 
     let algorithm = if proof.stmt0.key_size == AesKeySize::Aes128 { "aes128-ctr" } else { "aes256-ctr" };
 
     match verify_aes_ctr::<Blake2sMerkleChannel>(proof) {
-        Ok(_) => format!(r#"{{"valid": true, "algorithm": "{}"}}"#, algorithm),
-        Err(e) => format!(r#"{{"valid": false, "error": "{:?}"}}"#, e),
+        Ok(_) => json!({"valid": true, "algorithm": algorithm}).to_string(),
+        Err(e) => json!({"valid": false, "error": format!("{:?}", e)}).to_string(),
     }
 }
 
@@ -817,10 +845,10 @@ pub fn debug_chacha20_keystream(
     use crate::chacha::block::{chacha20_block_from_key, state_to_bytes};
 
     if key.len() != 32 {
-        return format!(r#"{{"error": "Key must be 32 bytes, got {}"}}"#, key.len());
+        return json_error(format!("Key must be 32 bytes, got {}", key.len()));
     }
     if nonce.len() != 12 {
-        return format!(r#"{{"error": "Nonce must be 12 bytes, got {}"}}"#, nonce.len());
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
     }
 
     // Parse key as 8 little-endian u32s
@@ -840,10 +868,12 @@ pub fn debug_chacha20_keystream(
     // Return as hex
     let hex: String = keystream_bytes.iter().map(|b| format!("{:02x}", b)).collect();
 
-    format!(
-        r#"{{"keystream_hex": "{}", "key_u32": {:?}, "nonce_u32": {:?}, "counter": {}}}"#,
-        hex, key_u32, nonce_u32, counter
-    )
+    json!({
+        "keystream_hex": hex,
+        "key_u32": key_u32,
+        "nonce_u32": nonce_u32,
+        "counter": counter
+    }).to_string()
 }
 
 /// Get circuit information as JSON.

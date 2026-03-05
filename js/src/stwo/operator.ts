@@ -27,6 +27,12 @@ type VerifyResult = {
 	algorithm?: string
 }
 
+function assertU32Counter(counter: number): void {
+	if(!Number.isInteger(counter) || counter < 0 || counter > 0xFFFFFFFF) {
+		throw new RangeError('counter must be a uint32 integer (0 to 4294967295)')
+	}
+}
+
 let wasmInitialized = false
 let initPromise: Promise<void> | undefined
 
@@ -54,6 +60,7 @@ function serializeWitness(algorithm: EncryptionAlgorithm, input: ZKProofInput): 
 	}
 
 	const { noncesAndCounters: [{ nonce, counter }] } = input
+	assertU32Counter(counter)
 	// Note: In the JS library, 'in' is ciphertext and 'out' is plaintext
 	// Stwo expects (key, nonce, counter, plaintext, ciphertext)
 	const data: StwoWitnessData = {

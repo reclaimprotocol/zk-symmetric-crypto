@@ -92,12 +92,13 @@ async function loadGnarkLib(): Promise<GnarkLib> {
 			toprfFinalize: libProve.func('TOPRFFinalize', LibReturn, [GoSlice]),
 			koffi
 		}
-	} catch(err: any) {
-		if(err.message.includes('not a mach-o')) {
+	} catch(err: unknown) {
+		const error = err as Error
+		if(error.message?.includes('not a mach-o')) {
 			throw new Error(
 				`Gnark library not compatible with OS/arch (${platform}/${arch})`
 			)
-		} else if(err.message.toLowerCase().includes('no such file')) {
+		} else if(error.message?.toLowerCase().includes('no such file')) {
 			throw new Error(
 				`Gnark library not built for OS/arch (${platform}/${arch})`
 			)

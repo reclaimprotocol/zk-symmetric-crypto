@@ -105,6 +105,15 @@ impl TraceGeneratorRow<'_> {
         self.quarter_round(&mut v, 1, 6, 11, 12);
         self.quarter_round(&mut v, 2, 7, 8, 13);
         self.quarter_round(&mut v, 3, 4, 9, 14);
+
+        // Verify all trace columns were written
+        debug_assert_eq!(
+            self.col_index,
+            self.gen.trace.len(),
+            "Trace column layout mismatch: wrote {} columns, expected {}",
+            self.col_index,
+            self.gen.trace.len()
+        );
     }
 
     /// Quarter-round on indices a, b, c, d.

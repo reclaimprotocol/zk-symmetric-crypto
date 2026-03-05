@@ -334,6 +334,20 @@ pub fn generate_trace(
     SboxAccumulator,
     AESLookupData,
 ) {
+    assert!(
+        log_size >= LOG_N_LANES,
+        "log_size ({}) must be >= LOG_N_LANES ({})",
+        log_size,
+        LOG_N_LANES
+    );
+    let n_rows = 1usize << (log_size - LOG_N_LANES);
+    assert!(
+        inputs.len() <= n_rows,
+        "inputs length ({}) exceeds trace row capacity ({})",
+        inputs.len(),
+        n_rows
+    );
+
     let mut gen = TraceGenerator::new(log_size);
 
     for input in inputs {
@@ -355,6 +369,13 @@ pub fn generate_sbox_interaction_trace(
     ColumnVec<CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>,
     SecureField,
 ) {
+    assert!(
+        log_size >= LOG_N_LANES,
+        "log_size ({}) must be >= LOG_N_LANES ({})",
+        log_size,
+        LOG_N_LANES
+    );
+    let vec_rows = 1 << (log_size - LOG_N_LANES);
     let mut logup_gen = LogupTraceGenerator::new(log_size);
 
     // Process S-box lookups from main trace in pairs
@@ -363,7 +384,7 @@ pub fn generate_sbox_interaction_trace(
     for [(_idx0, lookup0), (_idx1, lookup1)] in &mut lookup_iter {
         let mut col_gen = logup_gen.new_col();
 
-        for vec_row in 0..(1 << (log_size - LOG_N_LANES)) {
+        for vec_row in 0..vec_rows {
             // Get (input, output) pairs from both lookups
             let input0 = lookup0[0].data[vec_row];
             let output0 = lookup0[1].data[vec_row];
@@ -385,7 +406,7 @@ pub fn generate_sbox_interaction_trace(
     if let Some(remainder) = lookup_iter.into_remainder() {
         if let Some((_, lookup)) = remainder.collect_vec().pop() {
             let mut col_gen = logup_gen.new_col();
-            for vec_row in 0..(1 << (log_size - LOG_N_LANES)) {
+            for vec_row in 0..vec_rows {
                 let input = lookup[0].data[vec_row];
                 let output = lookup[1].data[vec_row];
                 let p: PackedSecureField = sbox_elements.combine(&[input, output]);

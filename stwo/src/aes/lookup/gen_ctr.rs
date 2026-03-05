@@ -399,6 +399,12 @@ pub fn generate_aes128_ctr_trace_with_inputs(
     let mut all_valid = true;
 
     let num_rows = 1 << (log_size - LOG_N_LANES);
+    assert!(
+        inputs.len() <= num_rows,
+        "inputs length ({}) exceeds trace row capacity ({})",
+        inputs.len(),
+        num_rows
+    );
     for row in 0..num_rows {
         if let Some(input) = inputs.get(row) {
             let valid = gen.process_ctr_block(input, &round_keys_slice);
@@ -422,6 +428,7 @@ pub fn generate_aes128_ctr_trace_with_inputs(
 }
 
 /// Generate trace for AES-128-CTR with test data.
+/// Note: num_blocks must be a multiple of 16 (SIMD lane count).
 pub fn generate_aes128_ctr_trace(
     log_size: u32,
     key: &[u8; 16],
@@ -432,6 +439,11 @@ pub fn generate_aes128_ctr_trace(
     SboxAccumulator,
     AESCtrLookupData,
 ) {
+    assert!(
+        num_blocks % 16 == 0,
+        "num_blocks ({}) must be a multiple of 16 (SIMD lane count)",
+        num_blocks
+    );
     let mut gen = CtrTraceGenerator::new(log_size, AesKeySize::Aes128);
     let round_keys = expand_keys_simd_128(key);
     let round_keys_slice: Vec<[Simd<u8, 16>; 16]> = round_keys.to_vec();
@@ -481,6 +493,12 @@ pub fn generate_aes256_ctr_trace_with_inputs(
     let mut all_valid = true;
 
     let num_rows = 1 << (log_size - LOG_N_LANES);
+    assert!(
+        inputs.len() <= num_rows,
+        "inputs length ({}) exceeds trace row capacity ({})",
+        inputs.len(),
+        num_rows
+    );
     for row in 0..num_rows {
         if let Some(input) = inputs.get(row) {
             let valid = gen.process_ctr_block(input, &round_keys_slice);
@@ -503,6 +521,7 @@ pub fn generate_aes256_ctr_trace_with_inputs(
 }
 
 /// Generate trace for AES-256-CTR with test data.
+/// Note: num_blocks must be a multiple of 16 (SIMD lane count).
 pub fn generate_aes256_ctr_trace(
     log_size: u32,
     key: &[u8; 32],
@@ -513,6 +532,11 @@ pub fn generate_aes256_ctr_trace(
     SboxAccumulator,
     AESCtrLookupData,
 ) {
+    assert!(
+        num_blocks % 16 == 0,
+        "num_blocks ({}) must be a multiple of 16 (SIMD lane count)",
+        num_blocks
+    );
     let mut gen = CtrTraceGenerator::new(log_size, AesKeySize::Aes256);
     let round_keys = expand_keys_simd_256(key);
     let round_keys_slice: Vec<[Simd<u8, 16>; 16]> = round_keys.to_vec();

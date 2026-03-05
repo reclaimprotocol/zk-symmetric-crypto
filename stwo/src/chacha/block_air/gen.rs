@@ -229,8 +229,15 @@ pub fn generate_trace(
     ChaChaBlockLookupData,
 ) {
     let mut generator = TraceGenerator::new(log_size);
+    let n_rows = 1usize << (log_size - LOG_N_LANES);
+    assert!(
+        inputs.len() <= n_rows,
+        "inputs length ({}) exceeds trace row capacity ({})",
+        inputs.len(),
+        n_rows
+    );
 
-    for vec_row in 0..(1 << (log_size - LOG_N_LANES)) {
+    for vec_row in 0..n_rows {
         let mut row_gen = generator.gen_row(vec_row);
         let input = inputs.get(vec_row).copied().unwrap_or_default();
         row_gen.generate(input.initial_state);
@@ -370,7 +377,28 @@ mod tests {
 
         // The trace should have the final output as the last 32 columns
         // (16 u32s = 32 field elements)
-        // Check that trace was generated without panicking
         assert!(!trace.is_empty());
+
+        // Validate trace correctness: check final state encoding matches native
+        // The final 32 columns should contain the output state (16 u32s as low/high pairs)
+        let num_cols = trace.len();
+        assert!(num_cols >= 32, "Trace should have at least 32 columns for output");
+
+        // Extract final output from trace (last 32 columns = 16 u32s)
+        for (i, &expected_word) in native_state.iter().enumerate() {
+            let low_col = num_cols - 32 + i * 2;
+            let high_col = num_cols - 32 + i * 2 + 1;
+
+            // Get the value from first SIMD lane (all lanes have same value for this test)
+            let low_val = trace[low_col].at(0).0;
+            let high_val = trace[high_col].at(0).0;
+            let reconstructed = low_val + (high_val << 16);
+
+            assert_eq!(
+                reconstructed, expected_word,
+                "Trace output word {} mismatch: got {:#x}, expected {:#x}",
+                i, reconstructed, expected_word
+            );
+        }
     }
 }

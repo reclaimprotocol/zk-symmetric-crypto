@@ -264,6 +264,12 @@ impl TraceGenerator {
             .into_iter()
             .map(|col| {
                 let mut base_col = BaseColumn::zeros(1 << self.log_size);
+                assert!(
+                    col.len() <= base_col.data.len(),
+                    "Trace has {} rows but domain only supports {}",
+                    col.len(),
+                    base_col.data.len()
+                );
                 for (i, val) in col.into_iter().enumerate() {
                     base_col.data[i] = val;
                 }

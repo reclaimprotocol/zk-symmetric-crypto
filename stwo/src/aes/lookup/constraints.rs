@@ -1,7 +1,8 @@
 //! Lookup-based AES constraint evaluation.
 //!
 //! Uses S-box lookup tables and represents bytes as field elements.
-//! XOR is done by splitting into nibbles and using 4-bit XOR tables.
+//! XOR is done by bit decomposition with algebraic constraints: c = a + b - 2*a*b.
+//! xtime (GF(2^8) multiply by 2) uses bit-level constraints for the reduction.
 
 use num_traits::One;
 use stwo::core::fields::m31::BaseField;

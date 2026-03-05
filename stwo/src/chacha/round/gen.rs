@@ -273,10 +273,9 @@ pub fn generate_interaction_trace(
         col_gen.finalize_col();
     }
 
-    // Handle odd remainder XOR lookups
-    let mut xor_iter = lookup_data.xor_lookups.iter();
-    while xor_iter.len() % 2 != 0 {
-        if let Some((w, l)) = xor_iter.next() {
+    // Handle odd remainder XOR lookup (if odd number of lookups)
+    if lookup_data.xor_lookups.len() % 2 == 1 {
+        if let Some((w, l)) = lookup_data.xor_lookups.last() {
             let mut col_gen = logup_gen.new_col();
             for vec_row in 0..(1 << (log_size - LOG_N_LANES)) {
                 let p: PackedSecureField =

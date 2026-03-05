@@ -27,6 +27,8 @@ pub struct AESBitwiseInput {
 struct TraceGenerator {
     log_size: u32,
     trace: Vec<Vec<PackedM31>>,
+    /// Current column index within a row (reset after each row).
+    current_col: usize,
 }
 
 impl TraceGenerator {
@@ -34,6 +36,7 @@ impl TraceGenerator {
         Self {
             log_size,
             trace: Vec::new(),
+            current_col: 0,
         }
     }
 
@@ -50,12 +53,20 @@ impl TraceGenerator {
     }
 
     /// Add a column of packed M31 values.
+    /// Each call appends to the next column in sequence within a row.
+    /// Call reset_column_index() to start a new row.
     fn append_packed(&mut self, value: PackedM31) {
-        let col_idx = self.trace.len();
-        if col_idx >= self.trace.len() {
+        let col_idx = self.current_col;
+        while self.trace.len() <= col_idx {
             self.trace.push(Vec::new());
         }
         self.trace[col_idx].push(value);
+        self.current_col += 1;
+    }
+
+    /// Reset column index for the next row.
+    fn reset_column_index(&mut self) {
+        self.current_col = 0;
     }
 
     /// Extend trace column with a single packed value (for building columns row by row).
@@ -271,6 +282,7 @@ pub fn generate_trace(
 
     for input in inputs {
         gen.process_block(input);
+        gen.reset_column_index();
     }
 
     gen.into_trace()

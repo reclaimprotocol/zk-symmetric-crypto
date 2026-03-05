@@ -1,19 +1,7 @@
 import { Base64 } from 'js-base64'
 import type { EncryptionAlgorithm, FileFetch, Logger, MakeZKOperatorOpts, ZKOperator, ZKProofInput } from '../types.ts'
-import * as stwoGlue from './s2circuits.js'
-
-type StwoWasmModule = {
-	generate_chacha20_proof: (key: Uint8Array, nonce: Uint8Array, counter: number, plaintext: Uint8Array, ciphertext: Uint8Array) => string
-	generate_aes128_ctr_proof: (key: Uint8Array, nonce: Uint8Array, counter: number, plaintext: Uint8Array, ciphertext: Uint8Array) => string
-	generate_aes256_ctr_proof: (key: Uint8Array, nonce: Uint8Array, counter: number, plaintext: Uint8Array, ciphertext: Uint8Array) => string
-	verify_chacha20_proof: (proof_b64: string) => string
-	verify_aes_ctr_proof: (proof_b64: string) => string
-	get_circuits_info: () => string
-	initSync: (module: BufferSource | { module: BufferSource }) => void
-	default: (module_or_path?: BufferSource | { module_or_path: BufferSource }) => Promise<void>
-}
-
-const stwo = stwoGlue as StwoWasmModule
+import * as stwo from './s2circuits.js'
+import { initSync } from './s2circuits.js'
 
 type StwoWitnessData = {
 	algorithm: EncryptionAlgorithm
@@ -53,7 +41,7 @@ async function ensureWasmInitialized(fetcher: FileFetch, logger?: Logger): Promi
 
 	initPromise = (async() => {
 		const wasmBytes = await fetcher.fetch('stwo', 's2circuits_bg.wasm', logger)
-		stwo.initSync({ module: wasmBytes })
+		initSync({ module: wasmBytes })
 		wasmInitialized = true
 	})()
 

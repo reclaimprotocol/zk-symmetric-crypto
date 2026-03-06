@@ -317,6 +317,12 @@ where
             log_size, LOG_N_LANES
         ));
     }
+    if log_size > MAX_LOG_SIZE {
+        return Err(format!(
+            "log_size ({}) must be <= MAX_LOG_SIZE ({})",
+            log_size, MAX_LOG_SIZE
+        ));
+    }
 
     // Precompute twiddles
     let twiddles = SimdBackend::precompute_twiddles(
@@ -544,6 +550,10 @@ where
 
 /// Maximum allowed interaction columns to prevent memory DoS from malformed proofs.
 const MAX_INTERACTION_COLS: usize = 1 << 16;
+
+/// Maximum allowed log_size to prevent excessive memory/computation during proving.
+/// 24 = 16M blocks which is already very large (256MB for AES, 1GB for ChaCha).
+const MAX_LOG_SIZE: u32 = 24;
 
 /// Verify AES-CTR proof with verifier-supplied public inputs.
 ///

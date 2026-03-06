@@ -935,14 +935,14 @@ pub fn debug_chacha20_keystream(
     let keystream_u32 = chacha20_block_from_key(&key_u32, counter, &nonce_u32);
     let keystream_bytes = state_to_bytes(&keystream_u32);
 
-    // Return as hex
+    // Return as hex (do not include key material in response for security)
     let hex: String = keystream_bytes.iter().map(|b| format!("{:02x}", b)).collect();
 
     json!({
         "keystream_hex": hex,
-        "key_u32": key_u32,
-        "nonce_u32": nonce_u32,
-        "counter": counter
+        "counter": counter,
+        "nonce_len": nonce.len(),
+        "key_len": key.len()
     }).to_string()
 }
 

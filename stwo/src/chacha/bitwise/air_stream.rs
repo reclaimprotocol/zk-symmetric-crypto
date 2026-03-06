@@ -172,6 +172,14 @@ where
             log_size, LOG_N_LANES
         ));
     }
+    // Maximum log_size to prevent excessive memory/computation (24 = 16M blocks = 1GB)
+    const MAX_LOG_SIZE: u32 = 24;
+    if log_size > MAX_LOG_SIZE {
+        return Err(format!(
+            "log_size ({}) must be <= MAX_LOG_SIZE ({})",
+            log_size, MAX_LOG_SIZE
+        ));
+    }
 
     // Precompute twiddles
     let twiddles = SimdBackend::precompute_twiddles(

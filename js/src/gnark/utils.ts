@@ -93,12 +93,12 @@ async function loadGnarkLib(): Promise<GnarkLib> {
 			koffi
 		}
 	} catch(err: unknown) {
-		const error = err as Error
-		if(error.message?.includes('not a mach-o')) {
+		const message = err instanceof Error ? err.message : String(err ?? '')
+		if(message.includes('not a mach-o')) {
 			throw new Error(
 				`Gnark library not compatible with OS/arch (${platform}/${arch})`
 			)
-		} else if(error.message?.toLowerCase().includes('no such file')) {
+		} else if(message.toLowerCase().includes('no such file')) {
 			throw new Error(
 				`Gnark library not built for OS/arch (${platform}/${arch})`
 			)

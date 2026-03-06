@@ -94,8 +94,14 @@ await init();
 const proofResult = generate_aes128_ctr_proof(key, nonce, counter, plaintext, ciphertext);
 const { proof } = JSON.parse(proofResult);
 
-// Verify proof (can be done without the key)
-const verifyResult = verify_aes_ctr_proof(proof);
+// Verify proof (can be done without the key, but with expected public inputs)
+const verifyResult = verify_aes_ctr_proof(
+  proof,
+  nonce,
+  counter,
+  plaintext,
+  ciphertext
+);
 // Returns: {"valid": true, "algorithm": "aes128-ctr"}
 ```
 
@@ -116,11 +122,11 @@ This implementation uses **Fiat-Shamir hash binding** to cryptographically bind 
 #### How It Works
 
 1. **AIR Constraints**: The constraint system enforces correct encryption:
-   ```
+   ```text
    ciphertext = AES(key, nonce || counter) XOR plaintext
    ```
    or for ChaCha20:
-   ```
+   ```text
    ciphertext = ChaCha20(key, nonce, counter) XOR plaintext
    ```
 
@@ -168,7 +174,7 @@ Both approaches are secure. The STARK approach is more flexible (can bind arbitr
 - Cannot find Blake2s collisions (256-bit security)
 
 **Attack: Tampered public inputs in serialized proof**
-```
+```text
 1. Attacker generates valid proof for (nonce_A, counter_A, plaintext_A, ciphertext_A)
 2. Attacker modifies proof.stmt0.public_inputs to claim (nonce_B, counter_B, plaintext_B, ciphertext_B)
 3. Verifier receives tampered proof
@@ -184,7 +190,7 @@ Both approaches are secure. The STARK approach is more flexible (can bind arbitr
   - FRI polynomial commitments don't match
 
 **Attack: Hash collision**
-```
+```text
 1. Attacker finds (data_A, data_B) where Blake2s(data_A) = Blake2s(data_B)
 2. Generates proof for data_A, claims it's for data_B
 ```

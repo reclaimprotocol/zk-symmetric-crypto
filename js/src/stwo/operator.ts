@@ -46,9 +46,14 @@ async function ensureWasmInitialized(fetcher: FileFetch, logger?: Logger): Promi
 	}
 
 	initPromise = (async() => {
-		const wasmBytes = await fetcher.fetch('stwo', 's2circuits_bg.wasm', logger)
-		initSync({ module: wasmBytes })
-		wasmInitialized = true
+		try {
+			const wasmBytes = await fetcher.fetch('stwo', 's2circuits_bg.wasm', logger)
+			initSync({ module: wasmBytes })
+			wasmInitialized = true
+		} catch(err) {
+			initPromise = undefined
+			throw err
+		}
 	})()
 
 	return initPromise

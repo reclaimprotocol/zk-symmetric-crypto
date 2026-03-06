@@ -288,28 +288,69 @@ where
         .expect("Test data should produce valid proof")
 }
 
-/// Verify ChaCha20 stream proof with verifier-supplied public inputs.
+/// Validate that the proof's PCS config meets minimum security requirements.
+fn validate_pcs_config(
+    proof_config: &PcsConfig,
+    min_config: &PcsConfig,
+) -> Result<(), VerificationError> {
+    if proof_config.pow_bits < min_config.pow_bits {
+        return Err(VerificationError::InvalidStructure(
+            format!(
+                "Proof pow_bits ({}) below minimum ({})",
+                proof_config.pow_bits, min_config.pow_bits
+            )
+        ));
+    }
+    if proof_config.fri_config.log_blowup_factor < min_config.fri_config.log_blowup_factor {
+        return Err(VerificationError::InvalidStructure(
+            format!(
+                "Proof log_blowup_factor ({}) below minimum ({})",
+                proof_config.fri_config.log_blowup_factor,
+                min_config.fri_config.log_blowup_factor
+            )
+        ));
+    }
+    if proof_config.fri_config.n_queries < min_config.fri_config.n_queries {
+        return Err(VerificationError::InvalidStructure(
+            format!(
+                "Proof n_queries ({}) below minimum ({})",
+                proof_config.fri_config.n_queries,
+                min_config.fri_config.n_queries
+            )
+        ));
+    }
+    Ok(())
+}
+
+/// Verify ChaCha20 stream proof with verifier-supplied public inputs and config validation.
 ///
 /// This is the secure verification function that ensures the proof is bound to the
-/// claimed public data (nonce, counter, plaintext, ciphertext).
+/// claimed public data (nonce, counter, plaintext, ciphertext) and uses acceptable
+/// security parameters.
 ///
 /// # Arguments
 /// * `proof` - The proof to verify
+/// * `min_config` - Minimum acceptable PCS config (rejects proofs with weaker settings)
 /// * `nonce` - The 12-byte nonce the verifier claims was used
 /// * `counter` - The starting counter the verifier claims was used
 /// * `plaintext` - The plaintext the verifier claims corresponds to the ciphertext
 /// * `ciphertext` - The ciphertext the verifier claims was encrypted
 ///
 /// # Security
-/// The public inputs are cryptographically bound to the proof via Fiat-Shamir.
-/// If the verifier-supplied inputs don't match what was proven, verification fails.
+/// - The proof's PCS config is validated against min_config before any verifier state is created
+/// - Public inputs are cryptographically bound to the proof via Fiat-Shamir
+/// - If the verifier-supplied inputs don't match what was proven, verification fails
 pub fn verify_stream_with_public_inputs<MC: MerkleChannel>(
     proof: StreamProof<MC::H>,
+    min_config: &PcsConfig,
     nonce: &[u8; 12],
     counter: u32,
     plaintext: &[u8],
     ciphertext: &[u8],
 ) -> Result<(), VerificationError> {
+    // SECURITY: Validate proof's config meets minimum requirements BEFORE creating verifier state
+    validate_pcs_config(&proof.stark_proof.config, min_config)?;
+
     // Verify the proof's public inputs match the verifier's claimed data
     // This ensures the proof is bound to the specific data the verifier expects
     if !proof.stmt.public_inputs.verify(nonce, counter, plaintext, ciphertext) {
@@ -321,13 +362,21 @@ pub fn verify_stream_with_public_inputs<MC: MerkleChannel>(
     verify_stream_internal::<MC>(proof)
 }
 
-/// Verify ChaCha20 stream proof without external public input validation.
+/// Verify ChaCha20 stream proof with config validation but without external public input validation.
 ///
 /// WARNING: This function trusts the public inputs embedded in the proof.
 /// For production use with untrusted provers, use `verify_stream_with_public_inputs` instead.
+///
+/// # Arguments
+/// * `proof` - The proof to verify
+/// * `min_config` - Minimum acceptable PCS config (rejects proofs with weaker settings)
 pub fn verify_stream<MC: MerkleChannel>(
     proof: StreamProof<MC::H>,
+    min_config: &PcsConfig,
 ) -> Result<(), VerificationError> {
+    // SECURITY: Validate proof's config meets minimum requirements BEFORE creating verifier state
+    validate_pcs_config(&proof.stark_proof.config, min_config)?;
+
     verify_stream_internal::<MC>(proof)
 }
 
@@ -398,7 +447,7 @@ mod tests {
         println!("Prove time: {:?}", prove_time);
 
         let start = Instant::now();
-        verify_stream::<Blake2sMerkleChannel>(proof).unwrap();
+        verify_stream::<Blake2sMerkleChannel>(proof, &PcsConfig::default()).unwrap();
         let verify_time = start.elapsed();
         println!("Verify time: {:?}", verify_time);
     }
@@ -491,7 +540,7 @@ mod tests {
 
         // Verification should fail
         let result = verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
-            proof, &nonce_bytes, 1, &fake_plaintext, &ciphertext_bytes
+            proof, &PcsConfig::default(), &nonce_bytes, 1, &fake_plaintext, &ciphertext_bytes
         );
         assert!(result.is_err(), "Tampered proof should fail verification");
         println!("Security test passed: tampered public inputs detected");
@@ -548,7 +597,7 @@ mod tests {
         // Verify with correct inputs should succeed
         assert!(
             verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
-                proof.clone(), &nonce_bytes, 1, &plaintext_bytes, &ciphertext_bytes
+                proof.clone(), &PcsConfig::default(), &nonce_bytes, 1, &plaintext_bytes, &ciphertext_bytes
             ).is_ok(),
             "Verification with correct inputs should succeed"
         );
@@ -557,7 +606,7 @@ mod tests {
         let wrong_plaintext = vec![0xffu8; plaintext_bytes.len()];
         assert!(
             verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
-                proof.clone(), &nonce_bytes, 1, &wrong_plaintext, &ciphertext_bytes
+                proof.clone(), &PcsConfig::default(), &nonce_bytes, 1, &wrong_plaintext, &ciphertext_bytes
             ).is_err(),
             "Verification with wrong plaintext should fail"
         );
@@ -566,7 +615,7 @@ mod tests {
         let wrong_nonce: [u8; 12] = [0xff; 12];
         assert!(
             verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
-                proof.clone(), &wrong_nonce, 1, &plaintext_bytes, &ciphertext_bytes
+                proof.clone(), &PcsConfig::default(), &wrong_nonce, 1, &plaintext_bytes, &ciphertext_bytes
             ).is_err(),
             "Verification with wrong nonce should fail"
         );
@@ -574,7 +623,7 @@ mod tests {
         // Verify with wrong counter should fail
         assert!(
             verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
-                proof.clone(), &nonce_bytes, 999, &plaintext_bytes, &ciphertext_bytes
+                proof.clone(), &PcsConfig::default(), &nonce_bytes, 999, &plaintext_bytes, &ciphertext_bytes
             ).is_err(),
             "Verification with wrong counter should fail"
         );
@@ -583,7 +632,7 @@ mod tests {
         let wrong_ciphertext = vec![0xffu8; ciphertext_bytes.len()];
         assert!(
             verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
-                proof, &nonce_bytes, 1, &plaintext_bytes, &wrong_ciphertext
+                proof, &PcsConfig::default(), &nonce_bytes, 1, &plaintext_bytes, &wrong_ciphertext
             ).is_err(),
             "Verification with wrong ciphertext should fail"
         );
@@ -609,7 +658,7 @@ mod tests {
             let prove_time = start.elapsed();
 
             let start = Instant::now();
-            verify_stream::<Blake2sMerkleChannel>(proof).unwrap();
+            verify_stream::<Blake2sMerkleChannel>(proof, &PcsConfig::default()).unwrap();
             let verify_time = start.elapsed();
 
             let blocks_per_sec = n_blocks as f64 / prove_time.as_secs_f64();

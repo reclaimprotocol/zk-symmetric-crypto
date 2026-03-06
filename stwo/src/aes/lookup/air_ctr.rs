@@ -555,28 +555,79 @@ const MAX_INTERACTION_COLS: usize = 1 << 16;
 /// 24 = 16M blocks which is already very large (256MB for AES, 1GB for ChaCha).
 const MAX_LOG_SIZE: u32 = 24;
 
-/// Verify AES-CTR proof with verifier-supplied public inputs.
+/// Validate that the proof's PCS config meets minimum security requirements.
+///
+/// This prevents a malicious prover from using weak STARK settings to reduce soundness.
+/// The verifier specifies minimum acceptable parameters; the proof must meet or exceed them.
+fn validate_pcs_config(
+    proof_config: &PcsConfig,
+    min_config: &PcsConfig,
+) -> Result<(), VerificationError> {
+    // Proof of work bits: higher = more grinding work required = more secure
+    if proof_config.pow_bits < min_config.pow_bits {
+        return Err(VerificationError::InvalidStructure(
+            format!(
+                "Proof pow_bits ({}) below minimum ({})",
+                proof_config.pow_bits, min_config.pow_bits
+            )
+        ));
+    }
+
+    // Log blowup factor: higher = larger evaluation domain = more secure
+    if proof_config.fri_config.log_blowup_factor < min_config.fri_config.log_blowup_factor {
+        return Err(VerificationError::InvalidStructure(
+            format!(
+                "Proof log_blowup_factor ({}) below minimum ({})",
+                proof_config.fri_config.log_blowup_factor,
+                min_config.fri_config.log_blowup_factor
+            )
+        ));
+    }
+
+    // Number of FRI queries: higher = more security bits
+    if proof_config.fri_config.n_queries < min_config.fri_config.n_queries {
+        return Err(VerificationError::InvalidStructure(
+            format!(
+                "Proof n_queries ({}) below minimum ({})",
+                proof_config.fri_config.n_queries,
+                min_config.fri_config.n_queries
+            )
+        ));
+    }
+
+    Ok(())
+}
+
+/// Verify AES-CTR proof with verifier-supplied public inputs and config validation.
 ///
 /// This is the secure verification function that ensures the proof is bound to the
-/// claimed public data (nonce, counter, plaintext, ciphertext).
+/// claimed public data (nonce, counter, plaintext, ciphertext) and uses acceptable
+/// security parameters.
 ///
 /// # Arguments
 /// * `proof` - The proof to verify
+/// * `min_config` - Minimum acceptable PCS config (rejects proofs with weaker settings)
 /// * `nonce` - The 12-byte nonce the verifier claims was used
 /// * `counter` - The starting counter the verifier claims was used
 /// * `plaintext` - The plaintext the verifier claims corresponds to the ciphertext
 /// * `ciphertext` - The ciphertext the verifier claims was encrypted
 ///
 /// # Security
-/// The public inputs are cryptographically bound to the proof via Fiat-Shamir.
-/// If the verifier-supplied inputs don't match what was proven, verification fails.
+/// - The proof's PCS config is validated against min_config before any verifier state is created
+/// - Public inputs are cryptographically bound to the proof via Fiat-Shamir
+/// - If the verifier-supplied inputs don't match what was proven, verification fails
 pub fn verify_aes_ctr_with_public_inputs<MC: MerkleChannel>(
     proof: AESCtrProof<MC::H>,
+    min_config: &PcsConfig,
     nonce: &[u8; 12],
     counter: u32,
     plaintext: &[u8],
     ciphertext: &[u8],
 ) -> Result<(), VerificationError> {
+    // SECURITY: Validate proof's config meets minimum requirements BEFORE creating verifier state
+    // This prevents a malicious prover from using weak STARK settings
+    validate_pcs_config(&proof.stark_proof.config, min_config)?;
+
     // Verify the proof's public inputs match the verifier's claimed data
     // This ensures the proof is bound to the specific data the verifier expects
     if !proof.stmt0.public_inputs.verify(nonce, counter, plaintext, ciphertext) {
@@ -588,13 +639,21 @@ pub fn verify_aes_ctr_with_public_inputs<MC: MerkleChannel>(
     verify_aes_ctr_internal::<MC>(proof)
 }
 
-/// Verify AES-CTR proof without external public input validation.
+/// Verify AES-CTR proof with config validation but without external public input validation.
 ///
 /// WARNING: This function trusts the public inputs embedded in the proof.
 /// For production use with untrusted provers, use `verify_aes_ctr_with_public_inputs` instead.
+///
+/// # Arguments
+/// * `proof` - The proof to verify
+/// * `min_config` - Minimum acceptable PCS config (rejects proofs with weaker settings)
 pub fn verify_aes_ctr<MC: MerkleChannel>(
     proof: AESCtrProof<MC::H>,
+    min_config: &PcsConfig,
 ) -> Result<(), VerificationError> {
+    // SECURITY: Validate proof's config meets minimum requirements BEFORE creating verifier state
+    validate_pcs_config(&proof.stark_proof.config, min_config)?;
+
     verify_aes_ctr_internal::<MC>(proof)
 }
 
@@ -690,7 +749,7 @@ mod tests {
         );
 
         let start = Instant::now();
-        verify_aes_ctr::<Blake2sMerkleChannel>(proof).unwrap();
+        verify_aes_ctr::<Blake2sMerkleChannel>(proof, &PcsConfig::default()).unwrap();
         let verify_time = start.elapsed();
         println!("Verify time: {:?}", verify_time);
     }
@@ -717,7 +776,7 @@ mod tests {
         );
 
         let start = Instant::now();
-        verify_aes_ctr::<Blake2sMerkleChannel>(proof).unwrap();
+        verify_aes_ctr::<Blake2sMerkleChannel>(proof, &PcsConfig::default()).unwrap();
         let verify_time = start.elapsed();
         println!("Verify time: {:?}", verify_time);
     }
@@ -792,7 +851,7 @@ mod tests {
         match result {
             Ok(proof) => {
                 println!("Proof generated successfully");
-                verify_aes_ctr::<Blake2sMerkleChannel>(proof).unwrap();
+                verify_aes_ctr::<Blake2sMerkleChannel>(proof, &PcsConfig::default()).unwrap();
                 println!("Verification passed!");
             }
             Err(e) => {
@@ -858,7 +917,7 @@ mod tests {
 
         // Verification should fail - the hash comparison catches the tampering
         let result = verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-            proof.clone(), &nonce, counter, &fake_plaintext, &ciphertext
+            proof.clone(), &PcsConfig::default(), &nonce, counter, &fake_plaintext, &ciphertext
         );
         // This fails because the proof's Fiat-Shamir transcript used the original plaintext hash,
         // so even though we tampered with stmt0.public_inputs, the STARK verification fails
@@ -918,7 +977,7 @@ mod tests {
         // Verify with correct inputs should succeed
         assert!(
             verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-                proof.clone(), &nonce, counter, &plaintext, &ciphertext
+                proof.clone(), &PcsConfig::default(), &nonce, counter, &plaintext, &ciphertext
             ).is_ok(),
             "Verification with correct inputs should succeed"
         );
@@ -927,7 +986,7 @@ mod tests {
         let wrong_plaintext: [u8; 16] = [0xff; 16];
         assert!(
             verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-                proof.clone(), &nonce, counter, &wrong_plaintext, &ciphertext
+                proof.clone(), &PcsConfig::default(), &nonce, counter, &wrong_plaintext, &ciphertext
             ).is_err(),
             "Verification with wrong plaintext should fail"
         );
@@ -936,7 +995,7 @@ mod tests {
         let wrong_nonce: [u8; 12] = [0xff; 12];
         assert!(
             verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-                proof.clone(), &wrong_nonce, counter, &plaintext, &ciphertext
+                proof.clone(), &PcsConfig::default(), &wrong_nonce, counter, &plaintext, &ciphertext
             ).is_err(),
             "Verification with wrong nonce should fail"
         );
@@ -944,7 +1003,7 @@ mod tests {
         // Verify with wrong counter should fail
         assert!(
             verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-                proof.clone(), &nonce, counter + 1, &plaintext, &ciphertext
+                proof.clone(), &PcsConfig::default(), &nonce, counter + 1, &plaintext, &ciphertext
             ).is_err(),
             "Verification with wrong counter should fail"
         );
@@ -953,7 +1012,7 @@ mod tests {
         let wrong_ciphertext: [u8; 16] = [0xff; 16];
         assert!(
             verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-                proof, &nonce, counter, &plaintext, &wrong_ciphertext
+                proof, &PcsConfig::default(), &nonce, counter, &plaintext, &wrong_ciphertext
             ).is_err(),
             "Verification with wrong ciphertext should fail"
         );
@@ -980,7 +1039,7 @@ mod tests {
             let prove_time = start.elapsed();
 
             let start = Instant::now();
-            verify_aes_ctr::<Blake2sMerkleChannel>(proof).unwrap();
+            verify_aes_ctr::<Blake2sMerkleChannel>(proof, &PcsConfig::default()).unwrap();
             let verify_time = start.elapsed();
 
             let blocks_per_sec = n_blocks as f64 / prove_time.as_secs_f64();
@@ -1000,7 +1059,7 @@ mod tests {
             let prove_time = start.elapsed();
 
             let start = Instant::now();
-            verify_aes_ctr::<Blake2sMerkleChannel>(proof).unwrap();
+            verify_aes_ctr::<Blake2sMerkleChannel>(proof, &PcsConfig::default()).unwrap();
             let verify_time = start.elapsed();
 
             let blocks_per_sec = n_blocks as f64 / prove_time.as_secs_f64();

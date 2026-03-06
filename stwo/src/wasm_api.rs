@@ -26,6 +26,13 @@ type Blake2sMerkleHasher = stwo::core::vcs_lifted::blake2_merkle::Blake2sMerkleH
 /// Maximum proof size in base64 (8 MB) to prevent memory DoS.
 const MAX_PROOF_B64_LEN: usize = 8 * 1024 * 1024;
 
+/// Minimum acceptable PCS config for verification.
+/// This prevents malicious provers from using weak STARK settings.
+/// Uses default values which provide ~100 bits of security.
+fn min_pcs_config() -> PcsConfig {
+    PcsConfig::default()
+}
+
 /// Build a JSON error response with proper escaping.
 fn json_error(msg: impl std::fmt::Display) -> String {
     json!({ "error": msg.to_string() }).to_string()
@@ -167,7 +174,7 @@ pub fn prove_chacha20_encrypt(
     };
 
     match verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
-        proof, &nonce_arr, counter, plaintext, ciphertext
+        proof, &min_pcs_config(), &nonce_arr, counter, plaintext, ciphertext
     ) {
         Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "chacha20"}).to_string(),
         Err(e) => json_error(format!("Verification failed: {:?}", e)),
@@ -298,7 +305,7 @@ pub fn prove_aes128_ctr_encrypt(
     };
 
     match verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-        proof, &nonce_arr, counter, plaintext, ciphertext
+        proof, &min_pcs_config(), &nonce_arr, counter, plaintext, ciphertext
     ) {
         Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "aes128-ctr"}).to_string(),
         Err(e) => json_error(format!("Verification failed: {:?}", e)),
@@ -425,7 +432,7 @@ pub fn prove_aes256_ctr_encrypt(
     };
 
     match verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-        proof, &nonce_arr, counter, plaintext, ciphertext
+        proof, &min_pcs_config(), &nonce_arr, counter, plaintext, ciphertext
     ) {
         Ok(_) => json!({"success": true, "blocks": num_blocks, "algorithm": "aes256-ctr"}).to_string(),
         Err(e) => json_error(format!("Verification failed: {:?}", e)),
@@ -607,9 +614,9 @@ pub fn verify_chacha20_proof(
         Err(e) => return json_error(format!("Invalid proof format: {}", e)),
     };
 
-    // Verify with verifier-supplied public inputs
+    // Verify with verifier-supplied public inputs and minimum config validation
     match verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
-        proof, &nonce_arr, counter, plaintext, ciphertext
+        proof, &min_pcs_config(), &nonce_arr, counter, plaintext, ciphertext
     ) {
         Ok(_) => json!({"valid": true, "algorithm": "chacha20"}).to_string(),
         Err(e) => json!({"valid": false, "error": format!("{:?}", e)}).to_string(),
@@ -892,9 +899,9 @@ pub fn verify_aes_ctr_proof(
 
     let algorithm = if proof.stmt0.key_size == AesKeySize::Aes128 { "aes128-ctr" } else { "aes256-ctr" };
 
-    // Verify with verifier-supplied public inputs
+    // Verify with verifier-supplied public inputs and minimum config validation
     match verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
-        proof, &nonce_arr, counter, plaintext, ciphertext
+        proof, &min_pcs_config(), &nonce_arr, counter, plaintext, ciphertext
     ) {
         Ok(_) => json!({"valid": true, "algorithm": algorithm}).to_string(),
         Err(e) => json!({"valid": false, "error": format!("{:?}", e)}).to_string(),

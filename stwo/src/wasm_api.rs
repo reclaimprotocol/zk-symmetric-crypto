@@ -1149,3 +1149,419 @@ pub fn get_toprf_info() -> String {
         "threshold": 1,
     }).to_string()
 }
+
+// ============================================================================
+// TOPRF Full API (gnark-compatible JSON format)
+// ============================================================================
+
+/// Generate TOPRF shared keys for threshold scheme.
+///
+/// # Arguments
+/// * `nodes` - Total number of nodes
+/// * `threshold` - Minimum nodes required to reconstruct
+/// * `seed` - Random seed for deterministic key generation (for testing)
+///
+/// # Returns
+/// JSON string with:
+/// - serverPublicKey: 64-byte hex-encoded point
+/// - shares: Array of share objects with index, privateKey, publicKey
+#[wasm_bindgen]
+pub fn toprf_generate_keys(nodes: u32, threshold: u32, seed: u64) -> String {
+    use crate::babyjub::field256::gen::modulus;
+    use crate::toprf_server::dkg::generate_shared_key;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+
+    if threshold > nodes || threshold == 0 {
+        return json_error("threshold must be > 0 and <= nodes");
+    }
+
+    let mut rng = ChaCha20Rng::seed_from_u64(seed);
+    let p = modulus();
+
+    let shared_key = generate_shared_key(&mut rng, nodes as usize, threshold as usize);
+
+    // Serialize server public key
+    let server_pub_bytes = shared_key.server_public_key.to_bytes_gnark(&p);
+    let server_pub_hex = hex::encode(server_pub_bytes);
+
+    // Serialize shares
+    let shares: Vec<_> = shared_key.shares.iter().map(|share| {
+        let pub_bytes = share.public_key.to_bytes_gnark(&p);
+        json!({
+            "index": share.index,
+            "privateKey": hex::encode(share.private_key.to_bytes_be_trimmed()),
+            "publicKey": hex::encode(pub_bytes),
+        })
+    }).collect();
+
+    json!({
+        "serverPublicKey": server_pub_hex,
+        "nodes": nodes,
+        "threshold": threshold,
+        "shares": shares,
+    }).to_string()
+}
+
+/// Create OPRF request (client-side).
+///
+/// # Arguments
+/// * `secret_bytes` - Secret data to hash (max 62 bytes)
+/// * `domain_separator` - Domain separator string
+///
+/// # Returns
+/// JSON string matching gnark's OPRFRequest format:
+/// - mask: hex-encoded scalar
+/// - maskedData: hex-encoded 64-byte point
+/// - secretElements: [hex, hex] two field elements
+#[wasm_bindgen]
+pub fn toprf_create_request(secret_bytes: &[u8], domain_separator: &str) -> String {
+    use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
+    use crate::toprf_server::dkg::random_scalar;
+    use crate::toprf_server::eval::{hash_to_point, mask_point};
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+
+    if secret_bytes.len() > 62 {
+        return json_error(format!("secret data too big: {}, max 62 bytes", secret_bytes.len()));
+    }
+
+    let p = modulus();
+
+    // Convert secret bytes to field elements (gnark-compatible: BEtoLE)
+    let secret_data = bytes_to_field256_elements_gnark(secret_bytes);
+
+    // Domain separator as field element
+    let domain_bytes = domain_separator.as_bytes();
+    let domain = bytes_to_bigint256_gnark(domain_bytes);
+
+    // Hash to curve point
+    let data_point = hash_to_point(&secret_data, &domain);
+
+    // Generate random mask
+    let mut rng = ChaCha20Rng::from_entropy();
+    let mask = random_scalar(&mut rng);
+
+    // Mask the data point
+    let masked_request = mask_point(&data_point, &mask);
+
+    // Serialize in gnark format
+    let mask_hex = hex::encode(mask.to_bytes_be_trimmed());
+    let masked_data_hex = hex::encode(masked_request.to_bytes_gnark(&p));
+    let secret_elem_0_hex = hex::encode(secret_data[0].to_bytes_be_trimmed());
+    let secret_elem_1_hex = hex::encode(secret_data[1].to_bytes_be_trimmed());
+
+    json!({
+        "mask": mask_hex,
+        "maskedData": masked_data_hex,
+        "secretElements": [secret_elem_0_hex, secret_elem_1_hex],
+    }).to_string()
+}
+
+/// Evaluate OPRF (server-side).
+///
+/// # Arguments
+/// * `share_json` - JSON with share: { index, privateKey, publicKey }
+/// * `masked_request_hex` - Hex-encoded 64-byte masked point
+///
+/// # Returns
+/// JSON string matching gnark's OPRFResponse format:
+/// - index: share index
+/// - publicKeyShare: hex-encoded 64-byte point
+/// - evaluated: hex-encoded 64-byte point
+/// - c: hex-encoded DLEQ challenge
+/// - r: hex-encoded DLEQ response
+#[wasm_bindgen]
+pub fn toprf_evaluate(share_json: &str, masked_request_hex: &str) -> String {
+    use crate::babyjub::field256::gen::{modulus, BigInt256};
+    use crate::babyjub::point::ExtendedPointBigInt;
+    use crate::toprf_server::{Share, evaluate_oprf};
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+
+    let p = modulus();
+
+    // Parse share
+    let share_value: serde_json::Value = match serde_json::from_str(share_json) {
+        Ok(v) => v,
+        Err(e) => return json_error(format!("Invalid share JSON: {}", e)),
+    };
+
+    let index = match share_value["index"].as_u64() {
+        Some(i) => i as usize,
+        None => return json_error("Missing or invalid share index"),
+    };
+
+    let private_key_hex = match share_value["privateKey"].as_str() {
+        Some(s) => s,
+        None => return json_error("Missing privateKey"),
+    };
+
+    let private_key_bytes = match hex::decode(private_key_hex) {
+        Ok(b) => b,
+        Err(e) => return json_error(format!("Invalid privateKey hex: {}", e)),
+    };
+
+    let public_key_hex = match share_value["publicKey"].as_str() {
+        Some(s) => s,
+        None => return json_error("Missing publicKey"),
+    };
+
+    let public_key_bytes = match hex::decode(public_key_hex) {
+        Ok(b) => b,
+        Err(e) => return json_error(format!("Invalid publicKey hex: {}", e)),
+    };
+
+    // Parse masked request
+    let masked_bytes = match hex::decode(masked_request_hex) {
+        Ok(b) => b,
+        Err(e) => return json_error(format!("Invalid maskedRequest hex: {}", e)),
+    };
+
+    let private_key = BigInt256::from_bytes_be(&private_key_bytes);
+    let public_key = match ExtendedPointBigInt::from_bytes_gnark(&public_key_bytes, &p) {
+        Some(pt) => pt,
+        None => return json_error("Invalid public key point"),
+    };
+    let masked_request = match ExtendedPointBigInt::from_bytes_gnark(&masked_bytes, &p) {
+        Some(pt) => pt,
+        None => return json_error("Invalid masked request point"),
+    };
+
+    let share = Share {
+        index,
+        private_key,
+        public_key,
+    };
+
+    // Evaluate OPRF
+    let mut rng = ChaCha20Rng::from_entropy();
+    let response = match evaluate_oprf(&mut rng, &share, &masked_request) {
+        Some(r) => r,
+        None => return json_error("OPRF evaluation failed: invalid point"),
+    };
+
+    // Serialize response
+    json!({
+        "index": index,
+        "publicKeyShare": hex::encode(public_key_bytes),
+        "evaluated": hex::encode(response.evaluated_point.to_bytes_gnark(&p)),
+        "c": hex::encode(response.c.to_bytes_be_trimmed()),
+        "r": hex::encode(response.r.to_bytes_be_trimmed()),
+    }).to_string()
+}
+
+/// Finalize TOPRF (client-side).
+///
+/// # Arguments
+/// * `params_json` - JSON matching gnark's InputTOPRFFinalizeParams:
+///   - serverPublicKey: hex-encoded 64-byte point
+///   - request: { mask, maskedData, secretElements }
+///   - responses: [{ index, publicKeyShare, evaluated, c, r }, ...]
+///
+/// # Returns
+/// JSON string with:
+/// - output: hex-encoded hash output
+/// - outputDecimal: decimal string of output (for comparison)
+#[wasm_bindgen]
+pub fn toprf_finalize(params_json: &str) -> String {
+    use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
+    use crate::babyjub::point::ExtendedPointBigInt;
+    use crate::toprf_server::{OPRFResponse, finalize_toprf};
+
+    let p = modulus();
+
+    // Parse params
+    let params: serde_json::Value = match serde_json::from_str(params_json) {
+        Ok(v) => v,
+        Err(e) => return json_error(format!("Invalid params JSON: {}", e)),
+    };
+
+    // Parse server public key
+    let server_pub_hex = match params["serverPublicKey"].as_str() {
+        Some(s) => s,
+        None => return json_error("Missing serverPublicKey"),
+    };
+    let server_pub_bytes = match hex::decode(server_pub_hex) {
+        Ok(b) => b,
+        Err(e) => return json_error(format!("Invalid serverPublicKey hex: {}", e)),
+    };
+    let _server_public_key = match ExtendedPointBigInt::from_bytes_gnark(&server_pub_bytes, &p) {
+        Some(pt) => pt,
+        None => return json_error("Invalid server public key point"),
+    };
+
+    // Parse request
+    let request = &params["request"];
+    let mask_hex = match request["mask"].as_str() {
+        Some(s) => s,
+        None => return json_error("Missing request.mask"),
+    };
+    let mask_bytes = match hex::decode(mask_hex) {
+        Ok(b) => b,
+        Err(e) => return json_error(format!("Invalid mask hex: {}", e)),
+    };
+    let mask = BigInt256::from_bytes_be(&mask_bytes);
+
+    let masked_data_hex = match request["maskedData"].as_str() {
+        Some(s) => s,
+        None => return json_error("Missing request.maskedData"),
+    };
+    let masked_data_bytes = match hex::decode(masked_data_hex) {
+        Ok(b) => b,
+        Err(e) => return json_error(format!("Invalid maskedData hex: {}", e)),
+    };
+    let masked_request = match ExtendedPointBigInt::from_bytes_gnark(&masked_data_bytes, &p) {
+        Some(pt) => pt,
+        None => return json_error("Invalid masked data point"),
+    };
+
+    let secret_elements = match request["secretElements"].as_array() {
+        Some(arr) if arr.len() == 2 => {
+            let elem0_hex = arr[0].as_str().unwrap_or("");
+            let elem1_hex = arr[1].as_str().unwrap_or("");
+            let elem0_bytes = hex::decode(elem0_hex).unwrap_or_default();
+            let elem1_bytes = hex::decode(elem1_hex).unwrap_or_default();
+            [
+                BigInt256::from_bytes_be(&elem0_bytes),
+                BigInt256::from_bytes_be(&elem1_bytes),
+            ]
+        }
+        _ => return json_error("Invalid secretElements"),
+    };
+
+    // Parse responses
+    let responses_arr = match params["responses"].as_array() {
+        Some(arr) => arr,
+        None => return json_error("Missing responses array"),
+    };
+
+    let mut indices = Vec::new();
+    let mut responses = Vec::new();
+    let mut share_public_keys = Vec::new();
+
+    for resp in responses_arr {
+        let index = match resp["index"].as_u64() {
+            Some(i) => i as usize,
+            None => return json_error("Missing response index"),
+        };
+        indices.push(index);
+
+        let pub_key_hex = match resp["publicKeyShare"].as_str() {
+            Some(s) => s,
+            None => return json_error("Missing publicKeyShare"),
+        };
+        let pub_key_bytes = match hex::decode(pub_key_hex) {
+            Ok(b) => b,
+            Err(e) => return json_error(format!("Invalid publicKeyShare hex: {}", e)),
+        };
+        let pub_key = match ExtendedPointBigInt::from_bytes_gnark(&pub_key_bytes, &p) {
+            Some(pt) => pt,
+            None => return json_error("Invalid public key share point"),
+        };
+        share_public_keys.push(pub_key);
+
+        let evaluated_hex = match resp["evaluated"].as_str() {
+            Some(s) => s,
+            None => return json_error("Missing evaluated"),
+        };
+        let evaluated_bytes = match hex::decode(evaluated_hex) {
+            Ok(b) => b,
+            Err(e) => return json_error(format!("Invalid evaluated hex: {}", e)),
+        };
+        let evaluated_point = match ExtendedPointBigInt::from_bytes_gnark(&evaluated_bytes, &p) {
+            Some(pt) => pt,
+            None => return json_error("Invalid evaluated point"),
+        };
+
+        let c_hex = match resp["c"].as_str() {
+            Some(s) => s,
+            None => return json_error("Missing c"),
+        };
+        let c_bytes = match hex::decode(c_hex) {
+            Ok(b) => b,
+            Err(e) => return json_error(format!("Invalid c hex: {}", e)),
+        };
+
+        let r_hex = match resp["r"].as_str() {
+            Some(s) => s,
+            None => return json_error("Missing r"),
+        };
+        let r_bytes = match hex::decode(r_hex) {
+            Ok(b) => b,
+            Err(e) => return json_error(format!("Invalid r hex: {}", e)),
+        };
+
+        responses.push(OPRFResponse {
+            evaluated_point,
+            c: BigInt256::from_bytes_be(&c_bytes),
+            r: BigInt256::from_bytes_be(&r_bytes),
+        });
+    }
+
+    // Finalize TOPRF
+    let result = match finalize_toprf(
+        &indices,
+        &responses,
+        &share_public_keys,
+        &masked_request,
+        &secret_elements,
+        &mask,
+    ) {
+        Some(r) => r,
+        None => return json_error("TOPRF finalization failed: verification error"),
+    };
+
+    json!({
+        "output": hex::encode(result.output.to_be_bytes()),
+        "outputDecimal": result.output.to_string(),
+    }).to_string()
+}
+
+/// Convert bytes to Field256 elements (gnark-compatible: big-endian to little-endian).
+fn bytes_to_field256_elements_gnark(bytes: &[u8]) -> [crate::babyjub::field256::gen::BigInt256; 2] {
+    use crate::babyjub::field256::gen::BigInt256;
+
+    const BYTES_PER_ELEMENT: usize = 31;
+
+    let mut elem0 = BigInt256::zero();
+    let mut elem1 = BigInt256::zero();
+
+    if !bytes.is_empty() {
+        if bytes.len() > BYTES_PER_ELEMENT {
+            // First element: first 31 bytes (reversed to LE)
+            let mut reversed0: Vec<u8> = bytes[..BYTES_PER_ELEMENT].to_vec();
+            reversed0.reverse();
+            elem0 = BigInt256::from_bytes_be(&reversed0);
+
+            // Second element: remaining bytes (reversed to LE)
+            let mut reversed1: Vec<u8> = bytes[BYTES_PER_ELEMENT..].to_vec();
+            reversed1.reverse();
+            elem1 = BigInt256::from_bytes_be(&reversed1);
+        } else {
+            // All bytes fit in first element (reversed to LE)
+            let mut reversed: Vec<u8> = bytes.to_vec();
+            reversed.reverse();
+            elem0 = BigInt256::from_bytes_be(&reversed);
+        }
+    }
+
+    [elem0, elem1]
+}
+
+/// Convert bytes to BigInt256 (gnark-compatible).
+fn bytes_to_bigint256_gnark(bytes: &[u8]) -> crate::babyjub::field256::gen::BigInt256 {
+    use crate::babyjub::field256::gen::BigInt256;
+
+    if bytes.is_empty() {
+        return BigInt256::zero();
+    }
+
+    // Reverse bytes (BE to LE) then parse
+    let mut reversed: Vec<u8> = bytes.to_vec();
+    reversed.reverse();
+    BigInt256::from_bytes_be(&reversed)
+}
+
+// Note: WASM API tests are in babyjub/toprf/gnark_compat_test.rs
+// since wasm_bindgen functions can't be tested in native context.

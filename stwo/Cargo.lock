@@ -616,6 +616,7 @@ dependencies = [
  "base64",
  "blake2",
  "getrandom",
+ "hex",
  "itertools 0.13.0",
  "num-traits",
  "rand",

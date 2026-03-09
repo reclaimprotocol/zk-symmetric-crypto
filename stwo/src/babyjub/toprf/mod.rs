@@ -13,6 +13,9 @@ pub mod gen;
 #[cfg(test)]
 mod integration_test;
 
+#[cfg(test)]
+mod gnark_compat_test;
+
 use crate::babyjub::field256::gen::BigInt256;
 pub use crate::babyjub::point::AffinePointBigInt;
 

@@ -200,6 +200,32 @@ impl ExtendedPointBigInt {
         let y = self.y.mul_mod(&z_inv, modulus);
         (x, y)
     }
+
+    // =========================================================================
+    // Gnark-compatible serialization
+    // =========================================================================
+
+    /// Serialize to 64-byte gnark-compatible format.
+    /// Format: X (32 bytes BE) || Y (32 bytes BE)
+    /// This matches gnark-crypto's `twistededwards.PointAffine.Marshal()`.
+    pub fn to_bytes_gnark(&self, modulus: &BigInt256) -> [u8; 64] {
+        let (x, y) = self.to_affine(modulus);
+        let mut bytes = [0u8; 64];
+        bytes[..32].copy_from_slice(&x.to_bytes_be());
+        bytes[32..].copy_from_slice(&y.to_bytes_be());
+        bytes
+    }
+
+    /// Deserialize from 64-byte gnark-compatible format.
+    /// Format: X (32 bytes BE) || Y (32 bytes BE)
+    pub fn from_bytes_gnark(bytes: &[u8], modulus: &BigInt256) -> Option<Self> {
+        if bytes.len() != 64 {
+            return None;
+        }
+        let x = BigInt256::from_bytes_be(&bytes[..32]);
+        let y = BigInt256::from_bytes_be(&bytes[32..]);
+        Some(Self::from_affine(x, y, modulus))
+    }
 }
 
 /// Native BigInt representation of affine point.

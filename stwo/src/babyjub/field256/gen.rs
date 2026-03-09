@@ -200,6 +200,58 @@ impl BigInt256 {
 
         result
     }
+
+    // =========================================================================
+    // Gnark-compatible serialization (big-endian bytes)
+    // =========================================================================
+
+    /// Convert to 32-byte big-endian representation (gnark-compatible).
+    /// This matches Go's `big.Int.Bytes()` padded to 32 bytes.
+    pub fn to_bytes_be(&self) -> [u8; 32] {
+        // First convert to u256 (8x32-bit little-endian)
+        let u256 = self.to_u256();
+
+        // Then convert to big-endian bytes
+        let mut bytes = [0u8; 32];
+        for (i, &word) in u256.iter().enumerate() {
+            let be_bytes = word.to_be_bytes();
+            // Place in reverse order (most significant first)
+            let offset = (7 - i) * 4;
+            bytes[offset..offset + 4].copy_from_slice(&be_bytes);
+        }
+        bytes
+    }
+
+    /// Create from 32-byte big-endian representation (gnark-compatible).
+    /// This matches Go's `new(big.Int).SetBytes(data)`.
+    pub fn from_bytes_be(bytes: &[u8]) -> Self {
+        let mut padded = [0u8; 32];
+        let start = 32usize.saturating_sub(bytes.len());
+        padded[start..].copy_from_slice(&bytes[..bytes.len().min(32)]);
+
+        // Convert from big-endian bytes to u256 (little-endian u32s)
+        let mut u256 = [0u32; 8];
+        for i in 0..8 {
+            let offset = (7 - i) * 4;
+            u256[i] = u32::from_be_bytes([
+                padded[offset],
+                padded[offset + 1],
+                padded[offset + 2],
+                padded[offset + 3],
+            ]);
+        }
+
+        Self::from_u256(&u256)
+    }
+
+    /// Convert to variable-length big-endian bytes (no leading zeros).
+    /// This matches Go's `big.Int.Bytes()` exactly.
+    pub fn to_bytes_be_trimmed(&self) -> Vec<u8> {
+        let bytes = self.to_bytes_be();
+        // Find first non-zero byte
+        let start = bytes.iter().position(|&b| b != 0).unwrap_or(31);
+        bytes[start..].to_vec()
+    }
 }
 
 /// BN254 scalar field modulus as BigInt256.

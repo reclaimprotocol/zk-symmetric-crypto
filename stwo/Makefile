@@ -15,13 +15,19 @@ build: build-release
 
 build-release:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "Error: wasm-pack not found. Run 'make setup' first."; exit 1; }
-	wasm-pack build --target web --release
-	@echo "Build complete: pkg/"
+	wasm-pack build --target web --release --out-dir pkg
+	mkdir -p ../resources/stwo
+	cp pkg/s2circuits_bg.wasm ../resources/stwo/
+	cp pkg/s2circuits.js ../js/src/stwo/
+	cp pkg/s2circuits.d.ts ../js/src/stwo/
+	@echo "Build complete: resources/stwo/ and js/src/stwo/"
 
 # Build WASM for development (faster compile, debug info)
 build-dev:
-	wasm-pack build --target web --dev
-	@echo "Dev build complete: pkg/"
+	wasm-pack build --target web --dev --out-dir pkg
+	cp pkg/s2circuits_bg.wasm ../resources/stwo/
+	cp pkg/s2circuits.js ../js/src/stwo/
+	@echo "Dev build complete: resources/stwo/ and js/src/stwo/"
 
 # Build for Node.js
 build-node:

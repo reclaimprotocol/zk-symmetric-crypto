@@ -1,7 +1,6 @@
 import { Base64 } from 'js-base64'
 import type { EncryptionAlgorithm, FileFetch, Logger, MakeZKOperatorOpts, ZKOperator, ZKProofInput } from '../types.ts'
-import * as stwo from './s2circuits.js'
-import { initSync } from './s2circuits.js'
+import { generate_aes128_ctr_proof, generate_aes256_ctr_proof, generate_chacha20_proof, initSync, verify_aes_ctr_proof, verify_chacha20_proof } from './s2circuits.js'
 
 type StwoWitnessData = {
 	algorithm: EncryptionAlgorithm
@@ -107,13 +106,13 @@ export function makeStwoZkOperator({
 			let resultJson: string
 			switch (data.algorithm) {
 			case 'chacha20':
-				resultJson = stwo.generate_chacha20_proof(key, nonce, data.counter, plaintext, ciphertext)
+				resultJson = generate_chacha20_proof(key, nonce, data.counter, plaintext, ciphertext)
 				break
 			case 'aes-128-ctr':
-				resultJson = stwo.generate_aes128_ctr_proof(key, nonce, data.counter, plaintext, ciphertext)
+				resultJson = generate_aes128_ctr_proof(key, nonce, data.counter, plaintext, ciphertext)
 				break
 			case 'aes-256-ctr':
-				resultJson = stwo.generate_aes256_ctr_proof(key, nonce, data.counter, plaintext, ciphertext)
+				resultJson = generate_aes256_ctr_proof(key, nonce, data.counter, plaintext, ciphertext)
 				break
 			default:
 				throw new Error(`Unsupported algorithm: ${data.algorithm}`)
@@ -163,11 +162,11 @@ export function makeStwoZkOperator({
 			// the STARK proof is invalid, verification fails.
 			let resultJson: string
 			if(algorithm === 'chacha20') {
-				resultJson = stwo.verify_chacha20_proof(
+				resultJson = verify_chacha20_proof(
 					proofStr, expectedNonce, expectedCounter, expectedPlaintext, expectedCiphertext
 				)
 			} else {
-				resultJson = stwo.verify_aes_ctr_proof(
+				resultJson = verify_aes_ctr_proof(
 					proofStr, expectedNonce, expectedCounter, expectedPlaintext, expectedCiphertext
 				)
 			}

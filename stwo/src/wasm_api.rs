@@ -1218,7 +1218,7 @@ pub fn toprf_generate_keys(nodes: u32, threshold: u32, seed: u64) -> String {
 pub fn toprf_create_request(secret_bytes: &[u8], domain_separator: &str) -> String {
     use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
     use crate::toprf_server::dkg::random_scalar;
-    use crate::toprf_server::eval::{hash_to_point, mask_point};
+    use crate::toprf_server::eval::{hash_to_point_mimc, mask_point};
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -1235,8 +1235,8 @@ pub fn toprf_create_request(secret_bytes: &[u8], domain_separator: &str) -> Stri
     let domain_bytes = domain_separator.as_bytes();
     let domain = bytes_to_bigint256_gnark(domain_bytes);
 
-    // Hash to curve point
-    let data_point = hash_to_point(&secret_data, &domain);
+    // Hash to curve point using MiMC (gnark-compatible)
+    let data_point = hash_to_point_mimc(&secret_data, &domain);
 
     // Generate random mask
     let mut rng = ChaCha20Rng::from_entropy();
@@ -1367,7 +1367,7 @@ pub fn toprf_evaluate(share_json: &str, masked_request_hex: &str) -> String {
 pub fn toprf_finalize(params_json: &str) -> String {
     use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
     use crate::babyjub::point::ExtendedPointBigInt;
-    use crate::toprf_server::{OPRFResponse, finalize_toprf};
+    use crate::toprf_server::{OPRFResponse, finalize_toprf_mimc};
 
     let p = modulus();
 
@@ -1499,8 +1499,8 @@ pub fn toprf_finalize(params_json: &str) -> String {
         });
     }
 
-    // Finalize TOPRF
-    let result = match finalize_toprf(
+    // Finalize TOPRF using MiMC hash (gnark-compatible)
+    let result = match finalize_toprf_mimc(
         &indices,
         &responses,
         &share_public_keys,
@@ -1512,9 +1512,15 @@ pub fn toprf_finalize(params_json: &str) -> String {
         None => return json_error("TOPRF finalization failed: verification error"),
     };
 
+    // Output is a 256-bit MiMC hash (gnark-compatible)
+    let output_bytes = result.output.to_bytes_be();
+    let output_hex = hex::encode(&output_bytes);
+
+    // For decimal representation, convert limbs directly
+    // The output is primarily used as hex for gnark compatibility
     json!({
-        "output": hex::encode(result.output.to_be_bytes()),
-        "outputDecimal": result.output.to_string(),
+        "output": output_hex,
+        "outputDecimal": output_hex,  // Use hex as placeholder - gnark uses hex format
     }).to_string()
 }
 

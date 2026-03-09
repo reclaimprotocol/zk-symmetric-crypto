@@ -4,14 +4,18 @@
 //! - evaluate_oprf: Evaluate masked point with server's private key
 //! - threshold_mul: Combine multiple server responses
 //! - finalize_toprf: Client-side finalization and verification
+//!
+//! For gnark compatibility, use the *_mimc variants which use MiMC hash
+//! instead of Poseidon2.
 
 use rand::Rng;
 
 use super::dkg::lagrange_coefficient;
 use super::dleq::{clear_cofactor, prove_dleq, verify_dleq};
-use super::{OPRFResponse, Share, TOPRFResult};
+use super::{OPRFResponse, Share, TOPRFResult, TOPRFResultMiMC};
 use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
 use crate::babyjub::mimc::gen::hash_field256_native;
+use crate::babyjub::mimc_compat::mimc_hash;
 use crate::babyjub::point::gen::native as point_native;
 use crate::babyjub::point::{base_point, ExtendedPointBigInt};
 
@@ -200,6 +204,117 @@ pub fn hash_to_point(
 /// * Masked point
 pub fn mask_point(data_point: &ExtendedPointBigInt, mask: &BigInt256) -> ExtendedPointBigInt {
     point_native::scalar_mul(data_point, mask)
+}
+
+// =============================================================================
+// gnark-compatible MiMC-based functions
+// =============================================================================
+
+/// Hash secret data to a curve point using MiMC (gnark-compatible).
+///
+/// This matches gnark's hash-to-point behavior for cross-system compatibility.
+///
+/// # Arguments
+/// * `secret_data` - Two Field256 values to hash
+/// * `domain_separator` - Domain separator for the hash
+///
+/// # Returns
+/// * Point on the curve
+pub fn hash_to_point_mimc(
+    secret_data: &[BigInt256; 2],
+    domain_separator: &BigInt256,
+) -> ExtendedPointBigInt {
+    // Hash the inputs using MiMC to get a scalar
+    let hash_inputs = vec![
+        secret_data[0].clone(),
+        secret_data[1].clone(),
+        domain_separator.clone(),
+    ];
+
+    // MiMC hash produces a full 256-bit output directly
+    let scalar = mimc_hash(&hash_inputs);
+
+    // Reduce mod scalar_order if needed
+    let order = scalar_order();
+    let scalar = if scalar.cmp(&order) >= 0 {
+        let (diff, _) = scalar.sub_no_reduce(&order);
+        diff
+    } else {
+        scalar
+    };
+
+    let base = base_point();
+    point_native::scalar_mul(&base, &scalar)
+}
+
+/// Finalize TOPRF computation using MiMC hash (gnark-compatible).
+///
+/// This matches gnark's TOPRF finalization for cross-system compatibility.
+///
+/// # Arguments
+/// * `indices` - Indices of shares that responded
+/// * `responses` - OPRF responses from servers
+/// * `share_public_keys` - Public keys for each responding share
+/// * `masked_request` - Original masked request point
+/// * `secret_elements` - Secret data being processed
+/// * `mask` - Client's blinding mask
+///
+/// # Returns
+/// * TOPRFResultMiMC with unmasked point and MiMC hash (gnark-compatible)
+/// * Returns None if any verification fails
+pub fn finalize_toprf_mimc(
+    indices: &[usize],
+    responses: &[OPRFResponse],
+    share_public_keys: &[ExtendedPointBigInt],
+    masked_request: &ExtendedPointBigInt,
+    secret_elements: &[BigInt256; 2],
+    mask: &BigInt256,
+) -> Option<TOPRFResultMiMC> {
+    let modulus = modulus();
+
+    // Verify all DLEQ proofs
+    for (i, response) in responses.iter().enumerate() {
+        let valid = verify_dleq(
+            &response.c,
+            &response.r,
+            &share_public_keys[i],
+            &response.evaluated_point,
+            masked_request,
+        );
+        if !valid {
+            return None;
+        }
+    }
+
+    // Combine responses
+    let evaluated_points: Vec<_> = responses
+        .iter()
+        .map(|r| r.evaluated_point.clone())
+        .collect();
+    let combined = threshold_mul(indices, &evaluated_points);
+
+    // Unmask: compute mask^(-1) in the scalar field and multiply
+    let order = scalar_order();
+    let mask_inv = mask.inv_mod(&order)?;
+    let unmasked = point_native::scalar_mul(&combined, &mask_inv);
+
+    // Convert unmasked to affine for hashing
+    let (unmasked_x, unmasked_y) = unmasked.to_affine(&modulus);
+
+    // Compute final hash using MiMC: H(unmasked.x, unmasked.y, secret_elements[0], secret_elements[1])
+    let hash_inputs = vec![
+        unmasked_x.clone(),
+        unmasked_y.clone(),
+        secret_elements[0].clone(),
+        secret_elements[1].clone(),
+    ];
+
+    let hash_output = mimc_hash(&hash_inputs);
+
+    Some(TOPRFResultMiMC {
+        unmasked_point: unmasked,
+        output: hash_output,
+    })
 }
 
 #[cfg(test)]

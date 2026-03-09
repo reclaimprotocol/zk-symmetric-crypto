@@ -59,7 +59,7 @@ pub struct OPRFResponse {
     pub r: BigInt256,
 }
 
-/// TOPRF verification result.
+/// TOPRF verification result (Poseidon2/M31 output).
 #[derive(Clone, Debug)]
 pub struct TOPRFResult {
     /// Unmasked point (after deblinding).
@@ -69,7 +69,17 @@ pub struct TOPRFResult {
     pub output: u32,
 }
 
+/// TOPRF verification result with MiMC hash (gnark-compatible).
+#[derive(Clone, Debug)]
+pub struct TOPRFResultMiMC {
+    /// Unmasked point (after deblinding).
+    pub unmasked_point: ExtendedPointBigInt,
+
+    /// Final MiMC hash output (256-bit, gnark-compatible).
+    pub output: BigInt256,
+}
+
 // Re-export commonly used items
 pub use dkg::{create_shares, generate_shared_key, lagrange_coefficient};
 pub use dleq::{prove_dleq, verify_dleq};
-pub use eval::{evaluate_oprf, finalize_toprf, threshold_mul};
+pub use eval::{evaluate_oprf, finalize_toprf, finalize_toprf_mimc, hash_to_point_mimc, threshold_mul};

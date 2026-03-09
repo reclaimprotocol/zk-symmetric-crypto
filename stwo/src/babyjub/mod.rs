@@ -10,6 +10,7 @@
 pub mod extraction;
 pub mod field256;
 pub mod mimc;
+pub mod mimc_compat;
 pub mod point;
 pub mod toprf;
 

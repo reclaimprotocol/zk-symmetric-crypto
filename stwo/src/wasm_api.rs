@@ -958,15 +958,194 @@ pub fn debug_chacha20_keystream(
 pub fn get_circuits_info() -> String {
     use crate::aes::lookup::{aes128_ctr_info, aes256_ctr_info};
     use crate::chacha::bitwise::chacha_stream_info;
+    use crate::babyjub::toprf::air::toprf_info;
 
     let aes128 = aes128_ctr_info();
     let aes256 = aes256_ctr_info();
     let chacha = chacha_stream_info();
+    let toprf = toprf_info();
 
     format!(
-        r#"{{"aes128_ctr":{{"cols":{},"constraints":{},"block_bytes":16,"key_bytes":16}},"aes256_ctr":{{"cols":{},"constraints":{},"block_bytes":16,"key_bytes":32}},"chacha20":{{"cols":{},"constraints":{},"block_bytes":64,"key_bytes":32}}}}"#,
+        r#"{{"aes128_ctr":{{"cols":{},"constraints":{},"block_bytes":16,"key_bytes":16}},"aes256_ctr":{{"cols":{},"constraints":{},"block_bytes":16,"key_bytes":32}},"chacha20":{{"cols":{},"constraints":{},"block_bytes":64,"key_bytes":32}},"toprf":{{"cols":{},"constraints":{}}}}}"#,
         aes128.mask_offsets[1].len(), aes128.n_constraints,
         aes256.mask_offsets[1].len(), aes256.n_constraints,
         chacha.mask_offsets[1].len(), chacha.n_constraints,
+        toprf.mask_offsets[1].len(), toprf.n_constraints,
     )
+}
+
+// ============================================================================
+// TOPRF API
+// ============================================================================
+
+/// Benchmark native TOPRF verification (no ZK proof, just the crypto operations).
+///
+/// This measures the time for scalar multiplications, hashing, etc.
+/// Returns JSON with timing info.
+#[wasm_bindgen]
+pub fn bench_toprf_native(secret_bytes: &[u8], domain_separator: u32) -> String {
+    use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
+    use crate::babyjub::mimc::gen::hash_field256_native;
+    use crate::babyjub::point::gen::native as point_native;
+    use crate::babyjub::toprf::{AffinePointBigInt, TOPRFInputs, TOPRFPrivateInputs, TOPRFPublicInputs};
+    use crate::babyjub::toprf::gen::verify_toprf_native;
+    use crate::toprf_server::dkg::{generate_shared_key, random_scalar};
+    use crate::toprf_server::eval::{evaluate_oprf, hash_to_point, mask_point};
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+
+    // Setup
+    let mut rng = ChaCha20Rng::seed_from_u64(42);
+    let p = modulus();
+    let order = scalar_order();
+
+    // Convert secret to field elements
+    let secret_data = bytes_to_field256_elements(secret_bytes);
+    let domain = BigInt256::from_limbs([domain_separator, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+    // Generate key (threshold=1)
+    let shared_key = generate_shared_key(&mut rng, 1, 1);
+    let share = &shared_key.shares[0];
+
+    // Client: hash to point
+    let data_point = hash_to_point(&secret_data, &domain);
+
+    // Client: generate mask
+    let mask = random_scalar(&mut rng);
+    let masked_request = mask_point(&data_point, &mask);
+
+    // Server: evaluate OPRF
+    let response = match evaluate_oprf(&mut rng, share, &masked_request) {
+        Some(r) => r,
+        None => return json_error("OPRF eval failed: invalid point"),
+    };
+
+    // Client: unmask
+    let mask_inv = match mask.inv_mod(&order) {
+        Some(inv) => inv,
+        None => return json_error("mask inverse failed"),
+    };
+    let unmasked = point_native::scalar_mul(&response.evaluated_point, &mask_inv);
+
+    // Compute output
+    let (unmasked_x, unmasked_y) = unmasked.to_affine(&p);
+    let output_hash = hash_field256_native(&[
+        unmasked_x.clone(),
+        unmasked_y.clone(),
+        secret_data[0].clone(),
+        secret_data[1].clone(),
+    ]);
+
+    // Create TOPRF inputs
+    let (resp_x, resp_y) = response.evaluated_point.to_affine(&p);
+    let (pub_x, pub_y) = share.public_key.to_affine(&p);
+
+    let inputs = TOPRFInputs {
+        private: TOPRFPrivateInputs {
+            mask: mask.clone(),
+            secret_data,
+        },
+        public: TOPRFPublicInputs {
+            domain_separator: domain,
+            responses: [AffinePointBigInt { x: resp_x, y: resp_y }],
+            coefficients: [BigInt256::one()],
+            share_public_keys: [AffinePointBigInt { x: pub_x, y: pub_y }],
+            c: [response.c],
+            r: [response.r],
+            output: output_hash.0,
+        },
+    };
+
+    // Benchmark native verification
+    let start = web_sys_time();
+    let result = verify_toprf_native(&inputs);
+    let elapsed = web_sys_time() - start;
+
+    match result {
+        Ok(output) => json!({
+            "success": true,
+            "output": output.0,
+            "time_ms": elapsed,
+            "secret_len": secret_bytes.len(),
+        }).to_string(),
+        Err(e) => json_error(format!("Verification failed: {}", e)),
+    }
+}
+
+/// Helper to get time in ms (for WASM).
+fn web_sys_time() -> f64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        web_sys::window()
+            .and_then(|w| w.performance())
+            .map(|p| p.now())
+            .unwrap_or(0.0)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        0.0
+    }
+}
+
+/// Convert bytes to Field256 elements (helper).
+fn bytes_to_field256_elements(bytes: &[u8]) -> [crate::babyjub::field256::gen::BigInt256; 2] {
+    use crate::babyjub::field256::gen::BigInt256;
+
+    let mut elem0 = BigInt256::zero();
+    let mut elem1 = BigInt256::zero();
+
+    if !bytes.is_empty() {
+        let end = bytes.len().min(31);
+        elem0 = bytes_to_bigint256_le(&bytes[..end]);
+    }
+
+    if bytes.len() > 31 {
+        elem1 = bytes_to_bigint256_le(&bytes[31..]);
+    }
+
+    [elem0, elem1]
+}
+
+fn bytes_to_bigint256_le(bytes: &[u8]) -> crate::babyjub::field256::gen::BigInt256 {
+    use crate::babyjub::field256::gen::BigInt256;
+
+    let mut limbs = [0u32; 9];
+    let mut bit_pos = 0;
+
+    for &byte in bytes {
+        let limb_idx = bit_pos / 29;
+        let bit_offset = bit_pos % 29;
+
+        if limb_idx < 9 {
+            limbs[limb_idx] |= (byte as u32) << bit_offset;
+            if bit_offset > 21 && limb_idx + 1 < 9 {
+                limbs[limb_idx + 1] |= (byte as u32) >> (29 - bit_offset);
+            }
+        }
+        bit_pos += 8;
+    }
+
+    for limb in &mut limbs {
+        *limb &= 0x1FFFFFFF;
+    }
+
+    BigInt256::from_limbs(limbs)
+}
+
+/// Get TOPRF circuit info.
+#[wasm_bindgen]
+pub fn get_toprf_info() -> String {
+    use crate::babyjub::toprf::air::toprf_info;
+    use crate::babyjub::toprf::constraints::toprf_constraint_count;
+
+    let info = toprf_info();
+
+    json!({
+        "cols": info.mask_offsets[1].len(),
+        "constraints": info.n_constraints,
+        "estimated_constraints": toprf_constraint_count(),
+        "algorithm": "poseidon2_m31",
+        "curve": "babyjub",
+        "threshold": 1,
+    }).to_string()
 }

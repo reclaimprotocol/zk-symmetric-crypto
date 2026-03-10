@@ -1,32 +1,18 @@
 import { describe, it } from 'node:test'
+import { CONFIG } from '../config.ts'
+import { strToUint8Array } from '../gnark/utils.ts'
 import {
+	debug_combined_toprf,
+	debug_toprf_verify,
+	generate_cipher_toprf_proof,
 	toprf_create_request,
 	toprf_evaluate,
 	toprf_finalize,
 	toprf_generate_keys,
-	debug_combined_toprf,
-	debug_toprf_verify,
-	generate_cipher_toprf_proof,
 } from '../stwo/s2circuits-wrapper.ts'
-import { strToUint8Array } from '../gnark/utils.ts'
-import { CONFIG } from '../config.ts'
 
 function uint8ArrayToHex(arr: Uint8Array): string {
 	return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-function hexToUint8Array(hex: string): Uint8Array {
-	if (hex.startsWith('0x')) {
-		hex = hex.slice(2)
-	}
-	if (hex.length % 2 !== 0) {
-		hex = '0' + hex
-	}
-	const bytes = new Uint8Array(hex.length / 2)
-	for (let i = 0; i < bytes.length; i++) {
-		bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
-	}
-	return bytes
 }
 
 describe('Stwo TOPRF debug', () => {
@@ -212,7 +198,7 @@ describe('Stwo TOPRF debug', () => {
 		)
 		const parsed = JSON.parse(proofResult)
 		console.log('Result success:', parsed.success)
-		if (parsed.error) {
+		if(parsed.error) {
 			console.log('Error:', parsed.error)
 		}
 	})

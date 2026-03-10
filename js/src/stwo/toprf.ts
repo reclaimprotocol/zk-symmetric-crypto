@@ -140,7 +140,7 @@ function deserializeStwoWitness(witness: Uint8Array): {
 	const numBlocks = data.noncesAndCounters.length
 	const blockSize = Math.ceil(plaintextLen / numBlocks)
 
-	const blocks = data.noncesAndCounters.map((nc: { nonce: string; counter: number }, i: number) => {
+	const blocks = data.noncesAndCounters.map((nc: { nonce: string, counter: number }, i: number) => {
 		const byteOffset = i * blockSize
 		const byteLen = Math.min(blockSize, plaintextLen - byteOffset)
 		return {

@@ -1159,14 +1159,13 @@ pub fn get_toprf_info() -> String {
 /// # Arguments
 /// * `nodes` - Total number of nodes
 /// * `threshold` - Minimum nodes required to reconstruct
-/// * `seed` - Random seed for deterministic key generation (for testing)
 ///
 /// # Returns
 /// JSON string with:
 /// - serverPublicKey: 64-byte hex-encoded point
 /// - shares: Array of share objects with index, privateKey, publicKey
 #[wasm_bindgen]
-pub fn toprf_generate_keys(nodes: u32, threshold: u32, seed: u64) -> String {
+pub fn toprf_generate_keys(nodes: u32, threshold: u32) -> String {
     use crate::babyjub::field256::gen::modulus;
     use crate::toprf_server::dkg::generate_shared_key;
     use rand::SeedableRng;
@@ -1176,7 +1175,10 @@ pub fn toprf_generate_keys(nodes: u32, threshold: u32, seed: u64) -> String {
         return json_error("threshold must be > 0 and <= nodes");
     }
 
-    let mut rng = ChaCha20Rng::seed_from_u64(seed);
+    // Use getrandom (CSPRNG) to seed ChaCha20
+    let mut seed_bytes = [0u8; 32];
+    getrandom::getrandom(&mut seed_bytes).expect("getrandom failed");
+    let mut rng = ChaCha20Rng::from_seed(seed_bytes);
     let p = modulus();
 
     let shared_key = generate_shared_key(&mut rng, nodes as usize, threshold as usize);

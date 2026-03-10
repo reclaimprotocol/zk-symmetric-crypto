@@ -104,10 +104,8 @@ export function makeStwoOPRFOperator({
 		async generateThresholdKeys(total, threshold, logger) {
 			await ensureWasmInitialized(fetcher, logger)
 
-			// Use current time as seed for randomness
-			const seed = BigInt(Date.now()) * BigInt(1000000) + BigInt(Math.floor(Math.random() * 1000000))
-
-			const resultJson = toprf_generate_keys(total, threshold, seed)
+			// Randomness is handled internally by WASM using getrandom (CSPRNG)
+			const resultJson = toprf_generate_keys(total, threshold)
 			const result: StwoKeysResult = JSON.parse(resultJson)
 
 			if(result.error) {

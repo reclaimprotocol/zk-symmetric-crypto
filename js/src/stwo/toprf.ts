@@ -1,4 +1,4 @@
-import type { FileFetch, KeyShare, Logger, OPRFOperator, OPRFRequestData, OPRFResponseData } from '../types.ts'
+import type { FileFetch, KeyShare, Logger, OPRFOperator } from '../types.ts'
 import {
 	get_toprf_info,
 	toprf_create_request,
@@ -82,19 +82,22 @@ export function makeStwoOPRFOperator({
 	fetcher,
 }: MakeStwoOPRFOperatorOpts): OPRFOperator {
 	return {
-		async generateWitness(_input) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		async generateWitness(input) {
 			// Stwo combines witness generation and proving
 			// For OPRF, we don't need a separate witness step
 			throw new Error('generateWitness not supported for stwo OPRF - use groth16Prove directly')
 		},
 
-		async groth16Prove(_witness, _logger) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		async groth16Prove(witness, logger) {
 			// STARK proof generation for cipher + TOPRF would go here
 			// For now, we only support the TOPRF operations (no ZK proof yet)
 			throw new Error('groth16Prove not yet implemented for stwo OPRF')
 		},
 
-		async groth16Verify(_publicSignals, _proof, _logger) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		async groth16Verify(publicSignals, proof, logger) {
 			throw new Error('groth16Verify not yet implemented for stwo OPRF')
 		},
 

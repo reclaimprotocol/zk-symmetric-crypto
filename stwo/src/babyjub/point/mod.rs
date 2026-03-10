@@ -51,9 +51,10 @@ pub const CURVE_D: [u32; N_LIMBS] = [
     0x001aee90, // limb 8
 ];
 
-/// Baby Jubjub base point X coordinate.
+/// Baby Jubjub base point X coordinate (gnark-crypto compatible).
 /// From gnark-crypto BN254 twisted edwards curve parameters.
 /// G_x = 9671717474070082183213120605117400219616337014328744928644933853176787189663
+/// Hex: 0x1561ff836ce19d358a4eb7a4c199e94c377c749ae6f2a277f1f9195afe553f9f
 pub const BASE_X: [u32; N_LIMBS] = [
     0x1e553f9f, // limb 0
     0x0fc8cad7, // limb 1
@@ -66,8 +67,9 @@ pub const BASE_X: [u32; N_LIMBS] = [
     0x001561ff, // limb 8
 ];
 
-/// Baby Jubjub base point Y coordinate.
+/// Baby Jubjub base point Y coordinate (gnark-crypto compatible).
 /// G_y = 16950150798460657717958625567821834550301663161624707787222815936182638968203
+/// Hex: 0x25797203f7a0b24925572e1cd16bf9edfce0051fb9e133774b3c257a872d7d8b
 pub const BASE_Y: [u32; N_LIMBS] = [
     0x072d7d8b, // limb 0
     0x19e12bd4, // limb 1
@@ -202,13 +204,79 @@ impl ExtendedPointBigInt {
     }
 
     // =========================================================================
-    // Gnark-compatible serialization
+    // Gnark-compatible serialization (compressed, 32 bytes)
     // =========================================================================
 
-    /// Serialize to 64-byte gnark-compatible format.
-    /// Format: X (32 bytes BE) || Y (32 bytes BE)
+    /// Serialize to 32-byte gnark-compatible compressed format.
+    /// Format: Y coordinate (little-endian) with X parity bit in MSB of last byte.
     /// This matches gnark-crypto's `twistededwards.PointAffine.Marshal()`.
-    pub fn to_bytes_gnark(&self, modulus: &BigInt256) -> [u8; 64] {
+    pub fn to_bytes_gnark(&self, modulus: &BigInt256) -> [u8; 32] {
+        let (x, y) = self.to_affine(modulus);
+        let mut bytes = y.to_bytes_le();
+
+        // Set the MSB of the last byte to indicate X parity
+        // X is "negative" if X > (p-1)/2
+        let half_p = modulus.shr_one();
+        if x.compare(&half_p) == std::cmp::Ordering::Greater {
+            bytes[31] |= 0x80;
+        }
+        bytes
+    }
+
+    /// Deserialize from 32-byte gnark-compatible compressed format.
+    /// Format: Y coordinate (little-endian) with X parity bit in MSB of last byte.
+    pub fn from_bytes_gnark(bytes: &[u8], modulus: &BigInt256) -> Option<Self> {
+        if bytes.len() != 32 {
+            return None;
+        }
+
+        let mut y_bytes = [0u8; 32];
+        y_bytes.copy_from_slice(bytes);
+
+        // Extract and clear the X parity bit
+        let x_sign = (y_bytes[31] & 0x80) != 0;
+        y_bytes[31] &= 0x7f;
+
+        let y = BigInt256::from_bytes_le(&y_bytes);
+
+        // Recover X from curve equation: a*x² + y² = 1 + d*x²y²
+        // For a = -1: -x² + y² = 1 + d*x²y²
+        // x² = (y² - 1) / (d*y² - a) = (y² - 1) / (d*y² + 1)
+        let y2 = y.mul_mod(&y, modulus);
+        let one = BigInt256::one();
+        let d = curve_d();
+
+        let num = y2.sub_mod(&one, modulus); // y² - 1
+        let dy2 = d.mul_mod(&y2, modulus); // d*y²
+        let denom = dy2.add_mod(&one, modulus); // d*y² + 1
+
+        // x² = num / denom
+        let denom_inv = denom.inv_mod(modulus)?;
+        let x2 = num.mul_mod(&denom_inv, modulus);
+
+        // x = sqrt(x²) - take positive or negative root based on parity
+        let x = x2.sqrt_mod(modulus)?;
+
+        // Check parity and negate if needed
+        let half_p = modulus.shr_one();
+        let x_is_negative = x.compare(&half_p) == std::cmp::Ordering::Greater;
+
+        let final_x = if x_sign != x_is_negative {
+            modulus.sub_mod(&x, modulus)
+        } else {
+            x
+        };
+
+        Some(Self::from_affine(final_x, y, modulus))
+    }
+
+    // =========================================================================
+    // 64-byte uncompressed serialization (for internal use/debugging)
+    // =========================================================================
+
+    /// Serialize to 64-byte uncompressed format.
+    /// Format: X (32 bytes BE) || Y (32 bytes BE)
+    pub fn to_bytes_uncompressed(&self, modulus: &BigInt256) -> [u8; 64] {
         let (x, y) = self.to_affine(modulus);
         let mut bytes = [0u8; 64];
         bytes[..32].copy_from_slice(&x.to_bytes_be());
@@ -216,9 +284,9 @@ impl ExtendedPointBigInt {
         bytes
     }
 
-    /// Deserialize from 64-byte gnark-compatible format.
+    /// Deserialize from 64-byte uncompressed format.
     /// Format: X (32 bytes BE) || Y (32 bytes BE)
-    pub fn from_bytes_gnark(bytes: &[u8], modulus: &BigInt256) -> Option<Self> {
+    pub fn from_bytes_uncompressed(bytes: &[u8], modulus: &BigInt256) -> Option<Self> {
         if bytes.len() != 64 {
             return None;
         }

@@ -245,13 +245,157 @@ impl BigInt256 {
     }
 
     /// Convert to variable-length big-endian bytes (no leading zeros).
-    /// This matches Go's `big.Int.Bytes()` exactly.
+    /// This matches Go's `big.Int.Bytes()` exactly:
+    /// - Zero returns empty slice []
+    /// - Non-zero returns big-endian bytes without leading zeros
     pub fn to_bytes_be_trimmed(&self) -> Vec<u8> {
+        // Match Go's BigInt.Bytes() behavior: return empty for zero
+        if self.is_zero() {
+            return Vec::new();
+        }
         let bytes = self.to_bytes_be();
         // Find first non-zero byte
-        let start = bytes.iter().position(|&b| b != 0).unwrap_or(31);
+        let start = bytes.iter().position(|&b| b != 0).unwrap_or(0);
         bytes[start..].to_vec()
     }
+
+    /// Convert to 32-byte little-endian representation.
+    pub fn to_bytes_le(&self) -> [u8; 32] {
+        let u256 = self.to_u256();
+        let mut bytes = [0u8; 32];
+        for (i, &word) in u256.iter().enumerate() {
+            let le_bytes = word.to_le_bytes();
+            let offset = i * 4;
+            bytes[offset..offset + 4].copy_from_slice(&le_bytes);
+        }
+        bytes
+    }
+
+    /// Create from 32-byte little-endian representation.
+    pub fn from_bytes_le(bytes: &[u8]) -> Self {
+        let mut padded = [0u8; 32];
+        let len = bytes.len().min(32);
+        padded[..len].copy_from_slice(&bytes[..len]);
+
+        let mut u256 = [0u32; 8];
+        for i in 0..8 {
+            let offset = i * 4;
+            u256[i] = u32::from_le_bytes([
+                padded[offset],
+                padded[offset + 1],
+                padded[offset + 2],
+                padded[offset + 3],
+            ]);
+        }
+
+        Self::from_u256(&u256)
+    }
+
+    /// Shift right by one bit.
+    pub fn shr_one(&self) -> Self {
+        let mut result = [0u32; N_LIMBS];
+        let mut carry = 0u32;
+
+        for i in (0..N_LIMBS).rev() {
+            let new_carry = self.limbs[i] & 1;
+            result[i] = (self.limbs[i] >> 1) | (carry << (LIMB_BITS - 1));
+            carry = new_carry;
+        }
+
+        Self { limbs: result }
+    }
+
+    /// Compare to another BigInt256, returning Ordering.
+    pub fn compare(&self, other: &Self) -> std::cmp::Ordering {
+        for i in (0..N_LIMBS).rev() {
+            if self.limbs[i] < other.limbs[i] {
+                return std::cmp::Ordering::Less;
+            }
+            if self.limbs[i] > other.limbs[i] {
+                return std::cmp::Ordering::Greater;
+            }
+        }
+        std::cmp::Ordering::Equal
+    }
+
+    /// Compute modular square root using Tonelli-Shanks algorithm.
+    /// Returns None if no square root exists.
+    pub fn sqrt_mod(&self, modulus: &Self) -> Option<Self> {
+        // For BN254 scalar field, p ≡ 1 (mod 4), so we use Tonelli-Shanks
+        // But first check if self is a quadratic residue
+
+        if self.is_zero() {
+            return Some(Self::zero());
+        }
+
+        // p - 1 = 2^s * q where q is odd
+        let one = Self::one();
+        let p_minus_1 = modulus.sub_no_reduce(&one).0;
+
+        // Find s and q
+        let mut s = 0u32;
+        let mut q = p_minus_1;
+        while (q.limbs[0] & 1) == 0 {
+            q = q.shr_one();
+            s += 1;
+        }
+
+        // Find a quadratic non-residue z
+        let mut z = Self::from_limbs([2, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let exp = p_minus_1.shr_one(); // (p-1)/2
+
+        loop {
+            let legendre = z.pow_mod(&exp, modulus);
+            if legendre == p_minus_1 {
+                // z is a QNR
+                break;
+            }
+            z = z.add_mod(&one, modulus);
+        }
+
+        // Initialize
+        let mut m = s;
+        let mut c = z.pow_mod(&q, modulus);
+        let mut t = self.pow_mod(&q, modulus);
+        let q_plus_1 = q.add_no_reduce(&one).0;
+        let exp_r = q_plus_1.shr_one();
+        let mut r = self.pow_mod(&exp_r, modulus);
+
+        loop {
+            if t.is_zero() {
+                return Some(Self::zero());
+            }
+            if t == one {
+                return Some(r);
+            }
+
+            // Find the least i such that t^(2^i) = 1
+            let mut i = 1u32;
+            let mut tt = t.mul_mod(&t, modulus);
+            while tt != one && i < m {
+                tt = tt.mul_mod(&tt, modulus);
+                i += 1;
+            }
+
+            if i == m {
+                // No square root exists
+                return None;
+            }
+
+            // b = c^(2^(m-i-1))
+            let exp_bits = m - i - 1;
+            let mut b = c;
+            for _ in 0..exp_bits {
+                b = b.mul_mod(&b, modulus);
+            }
+
+            m = i;
+            c = b.mul_mod(&b, modulus);
+            t = t.mul_mod(&c, modulus);
+            r = r.mul_mod(&b, modulus);
+        }
+    }
+
 }
 
 /// BN254 scalar field modulus as BigInt256.

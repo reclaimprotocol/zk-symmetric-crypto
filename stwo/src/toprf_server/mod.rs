@@ -81,5 +81,5 @@ pub struct TOPRFResultMiMC {
 
 // Re-export commonly used items
 pub use dkg::{create_shares, generate_shared_key, lagrange_coefficient};
-pub use dleq::{prove_dleq, verify_dleq};
-pub use eval::{evaluate_oprf, finalize_toprf, finalize_toprf_mimc, hash_to_point_mimc, threshold_mul};
+pub use dleq::{prove_dleq, prove_dleq_mimc, verify_dleq, verify_dleq_mimc};
+pub use eval::{evaluate_oprf, evaluate_oprf_mimc, finalize_toprf, finalize_toprf_mimc, hash_to_point_mimc, threshold_mul};

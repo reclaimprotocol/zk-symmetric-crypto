@@ -1275,7 +1275,7 @@ pub fn toprf_create_request(secret_bytes: &[u8], domain_separator: &str) -> Stri
 pub fn toprf_evaluate(share_json: &str, masked_request_hex: &str) -> String {
     use crate::babyjub::field256::gen::{modulus, BigInt256};
     use crate::babyjub::point::ExtendedPointBigInt;
-    use crate::toprf_server::{Share, evaluate_oprf};
+    use crate::toprf_server::{Share, evaluate_oprf_mimc};
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -1302,16 +1302,6 @@ pub fn toprf_evaluate(share_json: &str, masked_request_hex: &str) -> String {
         Err(e) => return json_error(format!("Invalid privateKey hex: {}", e)),
     };
 
-    let public_key_hex = match share_value["publicKey"].as_str() {
-        Some(s) => s,
-        None => return json_error("Missing publicKey"),
-    };
-
-    let public_key_bytes = match hex::decode(public_key_hex) {
-        Ok(b) => b,
-        Err(e) => return json_error(format!("Invalid publicKey hex: {}", e)),
-    };
-
     // Parse masked request
     let masked_bytes = match hex::decode(masked_request_hex) {
         Ok(b) => b,
@@ -1319,10 +1309,25 @@ pub fn toprf_evaluate(share_json: &str, masked_request_hex: &str) -> String {
     };
 
     let private_key = BigInt256::from_bytes_be(&private_key_bytes);
-    let public_key = match ExtendedPointBigInt::from_bytes_gnark(&public_key_bytes, &p) {
-        Some(pt) => pt,
-        None => return json_error("Invalid public key point"),
+
+    // Public key: derive from private key if not provided (gnark compatibility)
+    let public_key_hex = share_value["publicKey"].as_str().unwrap_or("");
+    let public_key = if public_key_hex.is_empty() {
+        // Derive from private key: pubkey = G * privateKey
+        use crate::babyjub::point::gen::native::scalar_mul;
+        use crate::babyjub::point::base_point;
+        scalar_mul(&base_point(), &private_key)
+    } else {
+        let public_key_bytes = match hex::decode(public_key_hex) {
+            Ok(b) => b,
+            Err(e) => return json_error(format!("Invalid publicKey hex: {}", e)),
+        };
+        match ExtendedPointBigInt::from_bytes_gnark(&public_key_bytes, &p) {
+            Some(pt) => pt,
+            None => return json_error("Invalid public key point"),
+        }
     };
+    let public_key_bytes = public_key.to_bytes_gnark(&p);
     let masked_request = match ExtendedPointBigInt::from_bytes_gnark(&masked_bytes, &p) {
         Some(pt) => pt,
         None => return json_error("Invalid masked request point"),
@@ -1334,9 +1339,9 @@ pub fn toprf_evaluate(share_json: &str, masked_request_hex: &str) -> String {
         public_key,
     };
 
-    // Evaluate OPRF
+    // Evaluate OPRF with MiMC-based DLEQ (gnark-compatible)
     let mut rng = ChaCha20Rng::from_entropy();
-    let response = match evaluate_oprf(&mut rng, &share, &masked_request) {
+    let response = match evaluate_oprf_mimc(&mut rng, &share, &masked_request) {
         Some(r) => r,
         None => return json_error("OPRF evaluation failed: invalid point"),
     };
@@ -1524,6 +1529,94 @@ pub fn toprf_finalize(params_json: &str) -> String {
     }).to_string()
 }
 
+/// Debug DLEQ verification - returns detailed info about hash computation.
+#[wasm_bindgen]
+pub fn debug_dleq_hash(points_json: &str) -> String {
+    use crate::babyjub::field256::gen::{modulus, BigInt256};
+    use crate::babyjub::mimc_compat::mimc_hash;
+    use crate::babyjub::point::ExtendedPointBigInt;
+
+    let p = modulus();
+
+    // Parse points
+    let params: serde_json::Value = match serde_json::from_str(points_json) {
+        Ok(v) => v,
+        Err(e) => return json_error(format!("Invalid JSON: {}", e)),
+    };
+
+    let mut points: Vec<ExtendedPointBigInt> = Vec::new();
+    let point_hexes = match params["points"].as_array() {
+        Some(arr) => arr,
+        None => return json_error("Missing points array"),
+    };
+
+    let mut byte_stream: Vec<u8> = Vec::new();
+    let mut elements_debug: Vec<serde_json::Value> = Vec::new();
+
+    for (idx, pt_hex) in point_hexes.iter().enumerate() {
+        let hex_str = pt_hex.as_str().unwrap_or("");
+        let pt_bytes = match hex::decode(hex_str) {
+            Ok(b) => b,
+            Err(e) => return json_error(format!("Invalid point hex at {}: {}", idx, e)),
+        };
+        let pt = match ExtendedPointBigInt::from_bytes_gnark(&pt_bytes, &p) {
+            Some(pt) => pt,
+            None => return json_error(format!("Invalid point at {}", idx)),
+        };
+
+        let (x, y) = pt.to_affine(&p);
+        let x_bytes = x.to_bytes_be_trimmed();
+        let y_bytes = y.to_bytes_be_trimmed();
+
+        elements_debug.push(serde_json::json!({
+            "index": idx,
+            "x_hex": hex::encode(&x.to_bytes_be()),
+            "y_hex": hex::encode(&y.to_bytes_be()),
+            "x_trimmed_len": x_bytes.len(),
+            "y_trimmed_len": y_bytes.len(),
+        }));
+
+        byte_stream.extend_from_slice(&x_bytes);
+        byte_stream.extend_from_slice(&y_bytes);
+        points.push(pt);
+    }
+
+    // Convert byte stream to chunks
+    let mut elements: Vec<BigInt256> = Vec::new();
+    let mut offset = 0;
+    let mut chunk_debug: Vec<serde_json::Value> = Vec::new();
+
+    while offset < byte_stream.len() {
+        let chunk_len = (byte_stream.len() - offset).min(32);
+        let chunk = &byte_stream[offset..offset + chunk_len];
+        let mut padded = [0u8; 32];
+        padded[32 - chunk_len..].copy_from_slice(chunk);
+        let elem = BigInt256::from_bytes_be(&padded);
+
+        chunk_debug.push(serde_json::json!({
+            "offset": offset,
+            "chunk_len": chunk_len,
+            "chunk_hex": hex::encode(&padded),
+        }));
+
+        elements.push(elem);
+        offset += 32;
+    }
+
+    // Compute hash
+    let hash = mimc_hash(&elements);
+    let hash_bytes = hash.to_bytes_be();
+
+    json!({
+        "byte_stream_len": byte_stream.len(),
+        "byte_stream_hex": hex::encode(&byte_stream),
+        "num_chunks": elements.len(),
+        "chunks": chunk_debug,
+        "points": elements_debug,
+        "hash_hex": hex::encode(&hash_bytes),
+    }).to_string()
+}
+
 /// Convert bytes to Field256 elements (gnark-compatible: big-endian to little-endian).
 fn bytes_to_field256_elements_gnark(bytes: &[u8]) -> [crate::babyjub::field256::gen::BigInt256; 2] {
     use crate::babyjub::field256::gen::BigInt256;
@@ -1567,6 +1660,126 @@ fn bytes_to_bigint256_gnark(bytes: &[u8]) -> crate::babyjub::field256::gen::BigI
     let mut reversed: Vec<u8> = bytes.to_vec();
     reversed.reverse();
     BigInt256::from_bytes_be(&reversed)
+}
+
+/// Debug DLEQ verification step by step.
+#[wasm_bindgen]
+pub fn debug_dleq_verify(params_json: &str) -> String {
+    use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
+    use crate::babyjub::mimc_compat::mimc_hash;
+    use crate::babyjub::point::gen::native as point_native;
+    use crate::babyjub::point::{base_point, ExtendedPointBigInt};
+
+    let p = modulus();
+    let order = scalar_order();
+
+    // Parse params
+    let params: serde_json::Value = match serde_json::from_str(params_json) {
+        Ok(v) => v,
+        Err(e) => return json_error(format!("Invalid JSON: {}", e)),
+    };
+
+    // Parse c
+    let c_hex = params["c"].as_str().unwrap_or("");
+    let c_bytes = hex::decode(c_hex).unwrap_or_default();
+    let c = BigInt256::from_bytes_be(&c_bytes);
+
+    // Parse r
+    let r_hex = params["r"].as_str().unwrap_or("");
+    let r_bytes = hex::decode(r_hex).unwrap_or_default();
+    let r = BigInt256::from_bytes_be(&r_bytes);
+
+    // Parse public key (xG)
+    let xg_hex = params["publicKey"].as_str().unwrap_or("");
+    let xg_bytes = hex::decode(xg_hex).unwrap_or_default();
+    let x_g = ExtendedPointBigInt::from_bytes_gnark(&xg_bytes, &p).unwrap();
+
+    // Parse evaluated point (xH)
+    let xh_hex = params["evaluated"].as_str().unwrap_or("");
+    let xh_bytes = hex::decode(xh_hex).unwrap_or_default();
+    let x_h = ExtendedPointBigInt::from_bytes_gnark(&xh_bytes, &p).unwrap();
+
+    // Parse masked point (H)
+    let h_hex = params["masked"].as_str().unwrap_or("");
+    let h_bytes = hex::decode(h_hex).unwrap_or_default();
+    let h = ExtendedPointBigInt::from_bytes_gnark(&h_bytes, &p).unwrap();
+
+    // Get base point
+    let base = base_point();
+
+    // Reduce c mod order
+    let mut c_reduced = c;
+    while c_reduced.cmp(&order) >= 0 {
+        let (diff, _) = c_reduced.sub_no_reduce(&order);
+        c_reduced = diff;
+    }
+
+    // Reconstruct vG = r*G + c*xG
+    let r_g = point_native::scalar_mul(&base, &r);
+    let c_xg = point_native::scalar_mul(&x_g, &c_reduced);
+    let v_g = point_native::add_points(&r_g, &c_xg);
+
+    // Reconstruct vH = r*H + c*xH
+    let r_h = point_native::scalar_mul(&h, &r);
+    let c_xh = point_native::scalar_mul(&x_h, &c_reduced);
+    let v_h = point_native::add_points(&r_h, &c_xh);
+
+    // Get affine coordinates for hash
+    let (base_x, base_y) = base.to_affine(&p);
+    let (xg_x, xg_y) = x_g.to_affine(&p);
+    let (vg_x, vg_y) = v_g.to_affine(&p);
+    let (vh_x, vh_y) = v_h.to_affine(&p);
+    let (h_x, h_y) = h.to_affine(&p);
+    let (xh_x, xh_y) = x_h.to_affine(&p);
+
+    // Build hash elements (each coordinate becomes one element)
+    let elements = vec![
+        BigInt256::from_bytes_be(&base_x.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&base_y.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&xg_x.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&xg_y.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&vg_x.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&vg_y.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&vh_x.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&vh_y.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&h_x.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&h_y.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&xh_x.to_bytes_be_trimmed()),
+        BigInt256::from_bytes_be(&xh_y.to_bytes_be_trimmed()),
+    ];
+
+    // Compute hash
+    let hash = mimc_hash(&elements);
+
+    // Reduce hash mod order
+    let mut expected_c = hash;
+    while expected_c.cmp(&order) >= 0 {
+        let (diff, _) = expected_c.sub_no_reduce(&order);
+        expected_c = diff;
+    }
+
+    let match_result = c_reduced.limbs == expected_c.limbs;
+
+    json!({
+        "c_hex": hex::encode(&c.to_bytes_be()),
+        "c_reduced_hex": hex::encode(&c_reduced.to_bytes_be()),
+        "r_hex": hex::encode(&r.to_bytes_be()),
+        "base_x_hex": hex::encode(&base_x.to_bytes_be()),
+        "base_y_hex": hex::encode(&base_y.to_bytes_be()),
+        "xg_x_hex": hex::encode(&xg_x.to_bytes_be()),
+        "xg_y_hex": hex::encode(&xg_y.to_bytes_be()),
+        "vg_x_hex": hex::encode(&vg_x.to_bytes_be()),
+        "vg_y_hex": hex::encode(&vg_y.to_bytes_be()),
+        "vh_x_hex": hex::encode(&vh_x.to_bytes_be()),
+        "vh_y_hex": hex::encode(&vh_y.to_bytes_be()),
+        "h_x_hex": hex::encode(&h_x.to_bytes_be()),
+        "h_y_hex": hex::encode(&h_y.to_bytes_be()),
+        "xh_x_hex": hex::encode(&xh_x.to_bytes_be()),
+        "xh_y_hex": hex::encode(&xh_y.to_bytes_be()),
+        "hash_hex": hex::encode(&hash.to_bytes_be()),
+        "expected_c_hex": hex::encode(&expected_c.to_bytes_be()),
+        "match": match_result,
+    }).to_string()
 }
 
 // Note: WASM API tests are in babyjub/toprf/gnark_compat_test.rs

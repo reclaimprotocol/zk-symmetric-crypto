@@ -6,8 +6,8 @@ mod tests {
     use crate::babyjub::point::{base_point, ExtendedPointBigInt};
     use crate::toprf_server::dkg::{generate_shared_key, random_scalar};
     use crate::toprf_server::eval::{
-        evaluate_oprf, finalize_toprf, finalize_toprf_mimc, hash_to_point, hash_to_point_mimc,
-        mask_point,
+        evaluate_oprf, evaluate_oprf_mimc, finalize_toprf, finalize_toprf_mimc, hash_to_point,
+        hash_to_point_mimc, mask_point,
     };
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
@@ -62,17 +62,12 @@ mod tests {
         let p = modulus();
         let base = base_point();
 
-        // Serialize to gnark format
+        // Serialize to gnark compressed format (32 bytes)
         let bytes = base.to_bytes_gnark(&p);
-        assert_eq!(bytes.len(), 64, "Gnark point should be 64 bytes");
+        assert_eq!(bytes.len(), 32, "Gnark point should be 32 bytes (compressed)");
 
-        // First 32 bytes = X, next 32 bytes = Y
-        let x_bytes = &bytes[..32];
-        let y_bytes = &bytes[32..];
-
-        // Both coordinates should be non-zero for base point
-        assert!(!x_bytes.iter().all(|&b| b == 0), "X should be non-zero");
-        assert!(!y_bytes.iter().all(|&b| b == 0), "Y should be non-zero");
+        // Bytes should be non-zero for base point (contains Y coordinate)
+        assert!(!bytes.iter().all(|&b| b == 0), "Compressed point should be non-zero");
 
         // Deserialize and verify roundtrip
         let recovered = ExtendedPointBigInt::from_bytes_gnark(&bytes, &p).unwrap();
@@ -92,15 +87,15 @@ mod tests {
         // 1. Generate keys (simulates toprf_generate_keys)
         let shared_key = generate_shared_key(&mut rng, 3, 2);
 
-        // Verify serialization
+        // Verify serialization (compressed format: 32 bytes)
         let server_pub_bytes = shared_key.server_public_key.to_bytes_gnark(&p);
-        assert_eq!(server_pub_bytes.len(), 64);
+        assert_eq!(server_pub_bytes.len(), 32);
 
         for share in &shared_key.shares {
             let priv_bytes = share.private_key.to_bytes_be_trimmed();
             let pub_bytes = share.public_key.to_bytes_gnark(&p);
             assert!(!priv_bytes.is_empty(), "Private key should serialize");
-            assert_eq!(pub_bytes.len(), 64, "Public key should be 64 bytes");
+            assert_eq!(pub_bytes.len(), 32, "Public key should be 32 bytes (compressed)");
         }
 
         println!("Key generation: OK");
@@ -114,11 +109,11 @@ mod tests {
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
 
-        // Verify serialization
+        // Verify serialization (compressed format: 32 bytes)
         let mask_bytes = mask.to_bytes_be_trimmed();
         let masked_bytes = masked_request.to_bytes_gnark(&p);
         assert!(!mask_bytes.is_empty());
-        assert_eq!(masked_bytes.len(), 64);
+        assert_eq!(masked_bytes.len(), 32);
 
         println!("Request creation: OK");
 
@@ -128,12 +123,12 @@ mod tests {
             let response = evaluate_oprf(&mut rng, &shared_key.shares[i], &masked_request)
                 .expect("Evaluation should succeed");
 
-            // Verify serialization
+            // Verify serialization (compressed format: 32 bytes)
             let eval_bytes = response.evaluated_point.to_bytes_gnark(&p);
             let c_bytes = response.c.to_bytes_be_trimmed();
             let r_bytes = response.r.to_bytes_be_trimmed();
 
-            assert_eq!(eval_bytes.len(), 64);
+            assert_eq!(eval_bytes.len(), 32);
             assert!(!c_bytes.is_empty());
             assert!(!r_bytes.is_empty());
 
@@ -183,12 +178,12 @@ mod tests {
     fn test_gnark_hex_format_compatibility() {
         let p = modulus();
 
-        // Test that hex encoding produces expected format
+        // Test that hex encoding produces expected format (compressed: 32 bytes = 64 hex chars)
         let base = base_point();
         let bytes = base.to_bytes_gnark(&p);
         let hex_str = hex::encode(&bytes);
 
-        assert_eq!(hex_str.len(), 128, "Hex string should be 128 chars for 64 bytes");
+        assert_eq!(hex_str.len(), 64, "Hex string should be 64 chars for 32 bytes (compressed)");
         assert!(
             hex_str.chars().all(|c| c.is_ascii_hexdigit()),
             "Should be valid hex"
@@ -205,7 +200,7 @@ mod tests {
         assert_eq!(orig_y, rec_y);
 
         println!("Hex encoding roundtrip: OK");
-        println!("  Point hex: {}...{}", &hex_str[..16], &hex_str[112..]);
+        println!("  Point hex: {}", &hex_str);
     }
 
     #[test]
@@ -232,10 +227,10 @@ mod tests {
 
         println!("MiMC hash_to_point: OK");
 
-        // 3. Evaluate (server-side is unchanged)
+        // 3. Evaluate using MiMC-based DLEQ (gnark-compatible)
         let mut responses = Vec::new();
         for i in 0..2 {
-            let response = evaluate_oprf(&mut rng, &shared_key.shares[i], &masked_request)
+            let response = evaluate_oprf_mimc(&mut rng, &shared_key.shares[i], &masked_request)
                 .expect("Evaluation should succeed");
             responses.push(response);
         }

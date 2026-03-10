@@ -101,6 +101,51 @@ export function verify_aes_ctr_proof(proof_b64: string, nonce: Uint8Array, count
  */
 export function verify_chacha20_proof(proof_b64: string, nonce: Uint8Array, counter: number, plaintext: Uint8Array, ciphertext: Uint8Array): string;
 
+// =============================================================================
+// TOPRF Functions (gnark-compatible)
+// =============================================================================
+
+/**
+ * Get TOPRF circuit information as JSON.
+ */
+export function get_toprf_info(): string;
+
+/**
+ * Generate threshold keys for TOPRF.
+ *
+ * @param nodes - Total number of key shares
+ * @param threshold - Minimum shares needed to reconstruct
+ * @param seed - Random seed for key generation (BigInt)
+ * @returns JSON string with serverPublicKey, shares[], etc.
+ */
+export function toprf_generate_keys(nodes: number, threshold: number, seed: bigint): string;
+
+/**
+ * Create an OPRF request (client-side).
+ *
+ * @param secret_bytes - Secret data to hash (max 62 bytes)
+ * @param domain_separator - Domain separator string
+ * @returns JSON string with mask, maskedData, secretElements
+ */
+export function toprf_create_request(secret_bytes: Uint8Array, domain_separator: string): string;
+
+/**
+ * Evaluate OPRF (server-side).
+ *
+ * @param share_json - JSON with share: { index, privateKey, publicKey }
+ * @param masked_request_hex - Hex-encoded 64-byte masked point
+ * @returns JSON string with evaluated, c, r, publicKeyShare
+ */
+export function toprf_evaluate(share_json: string, masked_request_hex: string): string;
+
+/**
+ * Finalize TOPRF (client-side).
+ *
+ * @param params_json - JSON with serverPublicKey, request, responses
+ * @returns JSON string with output (256-bit MiMC hash, hex)
+ */
+export function toprf_finalize(params_json: string): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {

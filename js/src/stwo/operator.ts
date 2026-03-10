@@ -1,6 +1,6 @@
 import { Base64 } from 'js-base64'
 import type { EncryptionAlgorithm, FileFetch, Logger, MakeZKOperatorOpts, ZKOperator, ZKProofInput } from '../types.ts'
-import { generate_aes128_ctr_proof, generate_aes256_ctr_proof, generate_chacha20_proof, initSync, verify_aes_ctr_proof, verify_chacha20_proof } from './s2circuits.js'
+import { generate_aes128_ctr_proof, generate_aes256_ctr_proof, generate_chacha20_proof, initSync, verify_aes_ctr_proof, verify_chacha20_proof } from './s2circuits-wrapper.ts'
 
 type StwoWitnessData = {
 	algorithm: EncryptionAlgorithm

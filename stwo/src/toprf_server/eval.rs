@@ -11,7 +11,7 @@
 use rand::Rng;
 
 use super::dkg::lagrange_coefficient;
-use super::dleq::{clear_cofactor, prove_dleq, verify_dleq};
+use super::dleq::{clear_cofactor, prove_dleq, prove_dleq_mimc, verify_dleq, verify_dleq_mimc, verify_dleq_mimc_with_cofactor};
 use super::{OPRFResponse, Share, TOPRFResult, TOPRFResultMiMC};
 use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
 use crate::babyjub::mimc::gen::hash_field256_native;
@@ -41,6 +41,31 @@ pub fn evaluate_oprf<R: Rng>(
 
     // Generate DLEQ proof
     let (c, r) = prove_dleq(rng, &share.private_key, request)?;
+
+    Some(OPRFResponse {
+        evaluated_point,
+        c,
+        r,
+    })
+}
+
+/// Evaluate OPRF using MiMC-based DLEQ (gnark-compatible).
+///
+/// This is identical to `evaluate_oprf` but uses MiMC hash for the DLEQ
+/// challenge, making the proof verifiable by gnark's VerifyDLEQ.
+pub fn evaluate_oprf_mimc<R: Rng>(
+    rng: &mut R,
+    share: &Share,
+    request: &ExtendedPointBigInt,
+) -> Option<OPRFResponse> {
+    // Validate request is on curve and not in small subgroup
+    let _cleared = clear_cofactor(request)?;
+
+    // Evaluate: response = request * private_key
+    let evaluated_point = point_native::scalar_mul(request, &share.private_key);
+
+    // Generate DLEQ proof using MiMC (gnark-compatible)
+    let (c, r) = prove_dleq_mimc(rng, &share.private_key, request)?;
 
     Some(OPRFResponse {
         evaluated_point,
@@ -250,6 +275,7 @@ pub fn hash_to_point_mimc(
 /// Finalize TOPRF computation using MiMC hash (gnark-compatible).
 ///
 /// This matches gnark's TOPRF finalization for cross-system compatibility.
+/// Uses MiMC-based DLEQ verification to verify proofs from gnark.
 ///
 /// # Arguments
 /// * `indices` - Indices of shares that responded
@@ -272,16 +298,24 @@ pub fn finalize_toprf_mimc(
 ) -> Option<TOPRFResultMiMC> {
     let modulus = modulus();
 
-    // Verify all DLEQ proofs
+    // Verify all DLEQ proofs using MiMC (gnark-compatible)
+    // Try without cofactor clearing first (old gnark binary), then with cofactor clearing (new gnark)
     for (i, response) in responses.iter().enumerate() {
-        let valid = verify_dleq(
+        let valid_no_cofactor = verify_dleq_mimc(
             &response.c,
             &response.r,
             &share_public_keys[i],
             &response.evaluated_point,
             masked_request,
         );
-        if !valid {
+        let valid_with_cofactor = verify_dleq_mimc_with_cofactor(
+            &response.c,
+            &response.r,
+            &share_public_keys[i],
+            &response.evaluated_point,
+            masked_request,
+        );
+        if !valid_no_cofactor && !valid_with_cofactor {
             return None;
         }
     }

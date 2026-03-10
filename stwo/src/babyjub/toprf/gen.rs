@@ -226,7 +226,7 @@ fn hash_to_scalar(secret_data: &[BigInt256; 2], domain_separator: &BigInt256) ->
 
     // Reduce mod scalar_order if needed (matching hash_to_point_mimc)
     let order = scalar_order();
-    if scalar.cmp(&order) >= 0 {
+    if scalar.compare(&order) != std::cmp::Ordering::Less {
         let (diff, _) = scalar.sub_no_reduce(&order);
         diff
     } else {

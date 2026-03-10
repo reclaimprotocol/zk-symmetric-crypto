@@ -214,13 +214,10 @@ fn generate_toprf_trace(
             let mut values = vec![M31::from_u32_unchecked(0); n_rows];
 
             if col_idx < trace_columns.len() {
-                let col_data = &trace_columns[col_idx];
-                if !col_data.is_empty() {
-                    // Replicate the first (and only) trace value across all rows
-                    let val = M31::from_u32_unchecked(col_data[0]);
-                    for row in 0..n_rows {
-                        values[row] = val;
-                    }
+                // Each trace element is an M31 value
+                let val = trace_columns[col_idx];
+                for row in 0..n_rows {
+                    values[row] = val;
                 }
             }
 

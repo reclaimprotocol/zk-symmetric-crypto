@@ -6,7 +6,7 @@
 use stwo_constraint_framework::EvalAtRow;
 
 use crate::babyjub::field256::constraints::Field256EvalAtRow;
-use crate::babyjub::field256::{field256_from_limbs29, Field256, N_LIMBS};
+use crate::babyjub::field256::{field256_from_limbs, Field256, N_LIMBS, LIMB_BITS};
 
 use super::constants::MIMC_CONSTANTS;
 
@@ -21,29 +21,30 @@ pub struct MiMCEvalAtRow<'a, E: EvalAtRow> {
 impl<E: EvalAtRow> MiMCEvalAtRow<'_, E> {
     /// Get MiMC round constant as Field256.
     fn round_constant(&self, round: usize) -> Field256<E::F> {
-        // Convert u256 constant to 29-bit limbs
+        // Convert u256 constant to 13-bit limbs
         let c = &MIMC_CONSTANTS[round];
         let mut limbs = [0u32; N_LIMBS];
 
-        // Convert from [u32; 8] (32-bit limbs) to [u32; 9] (29-bit limbs)
+        // Convert from [u32; 8] (32-bit limbs) to [u32; 20] (13-bit limbs)
         let mut bit_buffer: u64 = 0;
         let mut buffer_bits: u32 = 0;
         let mut input_idx = 0;
         let mut output_idx = 0;
+        let limb_mask = (1u32 << LIMB_BITS) - 1;
 
         while output_idx < N_LIMBS {
-            while buffer_bits < 29 && input_idx < 8 {
+            while buffer_bits < LIMB_BITS && input_idx < 8 {
                 bit_buffer |= (c[input_idx] as u64) << buffer_bits;
                 buffer_bits += 32;
                 input_idx += 1;
             }
-            limbs[output_idx] = (bit_buffer as u32) & 0x1FFFFFFF;
-            bit_buffer >>= 29;
-            buffer_bits = buffer_bits.saturating_sub(29);
+            limbs[output_idx] = (bit_buffer as u32) & limb_mask;
+            bit_buffer >>= LIMB_BITS;
+            buffer_bits = buffer_bits.saturating_sub(LIMB_BITS);
             output_idx += 1;
         }
 
-        field256_from_limbs29(&limbs)
+        field256_from_limbs(&limbs)
     }
 
     /// Constrain MiMC encryption: encrypt(message, key) using 110 rounds of x^5.

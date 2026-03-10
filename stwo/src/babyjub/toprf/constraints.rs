@@ -235,8 +235,10 @@ impl<E: EvalAtRow> TOPRFEvalAtRow<E> {
     }
 
     /// Read Field256 with bit decomposition (for range checking).
-    /// Trace format: 17 limbs + 17*16 bits = 289 columns.
+    /// Trace format: N_LIMBS limbs + N_LIMBS*LIMB_BITS bits.
     fn next_field256_checked(&mut self) -> Field256<E::F> {
+        use crate::babyjub::field256::LIMB_BITS;
+
         let one = E::F::from(BaseField::from_u32_unchecked(1));
         let two = E::F::from(BaseField::from_u32_unchecked(2));
 
@@ -244,10 +246,10 @@ impl<E: EvalAtRow> TOPRFEvalAtRow<E> {
             // Read the limb value
             let limb = self.eval.next_trace_mask();
 
-            // Read and constrain bit decomposition (16 bits)
+            // Read and constrain bit decomposition (LIMB_BITS bits)
             let mut reconstructed = E::F::from(BaseField::from_u32_unchecked(0));
             let mut power = one.clone();
-            for _ in 0..16 {
+            for _ in 0..LIMB_BITS {
                 let bit = self.eval.next_trace_mask();
                 // Constrain bit is boolean
                 self.eval.add_constraint(bit.clone() * (bit.clone() - one.clone()));
@@ -269,28 +271,32 @@ impl<E: EvalAtRow> TOPRFEvalAtRow<E> {
 const N_PRODUCT_LIMBS: usize = 2 * N_LIMBS - 1;
 
 /// Count total columns used by TOPRF trace.
+/// Updated for 20 × 13-bit limbs configuration.
 pub fn toprf_trace_columns() -> usize {
+    use crate::babyjub::field256::LIMB_BITS;
+
     let mut total = 0;
 
-    // Mask (17 limbs)
+    // Mask (N_LIMBS limbs)
     total += N_LIMBS;
 
-    // Inversion: inv (17) + mul trace
-    // mul trace = result_checked (17 + 17*16) + quotient (17) + a*b subs (17*17) + q*p subs (17*17) + carries (33*3)
+    // Inversion: inv (N_LIMBS) + mul trace
+    // mul trace = result_checked (N_LIMBS + N_LIMBS*LIMB_BITS) + quotient (N_LIMBS) +
+    //             a*b subs (N_LIMBS*N_LIMBS) + q*p subs (N_LIMBS*N_LIMBS) + carries (N_PRODUCT_LIMBS*3)
     total += N_LIMBS;  // inv
-    total += N_LIMBS + N_LIMBS * 16;  // result_checked
+    total += N_LIMBS + N_LIMBS * LIMB_BITS as usize;  // result_checked
     total += N_LIMBS;  // quotient
     total += N_LIMBS * N_LIMBS;  // a*b sub-products
     total += N_LIMBS * N_LIMBS;  // q*p sub-products
-    total += N_PRODUCT_LIMBS * 3;  // carries (sign + lo16 + hi16)
+    total += N_PRODUCT_LIMBS * 3;  // carries (sign + lo + hi)
 
-    // Secret data (2 * 17)
+    // Secret data (2 * N_LIMBS)
     total += 2 * N_LIMBS;
 
-    // Domain separator (17)
+    // Domain separator (N_LIMBS)
     total += N_LIMBS;
 
-    // Hashed scalar (17)
+    // Hashed scalar (N_LIMBS)
     total += N_LIMBS;
 
     // Scalar bits (254)
@@ -299,19 +305,19 @@ pub fn toprf_trace_columns() -> usize {
     // Mask bits (254)
     total += SCALAR_BITS;
 
-    // Per share: response (4*17) + pub_key (4*17) + c_bits (254) + r_bits (254) + 12 affine coords (12*17)
+    // Per share: response (4*N_LIMBS) + pub_key (4*N_LIMBS) + c_bits (254) + r_bits (254) + 12 affine coords (12*N_LIMBS)
     total += THRESHOLD * (4 * N_LIMBS + 4 * N_LIMBS + 2 * SCALAR_BITS + 12 * N_LIMBS);
 
     // Coefficient bits (254)
     total += SCALAR_BITS;
 
-    // Combined response point (4*17)
+    // Combined response point (4*N_LIMBS)
     total += 4 * N_LIMBS;
 
     // Mask inverse bits (254)
     total += SCALAR_BITS;
 
-    // Output (17) + public output (17)
+    // Output (N_LIMBS) + public output (N_LIMBS)
     total += 2 * N_LIMBS;
 
     total

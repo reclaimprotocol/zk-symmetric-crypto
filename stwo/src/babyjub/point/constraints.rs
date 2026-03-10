@@ -7,7 +7,7 @@ use stwo_constraint_framework::EvalAtRow;
 
 use super::{ExtendedPoint, CURVE_D};
 use crate::babyjub::field256::constraints::Field256EvalAtRow;
-use crate::babyjub::field256::{field256_from_limbs29, Field256, N_LIMBS};
+use crate::babyjub::field256::{field256_from_limbs, Field256, N_LIMBS};
 
 /// Evaluator for point operations.
 pub struct PointEvalAtRow<'a, E: EvalAtRow> {
@@ -26,7 +26,7 @@ impl<E: EvalAtRow> PointEvalAtRow<'_, E> {
 
     /// Get curve parameter d as Field256.
     fn curve_d(&self) -> Field256<E::F> {
-        field256_from_limbs29(&CURVE_D)
+        field256_from_limbs(&CURVE_D)
     }
 
     /// Point addition in extended coordinates.

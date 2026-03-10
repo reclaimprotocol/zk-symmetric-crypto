@@ -1105,25 +1105,27 @@ fn bytes_to_field256_elements(bytes: &[u8]) -> [crate::babyjub::field256::gen::B
 
 fn bytes_to_bigint256_le(bytes: &[u8]) -> crate::babyjub::field256::gen::BigInt256 {
     use crate::babyjub::field256::gen::BigInt256;
+    use crate::babyjub::field256::{N_LIMBS, LIMB_BITS, LIMB_MASK};
 
-    let mut limbs = [0u32; 9];
-    let mut bit_pos = 0;
+    let mut limbs = [0u32; N_LIMBS];
+    let mut bit_pos = 0usize;
 
     for &byte in bytes {
-        let limb_idx = bit_pos / 29;
-        let bit_offset = bit_pos % 29;
+        let limb_idx = bit_pos / LIMB_BITS as usize;
+        let bit_offset = bit_pos % LIMB_BITS as usize;
 
-        if limb_idx < 9 {
+        if limb_idx < N_LIMBS {
             limbs[limb_idx] |= (byte as u32) << bit_offset;
-            if bit_offset > 21 && limb_idx + 1 < 9 {
-                limbs[limb_idx + 1] |= (byte as u32) >> (29 - bit_offset);
+            // Handle overflow into next limb
+            if bit_offset > (LIMB_BITS as usize - 8) && limb_idx + 1 < N_LIMBS {
+                limbs[limb_idx + 1] |= (byte as u32) >> (LIMB_BITS as usize - bit_offset);
             }
         }
         bit_pos += 8;
     }
 
     for limb in &mut limbs {
-        *limb &= 0x1FFFFFFF;
+        *limb &= LIMB_MASK;
     }
 
     BigInt256::from_limbs(limbs)

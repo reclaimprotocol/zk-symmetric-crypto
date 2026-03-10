@@ -24,44 +24,42 @@ use stwo::core::fields::m31::BaseField;
 use stwo::core::fields::FieldExpOps;
 
 /// Baby Jubjub curve parameter a = -1 (as p - 1 in the field).
-/// Stored as 16-bit limbs.
+/// Stored as 13-bit limbs (20 limbs).
 pub const CURVE_A: [u32; N_LIMBS] = [
-    0x0000, 0xf000, 0xf593, 0x43e1, 0x7091, 0x79b9, 0xe848, 0x2833,
-    0x585d, 0x8181, 0x45b6, 0xb850, 0xa029, 0xe131, 0x4e72, 0x3064, 0x0000,
+    0x0000, 0x0000, 0x04FC, 0x03EB, 0x143E, 0x1848, 0x06E5, 0x090F, 0x13E8, 0x0941,
+    0x1617, 0x0302, 0x1B68, 0x0822, 0x06E1, 0x1405, 0x0131, 0x1397, 0x1913, 0x0060,
 ];
 
 /// Baby Jubjub curve parameter d.
 /// d = 12181644023421730124874158521699555681764249180949974110617291017600649128846
-/// Stored as 16-bit limbs.
+/// Stored as 13-bit limbs (20 limbs).
 pub const CURVE_D: [u32; N_LIMBS] = [
-    0xeb8e, 0xf4d7, 0xca8c, 0xd075, 0xc867, 0xebb7, 0x2959, 0x039b,
-    0x11fc, 0x99fd, 0x72d7, 0x3df0, 0x8969, 0x5f21, 0x90f1, 0x1aee, 0x0000,
+    0x0B8E, 0x06BF, 0x033D, 0x0B95, 0x1D07, 0x0433, 0x0EDF, 0x0B3D, 0x1B29, 0x001C,
+    0x047F, 0x13FA, 0x0D79, 0x1839, 0x04F7, 0x112D, 0x1F21, 0x078A, 0x1BA4, 0x0035,
 ];
 
 /// Baby Jubjub base point X coordinate (gnark-crypto compatible).
 /// From gnark-crypto BN254 twisted edwards curve parameters.
 /// G_x = 9671717474070082183213120605117400219616337014328744928644933853176787189663
-/// Hex: 0x1561ff836ce19d358a4eb7a4c199e94c377c749ae6f2a277f1f9195afe553f9f
-/// Stored as 16-bit limbs.
+/// Stored as 13-bit limbs (20 limbs).
 pub const BASE_X: [u32; N_LIMBS] = [
-    0x3f9f, 0xfe55, 0x195a, 0xf1f9, 0xa277, 0xe6f2, 0x749a, 0x377c,
-    0xe94c, 0xc199, 0xb7a4, 0x8a4e, 0x9d35, 0x6ce1, 0xff83, 0x1561, 0x0000,
+    0x1F9F, 0x12A9, 0x16BF, 0x1232, 0x1F1F, 0x113B, 0x1BCA, 0x135C, 0x1C74, 0x01BB,
+    0x1A53, 0x0333, 0x1A4C, 0x075B, 0x1629, 0x13A6, 0x0CE1, 0x1C1B, 0x187F, 0x002A,
 ];
 
 /// Baby Jubjub base point Y coordinate (gnark-crypto compatible).
 /// G_y = 16950150798460657717958625567821834550301663161624707787222815936182638968203
-/// Hex: 0x25797203f7a0b24925572e1cd16bf9edfce0051fb9e133774b3c257a872d7d8b
-/// Stored as 16-bit limbs.
+/// Stored as 13-bit limbs (20 limbs).
 pub const BASE_Y: [u32; N_LIMBS] = [
-    0x7d8b, 0x872d, 0x257a, 0x4b3c, 0x3377, 0xb9e1, 0x051f, 0xfce0,
-    0xf9ed, 0xd16b, 0x2e1c, 0x2557, 0xb249, 0xf7a0, 0x7203, 0x2579, 0x0000,
+    0x1D8B, 0x196B, 0x1EA1, 0x184A, 0x14B3, 0x19BB, 0x0784, 0x03F7, 0x0005, 0x0FE7,
+    0x1E7B, 0x02D7, 0x01CD, 0x0B97, 0x0495, 0x1649, 0x17A0, 0x101F, 0x1E5C, 0x004A,
 ];
 
 /// Identity point in extended coordinates: (0, 1, 0, 1).
 pub const IDENTITY_X: [u32; N_LIMBS] = [0; N_LIMBS];
-pub const IDENTITY_Y: [u32; N_LIMBS] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const IDENTITY_Y: [u32; N_LIMBS] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 pub const IDENTITY_T: [u32; N_LIMBS] = [0; N_LIMBS];
-pub const IDENTITY_Z: [u32; N_LIMBS] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const IDENTITY_Z: [u32; N_LIMBS] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 /// A point in affine coordinates (x, y).
 #[derive(Clone, Debug)]
@@ -339,9 +337,9 @@ mod tests {
         let a = curve_a();
         let d = curve_d();
 
-        // d is a large number, just verify limb 0 (16-bit)
+        // d is a large number, just verify limb 0 (13-bit)
         // d = 12181644023421730124874158521699555681764249180949974110617291017600649128846
-        assert_eq!(d.limbs[0], 0xeb8e);
+        assert_eq!(d.limbs[0], 0x0B8E);
 
         // a = p - 1 (a = -1 mod p)
         // So a + 1 should equal p

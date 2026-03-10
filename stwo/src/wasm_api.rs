@@ -1939,6 +1939,7 @@ pub fn debug_toprf_verify(
 /// * `counter` - Starting counter value
 /// * `plaintext` - Plaintext bytes
 /// * `ciphertext` - Ciphertext bytes (same length as plaintext)
+/// * `blocks_json` - JSON array of cipher blocks: [{nonce: "hex", counter: N, byteOffset: N, byteLen: N}, ...]
 /// * `toprf_json` - JSON with TOPRF parameters (see parse_toprf_json)
 ///
 /// # Returns
@@ -1947,10 +1948,9 @@ pub fn debug_toprf_verify(
 pub fn generate_cipher_toprf_proof(
     algorithm: &str,
     key: &[u8],
-    nonce: &[u8],
-    counter: u32,
     plaintext: &[u8],
     ciphertext: &[u8],
+    blocks_json: &str,
     toprf_json: &str,
 ) -> String {
     use crate::combined::air::{parse_toprf_json, prove_combined, serialize_combined_proof};
@@ -1971,11 +1971,6 @@ pub fn generate_cipher_toprf_proof(
         ));
     }
 
-    // Validate nonce
-    if nonce.len() != 12 {
-        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
-    }
-
     // Validate plaintext/ciphertext
     if plaintext.len() != ciphertext.len() {
         return json_error(format!(
@@ -1985,23 +1980,26 @@ pub fn generate_cipher_toprf_proof(
         ));
     }
 
+    // Parse blocks JSON
+    let blocks = match parse_blocks_json(blocks_json) {
+        Ok(b) => b,
+        Err(e) => return json_error(format!("Invalid blocks JSON: {}", e)),
+    };
+
+    if blocks.is_empty() {
+        return json_error("At least one block is required".to_string());
+    }
+
     // Parse TOPRF JSON
     let (locations, toprf_public, toprf_private) = match parse_toprf_json(toprf_json) {
         Ok(r) => r,
         Err(e) => return json_error(format!("Invalid TOPRF JSON: {}", e)),
     };
 
-    // Build inputs
-    let nonce_arr: [u8; 12] = match nonce.try_into() {
-        Ok(n) => n,
-        Err(_) => return json_error("Invalid nonce"),
-    };
-
     let inputs = CombinedInputs {
         algorithm: alg,
         key: key.to_vec(),
-        nonce: nonce_arr,
-        counter,
+        blocks,
         plaintext: plaintext.to_vec(),
         ciphertext: ciphertext.to_vec(),
         locations,
@@ -2023,15 +2021,69 @@ pub fn generate_cipher_toprf_proof(
     }
 }
 
+/// Parse cipher blocks from JSON.
+fn parse_blocks_json(json_str: &str) -> Result<Vec<crate::combined::CipherBlock>, String> {
+    use crate::combined::CipherBlock;
+
+    // Helper to decode hex string
+    fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
+        let s = s.strip_prefix("0x").unwrap_or(s);
+        hex::decode(s).map_err(|e| e.to_string())
+    }
+
+    let arr: serde_json::Value = serde_json::from_str(json_str)
+        .map_err(|e| format!("Failed to parse blocks JSON: {}", e))?;
+
+    let arr = arr.as_array()
+        .ok_or_else(|| "blocks_json must be an array".to_string())?;
+
+    let mut blocks = Vec::with_capacity(arr.len());
+
+    for (i, item) in arr.iter().enumerate() {
+        let nonce_hex = item.get("nonce")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("Block {} missing 'nonce'", i))?;
+
+        let nonce_bytes = decode_hex(nonce_hex)
+            .map_err(|e| format!("Block {} nonce decode error: {}", i, e))?;
+
+        if nonce_bytes.len() != 12 {
+            return Err(format!("Block {} nonce must be 12 bytes, got {}", i, nonce_bytes.len()));
+        }
+
+        let nonce: [u8; 12] = nonce_bytes.try_into()
+            .map_err(|_| format!("Block {} nonce conversion error", i))?;
+
+        let counter = item.get("counter")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| format!("Block {} missing 'counter'", i))? as u32;
+
+        let byte_offset = item.get("byteOffset")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| format!("Block {} missing 'byteOffset'", i))? as usize;
+
+        let byte_len = item.get("byteLen")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| format!("Block {} missing 'byteLen'", i))? as usize;
+
+        blocks.push(CipherBlock {
+            nonce,
+            counter,
+            byte_offset,
+            byte_len,
+        });
+    }
+
+    Ok(blocks)
+}
+
 /// Verify combined cipher + TOPRF STARK proof.
 ///
 /// # Arguments
 /// * `algorithm` - "chacha20" | "aes-128-ctr" | "aes-256-ctr"
 /// * `proof_b64` - Base64-encoded proof
-/// * `nonce` - 12-byte nonce
-/// * `counter` - Starting counter value
-/// * `plaintext` - Plaintext bytes
 /// * `ciphertext` - Ciphertext bytes
+/// * `blocks_json` - JSON array of cipher blocks: [{nonce: "hex", counter: N, byteOffset: N, byteLen: N}, ...]
 /// * `toprf_json` - JSON with TOPRF public parameters (no mask needed for verify)
 ///
 /// # Returns
@@ -2040,13 +2092,11 @@ pub fn generate_cipher_toprf_proof(
 pub fn verify_cipher_toprf_proof(
     algorithm: &str,
     proof_b64: &str,
-    nonce: &[u8],
-    counter: u32,
-    _plaintext: &[u8], // Unused: plaintext is private in TOPRF mode
     ciphertext: &[u8],
+    blocks_json: &str,
     toprf_json: &str,
 ) -> String {
-    use crate::combined::air::{deserialize_combined_proof, parse_toprf_json, verify_combined};
+    use crate::combined::air::{deserialize_combined_proof, parse_toprf_json, verify_combined, SerializedBlock};
     use crate::combined::CipherAlgorithm;
 
     // Parse algorithm
@@ -2055,15 +2105,22 @@ pub fn verify_cipher_toprf_proof(
         None => return json!({"valid": false, "error": format!("Unknown algorithm: {}", algorithm)}).to_string(),
     };
 
-    // Validate nonce
-    if nonce.len() != 12 {
-        return json!({"valid": false, "error": format!("Nonce must be 12 bytes, got {}", nonce.len())}).to_string();
-    }
-
-    let nonce_arr: [u8; 12] = match nonce.try_into() {
-        Ok(n) => n,
-        Err(_) => return json!({"valid": false, "error": "Invalid nonce"}).to_string(),
+    // Parse blocks JSON
+    let cipher_blocks = match parse_blocks_json(blocks_json) {
+        Ok(b) => b,
+        Err(e) => return json!({"valid": false, "error": format!("Invalid blocks JSON: {}", e)}).to_string(),
     };
+
+    // Convert to SerializedBlock for verification
+    let serialized_blocks: Vec<SerializedBlock> = cipher_blocks
+        .iter()
+        .map(|b| SerializedBlock {
+            nonce: b.nonce,
+            counter: b.counter,
+            byte_offset: b.byte_offset,
+            byte_len: b.byte_len,
+        })
+        .collect();
 
     // Parse TOPRF JSON to get expected output
     let (_locations, toprf_public, _toprf_private) = match parse_toprf_json(toprf_json) {
@@ -2091,7 +2148,7 @@ pub fn verify_cipher_toprf_proof(
     // Verify - pass None for plaintext since it's private in TOPRF mode
     // The proof's plaintext hash was verified at prove time
     let min_config = PcsConfig::default();
-    match verify_combined(&proof, &min_config, &nonce_arr, counter, None, ciphertext, &expected_output) {
+    match verify_combined(&proof, &min_config, &serialized_blocks, None, ciphertext, &expected_output) {
         Ok(_) => json!({"valid": true, "algorithm": algorithm}).to_string(),
         Err(e) => json!({"valid": false, "error": format!("{:?}", e)}).to_string(),
     }

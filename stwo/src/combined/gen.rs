@@ -80,6 +80,9 @@ fn verify_chacha20_native(inputs: &CombinedInputs) -> bool {
     if inputs.plaintext.len() != inputs.ciphertext.len() {
         return false;
     }
+    if inputs.blocks.is_empty() {
+        return false;
+    }
 
     // Parse key as 8 u32s (little-endian)
     let key_u32: [u32; 8] = std::array::from_fn(|i| {
@@ -91,38 +94,49 @@ fn verify_chacha20_native(inputs: &CombinedInputs) -> bool {
         ])
     });
 
-    // Parse nonce as 3 u32s (little-endian)
-    let nonce_u32: [u32; 3] = std::array::from_fn(|i| {
-        u32::from_le_bytes([
-            inputs.nonce[i * 4],
-            inputs.nonce[i * 4 + 1],
-            inputs.nonce[i * 4 + 2],
-            inputs.nonce[i * 4 + 3],
-        ])
-    });
+    let cipher_block_size = 64;
 
-    // Verify each block
-    let block_size = 64;
-    let num_blocks = (inputs.plaintext.len() + block_size - 1) / block_size;
+    // Verify each cipher block (which may have different nonces)
+    for cipher_block in &inputs.blocks {
+        // Parse nonce as 3 u32s (little-endian)
+        let nonce_u32: [u32; 3] = std::array::from_fn(|i| {
+            u32::from_le_bytes([
+                cipher_block.nonce[i * 4],
+                cipher_block.nonce[i * 4 + 1],
+                cipher_block.nonce[i * 4 + 2],
+                cipher_block.nonce[i * 4 + 3],
+            ])
+        });
 
-    for block_idx in 0..num_blocks {
-        let counter = inputs.counter + block_idx as u32;
-        let keystream_u32 = chacha20_block_from_key(&key_u32, counter, &nonce_u32);
+        let block_start = cipher_block.byte_offset;
+        let block_end = block_start + cipher_block.byte_len;
 
-        // Convert keystream to bytes
-        let mut keystream_bytes = [0u8; 64];
-        for (i, &word) in keystream_u32.iter().enumerate() {
-            keystream_bytes[i * 4..(i + 1) * 4].copy_from_slice(&word.to_le_bytes());
+        if block_end > inputs.plaintext.len() {
+            return false;
         }
 
-        // Check each byte in this block
-        let start = block_idx * block_size;
-        let end = (start + block_size).min(inputs.plaintext.len());
+        // Process 64-byte cipher blocks within this block
+        let num_cipher_blocks = (cipher_block.byte_len + cipher_block_size - 1) / cipher_block_size;
 
-        for i in start..end {
-            let expected = inputs.plaintext[i] ^ keystream_bytes[i - start];
-            if inputs.ciphertext[i] != expected {
-                return false;
+        for block_idx in 0..num_cipher_blocks {
+            let counter = cipher_block.counter + block_idx as u32;
+            let keystream_u32 = chacha20_block_from_key(&key_u32, counter, &nonce_u32);
+
+            // Convert keystream to bytes
+            let mut keystream_bytes = [0u8; 64];
+            for (i, &word) in keystream_u32.iter().enumerate() {
+                keystream_bytes[i * 4..(i + 1) * 4].copy_from_slice(&word.to_le_bytes());
+            }
+
+            // Check each byte in this cipher block
+            let start = block_start + block_idx * cipher_block_size;
+            let end = (start + cipher_block_size).min(block_end);
+
+            for i in start..end {
+                let expected = inputs.plaintext[i] ^ keystream_bytes[i - start];
+                if inputs.ciphertext[i] != expected {
+                    return false;
+                }
             }
         }
     }
@@ -139,29 +153,42 @@ fn verify_aes128_ctr_native(inputs: &CombinedInputs) -> bool {
     if inputs.plaintext.len() != inputs.ciphertext.len() {
         return false;
     }
+    if inputs.blocks.is_empty() {
+        return false;
+    }
 
     let key: [u8; 16] = inputs.key[..16].try_into().unwrap();
+    let cipher_block_size = 16;
 
-    // Verify each block
-    let block_size = 16;
-    let num_blocks = (inputs.plaintext.len() + block_size - 1) / block_size;
+    // Verify each cipher block (which may have different nonces)
+    for cipher_block in &inputs.blocks {
+        let block_start = cipher_block.byte_offset;
+        let block_end = block_start + cipher_block.byte_len;
 
-    for block_idx in 0..num_blocks {
-        let counter = inputs.counter + block_idx as u32;
-        let start = block_idx * block_size;
-        let end = (start + block_size).min(inputs.plaintext.len());
+        if block_end > inputs.plaintext.len() {
+            return false;
+        }
 
-        // Get plaintext block (pad with zeros if partial)
-        let mut pt_block = [0u8; 16];
-        pt_block[..end - start].copy_from_slice(&inputs.plaintext[start..end]);
+        // Process 16-byte cipher blocks within this block
+        let num_cipher_blocks = (cipher_block.byte_len + cipher_block_size - 1) / cipher_block_size;
 
-        // Encrypt
-        let ct_block = aes128_ctr_block(&key, &inputs.nonce, counter, &pt_block);
+        for block_idx in 0..num_cipher_blocks {
+            let counter = cipher_block.counter + block_idx as u32;
+            let start = block_start + block_idx * cipher_block_size;
+            let end = (start + cipher_block_size).min(block_end);
 
-        // Verify
-        for i in 0..(end - start) {
-            if inputs.ciphertext[start + i] != ct_block[i] {
-                return false;
+            // Get plaintext block (pad with zeros if partial)
+            let mut pt_block = [0u8; 16];
+            pt_block[..end - start].copy_from_slice(&inputs.plaintext[start..end]);
+
+            // Encrypt
+            let ct_block = aes128_ctr_block(&key, &cipher_block.nonce, counter, &pt_block);
+
+            // Verify
+            for i in 0..(end - start) {
+                if inputs.ciphertext[start + i] != ct_block[i] {
+                    return false;
+                }
             }
         }
     }
@@ -178,29 +205,42 @@ fn verify_aes256_ctr_native(inputs: &CombinedInputs) -> bool {
     if inputs.plaintext.len() != inputs.ciphertext.len() {
         return false;
     }
+    if inputs.blocks.is_empty() {
+        return false;
+    }
 
     let key: [u8; 32] = inputs.key[..32].try_into().unwrap();
+    let cipher_block_size = 16;
 
-    // Verify each block
-    let block_size = 16;
-    let num_blocks = (inputs.plaintext.len() + block_size - 1) / block_size;
+    // Verify each cipher block (which may have different nonces)
+    for cipher_block in &inputs.blocks {
+        let block_start = cipher_block.byte_offset;
+        let block_end = block_start + cipher_block.byte_len;
 
-    for block_idx in 0..num_blocks {
-        let counter = inputs.counter + block_idx as u32;
-        let start = block_idx * block_size;
-        let end = (start + block_size).min(inputs.plaintext.len());
+        if block_end > inputs.plaintext.len() {
+            return false;
+        }
 
-        // Get plaintext block (pad with zeros if partial)
-        let mut pt_block = [0u8; 16];
-        pt_block[..end - start].copy_from_slice(&inputs.plaintext[start..end]);
+        // Process 16-byte cipher blocks within this block
+        let num_cipher_blocks = (cipher_block.byte_len + cipher_block_size - 1) / cipher_block_size;
 
-        // Encrypt
-        let ct_block = aes256_ctr_block(&key, &inputs.nonce, counter, &pt_block);
+        for block_idx in 0..num_cipher_blocks {
+            let counter = cipher_block.counter + block_idx as u32;
+            let start = block_start + block_idx * cipher_block_size;
+            let end = (start + cipher_block_size).min(block_end);
 
-        // Verify
-        for i in 0..(end - start) {
-            if inputs.ciphertext[start + i] != ct_block[i] {
-                return false;
+            // Get plaintext block (pad with zeros if partial)
+            let mut pt_block = [0u8; 16];
+            pt_block[..end - start].copy_from_slice(&inputs.plaintext[start..end]);
+
+            // Encrypt
+            let ct_block = aes256_ctr_block(&key, &cipher_block.nonce, counter, &pt_block);
+
+            // Verify
+            for i in 0..(end - start) {
+                if inputs.ciphertext[start + i] != ct_block[i] {
+                    return false;
+                }
             }
         }
     }
@@ -306,11 +346,18 @@ mod tests {
         let (resp_x, resp_y) = response.evaluated_point.to_affine(&p);
         let (pub_x, pub_y) = share.public_key.to_affine(&p);
 
+        // Create single block covering entire plaintext
+        let blocks = vec![super::super::CipherBlock {
+            nonce,
+            counter,
+            byte_offset: 0,
+            byte_len: plaintext.len(),
+        }];
+
         CombinedInputs {
             algorithm,
             key,
-            nonce,
-            counter,
+            blocks,
             plaintext,
             ciphertext,
             locations,

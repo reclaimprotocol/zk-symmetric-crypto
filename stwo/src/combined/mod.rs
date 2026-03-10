@@ -24,6 +24,19 @@ pub struct DataLocation {
     pub len: usize,
 }
 
+/// A cipher block with its own nonce and counter.
+#[derive(Clone, Debug)]
+pub struct CipherBlock {
+    /// Nonce/IV for this block.
+    pub nonce: [u8; 12],
+    /// Starting counter for this block.
+    pub counter: u32,
+    /// Byte offset in the concatenated plaintext/ciphertext where this block starts.
+    pub byte_offset: usize,
+    /// Length of this block in bytes.
+    pub byte_len: usize,
+}
+
 /// Cipher algorithm selection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CipherAlgorithm {
@@ -102,16 +115,14 @@ pub struct CombinedInputs {
     /// Encryption key (private).
     pub key: Vec<u8>,
 
-    /// Nonce/IV (public).
-    pub nonce: [u8; 12],
+    /// Cipher blocks with their nonces and counters.
+    /// Each block covers a portion of the plaintext/ciphertext.
+    pub blocks: Vec<CipherBlock>,
 
-    /// Starting counter value (public).
-    pub counter: u32,
-
-    /// Plaintext (public).
+    /// Plaintext (concatenated from all blocks).
     pub plaintext: Vec<u8>,
 
-    /// Ciphertext (public).
+    /// Ciphertext (concatenated from all blocks).
     pub ciphertext: Vec<u8>,
 
     /// Locations in plaintext to extract secret data for TOPRF.
@@ -122,6 +133,18 @@ pub struct CombinedInputs {
 
     /// TOPRF private inputs.
     pub toprf_private: TOPRFPrivateInputs,
+}
+
+impl CombinedInputs {
+    /// Get the first nonce (for backward compatibility).
+    pub fn first_nonce(&self) -> [u8; 12] {
+        self.blocks.first().map(|b| b.nonce).unwrap_or([0u8; 12])
+    }
+
+    /// Get the first counter (for backward compatibility).
+    pub fn first_counter(&self) -> u32 {
+        self.blocks.first().map(|b| b.counter).unwrap_or(0)
+    }
 }
 
 impl Default for TOPRFPublicInputs {

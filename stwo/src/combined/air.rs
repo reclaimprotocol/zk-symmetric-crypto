@@ -29,11 +29,8 @@ pub struct CombinedProof {
     /// TOPRF STARK proof (serialized).
     pub toprf_proof: TOPRFProof<Blake2sMerkleHasher>,
 
-    /// Blake2s hash of nonce (12 bytes).
-    pub nonce: [u8; 12],
-
-    /// Starting counter.
-    pub counter: u32,
+    /// Cipher blocks with nonces and counters.
+    pub blocks: Vec<SerializedBlock>,
 
     /// Blake2s hash of plaintext.
     pub plaintext_hash: [u8; 32],
@@ -43,6 +40,15 @@ pub struct CombinedProof {
 
     /// Data locations for TOPRF extraction.
     pub locations: Vec<SerializedLocation>,
+}
+
+/// Serialized cipher block info.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SerializedBlock {
+    pub nonce: [u8; 12],
+    pub counter: u32,
+    pub byte_offset: usize,
+    pub byte_len: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -125,6 +131,18 @@ pub fn prove_combined(
         })
         .collect();
 
+    // 6. Serialize blocks
+    let blocks: Vec<SerializedBlock> = inputs
+        .blocks
+        .iter()
+        .map(|b| SerializedBlock {
+            nonce: b.nonce,
+            counter: b.counter,
+            byte_offset: b.byte_offset,
+            byte_len: b.byte_len,
+        })
+        .collect();
+
     Ok(CombinedProof {
         algorithm: match inputs.algorithm {
             CipherAlgorithm::ChaCha20 => "chacha20".to_string(),
@@ -132,8 +150,7 @@ pub fn prove_combined(
             CipherAlgorithm::Aes256Ctr => "aes-256-ctr".to_string(),
         },
         toprf_proof,
-        nonce: inputs.nonce,
-        counter: inputs.counter,
+        blocks,
         plaintext_hash,
         ciphertext_hash,
         locations,
@@ -146,6 +163,7 @@ pub fn prove_combined(
 /// 1. The TOPRF STARK proof is valid
 /// 2. The ciphertext hash matches (public input)
 /// 3. The expected output matches the proof's output
+/// 4. The blocks match the expected blocks
 ///
 /// Note: Plaintext verification is optional. In TOPRF mode, the plaintext is private
 /// and the security comes from:
@@ -155,27 +173,42 @@ pub fn prove_combined(
 pub fn verify_combined(
     proof: &CombinedProof,
     min_config: &PcsConfig,
-    nonce: &[u8; 12],
-    counter: u32,
+    blocks: &[SerializedBlock],
     plaintext: Option<&[u8]>,
     ciphertext: &[u8],
     expected_output: &[u8],
 ) -> Result<(), VerificationError> {
-    // 1. Verify nonce matches
-    if proof.nonce != *nonce {
+    // 1. Verify blocks match
+    if proof.blocks.len() != blocks.len() {
         return Err(VerificationError::InvalidStructure(
-            "Nonce mismatch".to_string(),
+            format!("Block count mismatch: proof has {}, expected {}", proof.blocks.len(), blocks.len()),
         ));
     }
 
-    // 2. Verify counter matches
-    if proof.counter != counter {
-        return Err(VerificationError::InvalidStructure(
-            "Counter mismatch".to_string(),
-        ));
+    for (i, (proof_block, expected_block)) in proof.blocks.iter().zip(blocks.iter()).enumerate() {
+        if proof_block.nonce != expected_block.nonce {
+            return Err(VerificationError::InvalidStructure(
+                format!("Nonce mismatch at block {}", i),
+            ));
+        }
+        if proof_block.counter != expected_block.counter {
+            return Err(VerificationError::InvalidStructure(
+                format!("Counter mismatch at block {}", i),
+            ));
+        }
+        if proof_block.byte_offset != expected_block.byte_offset {
+            return Err(VerificationError::InvalidStructure(
+                format!("Byte offset mismatch at block {}", i),
+            ));
+        }
+        if proof_block.byte_len != expected_block.byte_len {
+            return Err(VerificationError::InvalidStructure(
+                format!("Byte len mismatch at block {}", i),
+            ));
+        }
     }
 
-    // 3. Verify plaintext hash matches (optional - only if plaintext provided)
+    // 2. Verify plaintext hash matches (optional - only if plaintext provided)
     if let Some(pt) = plaintext {
         let plaintext_hash = blake2_hash(pt);
         if proof.plaintext_hash != plaintext_hash {
@@ -185,7 +218,7 @@ pub fn verify_combined(
         }
     }
 
-    // 4. Verify ciphertext hash matches
+    // 3. Verify ciphertext hash matches
     let ciphertext_hash = blake2_hash(ciphertext);
     if proof.ciphertext_hash != ciphertext_hash {
         return Err(VerificationError::InvalidStructure(
@@ -193,7 +226,7 @@ pub fn verify_combined(
         ));
     }
 
-    // 5. Verify TOPRF proof with expected output
+    // 4. Verify TOPRF proof with expected output
     verify_toprf::<Blake2sMerkleChannel>(proof.toprf_proof.clone(), min_config)?;
 
     // 6. Verify output matches
@@ -211,12 +244,17 @@ pub fn serialize_combined_proof(proof: &CombinedProof) -> Result<String, String>
     let proof_bytes = serde_json::to_vec(proof).map_err(|e| format!("Serialization error: {}", e))?;
     let proof_b64 = BASE64.encode(&proof_bytes);
 
+    // Serialize blocks for info (first block's nonce/counter for backward compat)
+    let first_nonce = proof.blocks.first().map(|b| hex::encode(b.nonce)).unwrap_or_default();
+    let first_counter = proof.blocks.first().map(|b| b.counter).unwrap_or(0);
+
     Ok(json!({
         "success": true,
         "algorithm": proof.algorithm,
         "proof": proof_b64,
-        "nonce": hex::encode(proof.nonce),
-        "counter": proof.counter,
+        "nonce": first_nonce,
+        "counter": first_counter,
+        "num_blocks": proof.blocks.len(),
         "plaintext_hash": hex::encode(proof.plaintext_hash),
         "ciphertext_hash": hex::encode(proof.ciphertext_hash),
     })

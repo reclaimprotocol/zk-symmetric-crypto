@@ -126,17 +126,32 @@ function serializeStwoWitness(algorithm: EncryptionAlgorithm, input: ZKProofInpu
 function deserializeStwoWitness(witness: Uint8Array): {
 	algorithm: EncryptionAlgorithm
 	key: Uint8Array
-	nonce: Uint8Array
-	counter: number
 	plaintext: Uint8Array
 	ciphertext: Uint8Array
+	blocksJson: string
 	toprfJson: string
 } {
 	const text = new TextDecoder().decode(witness)
 	const data = JSON.parse(text)
 
-	// Get first nonce/counter (for now we support single block)
-	const nc = data.noncesAndCounters[0]
+	// Build blocks JSON - each block has nonce, counter, byteOffset, byteLen
+	// Calculate byte offsets based on plaintext/ciphertext length per block
+	const plaintextLen = hexToUint8Array(data.plaintext).length
+	const numBlocks = data.noncesAndCounters.length
+	const blockSize = Math.ceil(plaintextLen / numBlocks)
+
+	const blocks = data.noncesAndCounters.map((nc: { nonce: string; counter: number }, i: number) => {
+		const byteOffset = i * blockSize
+		const byteLen = Math.min(blockSize, plaintextLen - byteOffset)
+		return {
+			nonce: nc.nonce, // Already hex from serialization
+			counter: nc.counter,
+			byteOffset,
+			byteLen,
+		}
+	})
+
+	const blocksJson = JSON.stringify(blocks)
 
 	// Build TOPRF JSON in the format expected by generate_cipher_toprf_proof
 	const toprfJson = JSON.stringify({
@@ -160,10 +175,9 @@ function deserializeStwoWitness(witness: Uint8Array): {
 	return {
 		algorithm: data.algorithm,
 		key: hexToUint8Array(data.key),
-		nonce: hexToUint8Array(nc.nonce),
-		counter: nc.counter,
 		plaintext: hexToUint8Array(data.plaintext),
 		ciphertext: hexToUint8Array(data.ciphertext),
+		blocksJson,
 		toprfJson,
 	}
 }
@@ -191,14 +205,13 @@ export function makeStwoOPRFOperator({
 			// Deserialize witness to get components
 			const data = deserializeStwoWitness(witness)
 
-			// Call WASM to generate proof
+			// Call WASM to generate proof with blocks
 			const resultJson = generate_cipher_toprf_proof(
 				data.algorithm,
 				data.key,
-				data.nonce,
-				data.counter,
 				data.plaintext,
 				data.ciphertext,
+				data.blocksJson,
 				data.toprfJson,
 			)
 
@@ -215,8 +228,23 @@ export function makeStwoOPRFOperator({
 		async groth16Verify(publicSignals, proof, logger) {
 			await ensureWasmInitialized(fetcher, logger)
 
-			// Get first nonce/counter
-			const nc = publicSignals.noncesAndCounters[0]
+			// Build blocks JSON from noncesAndCounters
+			const ciphertextLen = publicSignals.in.length
+			const numBlocks = publicSignals.noncesAndCounters.length
+			const blockSize = Math.ceil(ciphertextLen / numBlocks)
+
+			const blocks = publicSignals.noncesAndCounters.map((nc, i) => {
+				const byteOffset = i * blockSize
+				const byteLen = Math.min(blockSize, ciphertextLen - byteOffset)
+				return {
+					nonce: uint8ArrayToHex(nc.nonce),
+					counter: nc.counter,
+					byteOffset,
+					byteLen,
+				}
+			})
+
+			const blocksJson = JSON.stringify(blocks)
 
 			// Build TOPRF JSON for verification (no mask needed)
 			const toprfJson = JSON.stringify({
@@ -237,14 +265,12 @@ export function makeStwoOPRFOperator({
 				? proof
 				: new TextDecoder().decode(proof)
 
-			// Call WASM to verify proof
+			// Call WASM to verify proof with blocks
 			const resultJson = verify_cipher_toprf_proof(
 				algorithm,
 				proofStr,
-				nc.nonce,
-				nc.counter,
-				publicSignals.out, // plaintext
 				publicSignals.in, // ciphertext
+				blocksJson,
 				toprfJson,
 			)
 

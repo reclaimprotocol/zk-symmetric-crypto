@@ -193,13 +193,21 @@ describe('Stwo TOPRF debug', () => {
 
 		// Try to generate proof
 		console.log('\n=== Generating Combined Proof ===')
+
+		// Build blocks JSON for the new API
+		const blocksJson = JSON.stringify([{
+			nonce: uint8ArrayToHex(iv),
+			counter: startCounter,
+			byteOffset: 0,
+			byteLen: plaintext.length
+		}])
+
 		const proofResult = generate_cipher_toprf_proof(
 			algorithm,
 			key,
-			iv,
-			startCounter, // Use correct start counter
 			plaintext,
 			ciphertext,
+			blocksJson,
 			toprfJson
 		)
 		const parsed = JSON.parse(proofResult)

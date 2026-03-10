@@ -255,20 +255,20 @@ exports.generate_chacha20_proof = generate_chacha20_proof;
  * * `counter` - Starting counter value
  * * `plaintext` - Plaintext bytes
  * * `ciphertext` - Ciphertext bytes (same length as plaintext)
+ * * `blocks_json` - JSON array of cipher blocks: [{nonce: "hex", counter: N, byteOffset: N, byteLen: N}, ...]
  * * `toprf_json` - JSON with TOPRF parameters (see parse_toprf_json)
  *
  * # Returns
  * JSON string: {"success": true, "proof": "base64...", ...} or {"error": "..."}
  * @param {string} algorithm
  * @param {Uint8Array} key
- * @param {Uint8Array} nonce
- * @param {number} counter
  * @param {Uint8Array} plaintext
  * @param {Uint8Array} ciphertext
+ * @param {string} blocks_json
  * @param {string} toprf_json
  * @returns {string}
  */
-function generate_cipher_toprf_proof(algorithm, key, nonce, counter, plaintext, ciphertext, toprf_json) {
+function generate_cipher_toprf_proof(algorithm, key, plaintext, ciphertext, blocks_json, toprf_json) {
     let deferred7_0;
     let deferred7_1;
     try {
@@ -276,15 +276,15 @@ function generate_cipher_toprf_proof(algorithm, key, nonce, counter, plaintext, 
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passArray8ToWasm0(key, wasm.__wbindgen_malloc);
         const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passArray8ToWasm0(nonce, wasm.__wbindgen_malloc);
+        const ptr2 = passArray8ToWasm0(plaintext, wasm.__wbindgen_malloc);
         const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passArray8ToWasm0(plaintext, wasm.__wbindgen_malloc);
+        const ptr3 = passArray8ToWasm0(ciphertext, wasm.__wbindgen_malloc);
         const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passArray8ToWasm0(ciphertext, wasm.__wbindgen_malloc);
+        const ptr4 = passStringToWasm0(blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len4 = WASM_VECTOR_LEN;
         const ptr5 = passStringToWasm0(toprf_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.generate_cipher_toprf_proof(ptr0, len0, ptr1, len1, ptr2, len2, counter, ptr3, len3, ptr4, len4, ptr5, len5);
+        const ret = wasm.generate_cipher_toprf_proof(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
         deferred7_0 = ret[0];
         deferred7_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
@@ -671,45 +671,39 @@ exports.verify_chacha20_proof = verify_chacha20_proof;
  * # Arguments
  * * `algorithm` - "chacha20" | "aes-128-ctr" | "aes-256-ctr"
  * * `proof_b64` - Base64-encoded proof
- * * `nonce` - 12-byte nonce
- * * `counter` - Starting counter value
- * * `plaintext` - Plaintext bytes
  * * `ciphertext` - Ciphertext bytes
+ * * `blocks_json` - JSON array of cipher blocks: [{nonce: "hex", counter: N, byteOffset: N, byteLen: N}, ...]
  * * `toprf_json` - JSON with TOPRF public parameters (no mask needed for verify)
  *
  * # Returns
  * JSON string: {"valid": true} or {"valid": false, "error": "..."}
  * @param {string} algorithm
  * @param {string} proof_b64
- * @param {Uint8Array} nonce
- * @param {number} counter
- * @param {Uint8Array} _plaintext
  * @param {Uint8Array} ciphertext
+ * @param {string} blocks_json
  * @param {string} toprf_json
  * @returns {string}
  */
-function verify_cipher_toprf_proof(algorithm, proof_b64, nonce, counter, _plaintext, ciphertext, toprf_json) {
-    let deferred7_0;
-    let deferred7_1;
+function verify_cipher_toprf_proof(algorithm, proof_b64, ciphertext, blocks_json, toprf_json) {
+    let deferred6_0;
+    let deferred6_1;
     try {
         const ptr0 = passStringToWasm0(algorithm, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(proof_b64, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passArray8ToWasm0(nonce, wasm.__wbindgen_malloc);
+        const ptr2 = passArray8ToWasm0(ciphertext, wasm.__wbindgen_malloc);
         const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passArray8ToWasm0(_plaintext, wasm.__wbindgen_malloc);
+        const ptr3 = passStringToWasm0(blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passArray8ToWasm0(ciphertext, wasm.__wbindgen_malloc);
+        const ptr4 = passStringToWasm0(toprf_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len4 = WASM_VECTOR_LEN;
-        const ptr5 = passStringToWasm0(toprf_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.verify_cipher_toprf_proof(ptr0, len0, ptr1, len1, ptr2, len2, counter, ptr3, len3, ptr4, len4, ptr5, len5);
-        deferred7_0 = ret[0];
-        deferred7_1 = ret[1];
+        const ret = wasm.verify_cipher_toprf_proof(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        deferred6_0 = ret[0];
+        deferred6_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
     }
 }
 exports.verify_cipher_toprf_proof = verify_cipher_toprf_proof;

@@ -188,9 +188,6 @@ impl Poseidon2TraceGen {
             // Append domain separator
             self.append(limb_idx as u32);
 
-            // Build input: prepend domain separator to the coordinates
-            let domain_sep = BigInt256::from_limbs([limb_idx as u32, 0, 0, 0, 0, 0, 0, 0, 0]);
-
             // Hash with domain separator prepended
             // We need to hash: [domain_sep, coord[0], coord[1], ..., coord[11]]
             // But the sponge construction absorbs limbs incrementally

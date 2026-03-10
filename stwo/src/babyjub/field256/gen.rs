@@ -452,42 +452,6 @@ fn div_wide_by_modulus(product: &[u64; 2 * N_LIMBS], modulus: &BigInt256) -> (Bi
 
     (quotient, remainder)
 }
-
-/// Integer division with remainder.
-fn div_rem(a: &BigInt256, b: &BigInt256) -> (BigInt256, BigInt256) {
-    if b.is_zero() {
-        panic!("Division by zero");
-    }
-
-    let mut quotient = BigInt256::zero();
-    let mut remainder = BigInt256::zero();
-
-    // Process from most significant bit down
-    for i in (0..N_LIMBS).rev() {
-        for bit in (0..LIMB_BITS).rev() {
-            // Shift remainder left by 1
-            let mut carry = 0u32;
-            for j in 0..N_LIMBS {
-                let new_val = (remainder.limbs[j] << 1) | carry;
-                carry = remainder.limbs[j] >> (LIMB_BITS - 1);
-                remainder.limbs[j] = new_val & LIMB_MASK;
-            }
-
-            // Add the current bit of a
-            let a_bit = (a.limbs[i] >> bit) & 1;
-            remainder.limbs[0] |= a_bit;
-
-            // If remainder >= b, subtract and set quotient bit
-            if remainder.gte(b) {
-                remainder = remainder.sub_no_reduce(b).0;
-                quotient.limbs[i] |= 1 << bit;
-            }
-        }
-    }
-
-    (quotient, remainder)
-}
-
 /// Trace row generator for Field256 operations.
 pub struct Field256TraceGen {
     pub trace: Vec<Vec<u32>>,

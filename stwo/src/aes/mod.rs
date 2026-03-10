@@ -3,7 +3,6 @@
 //! This module provides both native reference implementations and
 //! STARK circuit implementations for AES-128/256.
 
-pub mod bitwise;
 pub mod lookup;
 pub mod sbox_table;
 

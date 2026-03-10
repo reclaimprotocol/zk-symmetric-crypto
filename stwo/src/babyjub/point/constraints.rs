@@ -3,10 +3,9 @@
 //! Uses extended coordinates for efficient add/double without inversions.
 //! Twisted Edwards curve formula: a*x² + y² = 1 + d*x²y²
 
-use stwo::core::fields::m31::BaseField;
 use stwo_constraint_framework::EvalAtRow;
 
-use super::{ExtendedPoint, CURVE_A, CURVE_D};
+use super::{ExtendedPoint, CURVE_D};
 use crate::babyjub::field256::constraints::Field256EvalAtRow;
 use crate::babyjub::field256::{field256_from_limbs29, Field256, N_LIMBS};
 
@@ -23,11 +22,6 @@ impl<E: EvalAtRow> PointEvalAtRow<'_, E> {
         let t = self.field_eval.next_field256();
         let z = self.field_eval.next_field256();
         ExtendedPoint::new(x, y, t, z)
-    }
-
-    /// Get curve parameter a as Field256.
-    fn curve_a(&self) -> Field256<E::F> {
-        field256_from_limbs29(&CURVE_A)
     }
 
     /// Get curve parameter d as Field256.
@@ -181,8 +175,6 @@ impl<E: EvalAtRow> PointEvalAtRow<'_, E> {
         p: &ExtendedPoint<E::F>,
         scalar_bits: &[E::F; 254],
     ) -> ExtendedPoint<E::F> {
-        let one = E::F::from(BaseField::from_u32_unchecked(1));
-
         // Start with identity point
         let identity = self.next_extended_point();
 

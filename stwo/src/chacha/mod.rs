@@ -15,17 +15,9 @@ use stwo::core::fields::m31::BaseField;
 use stwo::core::fields::FieldExpOps;
 use stwo::prover::backend::simd::m31::PackedBaseField;
 
-pub mod air;
 pub mod bitwise;
 pub mod block;
-pub mod block_air;
-pub mod constraints;
 pub mod quarter_round;
-pub mod round;
-pub mod xor_table;
-
-#[cfg(test)]
-mod underconstraint_test;
 
 /// ChaCha state is 16 x 32-bit words
 pub const STATE_SIZE: usize = 16;

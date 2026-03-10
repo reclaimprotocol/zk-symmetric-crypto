@@ -13,7 +13,7 @@ export const debug_chacha20_keystream: (a: number, b: number, c: number, d: numb
 export const get_circuits_info: () => [number, number];
 export const bench_toprf_native: (a: number, b: number, c: number) => [number, number];
 export const get_toprf_info: () => [number, number];
-export const toprf_generate_keys: (a: number, b: number, c: bigint) => [number, number];
+export const toprf_generate_keys: (a: number, b: number) => [number, number];
 export const toprf_create_request: (a: number, b: number, c: number, d: number) => [number, number];
 export const toprf_evaluate: (a: number, b: number, c: number, d: number) => [number, number];
 export const toprf_finalize: (a: number, b: number) => [number, number];

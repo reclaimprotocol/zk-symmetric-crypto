@@ -1218,7 +1218,7 @@ pub fn toprf_generate_keys(nodes: u32, threshold: u32) -> String {
 /// - secretElements: [hex, hex] two field elements
 #[wasm_bindgen]
 pub fn toprf_create_request(secret_bytes: &[u8], domain_separator: &str) -> String {
-    use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
+    use crate::babyjub::field256::gen::modulus;
     use crate::toprf_server::dkg::random_scalar;
     use crate::toprf_server::eval::{hash_to_point_mimc, mask_point};
     use rand::SeedableRng;
@@ -1372,7 +1372,7 @@ pub fn toprf_evaluate(share_json: &str, masked_request_hex: &str) -> String {
 /// - outputDecimal: decimal string of output (for comparison)
 #[wasm_bindgen]
 pub fn toprf_finalize(params_json: &str) -> String {
-    use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
+    use crate::babyjub::field256::gen::{modulus, BigInt256};
     use crate::babyjub::point::ExtendedPointBigInt;
     use crate::toprf_server::{OPRFResponse, finalize_toprf_mimc};
 

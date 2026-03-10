@@ -30,7 +30,6 @@ impl PointTraceGen {
         p1: &ExtendedPointBigInt,
         p2: &ExtendedPointBigInt,
     ) -> ExtendedPointBigInt {
-        let modulus = modulus();
         let d = curve_d();
 
         // A = X1 * X2
@@ -192,8 +191,6 @@ impl PointTraceGen {
 
     /// Convert to affine coordinates.
     pub fn to_affine(&mut self, p: &ExtendedPointBigInt) -> (BigInt256, BigInt256) {
-        let modulus = modulus();
-
         // z_inv = z^(-1)
         let z_inv = self.field_gen.gen_inv(&p.z);
 

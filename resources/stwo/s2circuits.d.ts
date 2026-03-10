@@ -161,14 +161,13 @@ export function toprf_finalize(params_json: string): string;
  * # Arguments
  * * `nodes` - Total number of nodes
  * * `threshold` - Minimum nodes required to reconstruct
- * * `seed` - Random seed for deterministic key generation (for testing)
  *
  * # Returns
  * JSON string with:
  * - serverPublicKey: 64-byte hex-encoded point
  * - shares: Array of share objects with index, privateKey, publicKey
  */
-export function toprf_generate_keys(nodes: number, threshold: number, seed: bigint): string;
+export function toprf_generate_keys(nodes: number, threshold: number): string;
 
 /**
  * Verify an AES-CTR proof (base64-encoded) against verifier-supplied public inputs.

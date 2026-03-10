@@ -7,7 +7,6 @@
 //!   a*x² + y² = 1 + d*x²y²
 //! where a = -1 (equivalently 168700) and d = 168696.
 
-pub mod extraction;
 pub mod field256;
 pub mod mimc;
 pub mod mimc_compat;

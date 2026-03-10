@@ -5,9 +5,9 @@ import { createRequire } from 'module'
 
 const require = createRequire(import.meta.url)
 
-// Load the CommonJS module from resources directory
+// Load the CommonJS module
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const s2circuits = require('../../../resources/stwo/s2circuits.cjs')
+const s2circuits = require('./s2circuits.cjs')
 
 // Re-export all functions
 // eslint-disable-next-line camelcase

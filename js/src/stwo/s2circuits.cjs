@@ -942,7 +942,9 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-const wasmPath = `${__dirname}/s2circuits_bg.wasm`;
+// Load WASM from resources directory
+const path = require('path');
+const wasmPath = path.join(__dirname, '..', '..', '..', 'resources', 'stwo', 's2circuits_bg.wasm');
 const wasmBytes = require('fs').readFileSync(wasmPath);
 const wasmModule = new WebAssembly.Module(wasmBytes);
 let wasm = new WebAssembly.Instance(wasmModule, __wbg_get_imports()).exports;

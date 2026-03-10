@@ -958,19 +958,16 @@ pub fn debug_chacha20_keystream(
 pub fn get_circuits_info() -> String {
     use crate::aes::lookup::{aes128_ctr_info, aes256_ctr_info};
     use crate::chacha::bitwise::chacha_stream_info;
-    use crate::babyjub::toprf::air::toprf_info;
 
     let aes128 = aes128_ctr_info();
     let aes256 = aes256_ctr_info();
     let chacha = chacha_stream_info();
-    let toprf = toprf_info();
 
     format!(
-        r#"{{"aes128_ctr":{{"cols":{},"constraints":{},"block_bytes":16,"key_bytes":16}},"aes256_ctr":{{"cols":{},"constraints":{},"block_bytes":16,"key_bytes":32}},"chacha20":{{"cols":{},"constraints":{},"block_bytes":64,"key_bytes":32}},"toprf":{{"cols":{},"constraints":{}}}}}"#,
+        r#"{{"aes128_ctr":{{"cols":{},"constraints":{},"block_bytes":16,"key_bytes":16}},"aes256_ctr":{{"cols":{},"constraints":{},"block_bytes":16,"key_bytes":32}},"chacha20":{{"cols":{},"constraints":{},"block_bytes":64,"key_bytes":32}}}}"#,
         aes128.mask_offsets[1].len(), aes128.n_constraints,
         aes256.mask_offsets[1].len(), aes256.n_constraints,
         chacha.mask_offsets[1].len(), chacha.n_constraints,
-        toprf.mask_offsets[1].len(), toprf.n_constraints,
     )
 }
 
@@ -1132,18 +1129,10 @@ fn bytes_to_bigint256_le(bytes: &[u8]) -> crate::babyjub::field256::gen::BigInt2
     BigInt256::from_limbs(limbs)
 }
 
-/// Get TOPRF circuit info.
+/// Get TOPRF info.
 #[wasm_bindgen]
 pub fn get_toprf_info() -> String {
-    use crate::babyjub::toprf::air::toprf_info;
-    use crate::babyjub::toprf::constraints::toprf_constraint_count;
-
-    let info = toprf_info();
-
     json!({
-        "cols": info.mask_offsets[1].len(),
-        "constraints": info.n_constraints,
-        "estimated_constraints": toprf_constraint_count(),
         "algorithm": "mimc_bn254",
         "curve": "babyjub",
         "threshold": 1,

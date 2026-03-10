@@ -11,43 +11,12 @@
 use rand::Rng;
 
 use super::dkg::lagrange_coefficient;
-use super::dleq::{clear_cofactor, prove_dleq, prove_dleq_mimc, verify_dleq, verify_dleq_mimc, verify_dleq_mimc_with_cofactor};
-use super::{OPRFResponse, Share, TOPRFResult, TOPRFResultMiMC};
+use super::dleq::{clear_cofactor, prove_dleq_mimc, verify_dleq_mimc, verify_dleq_mimc_with_cofactor};
+use super::{OPRFResponse, Share, TOPRFResultMiMC};
 use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
-use crate::babyjub::mimc::gen::hash_field256_native;
 use crate::babyjub::mimc_compat::mimc_hash;
 use crate::babyjub::point::gen::native as point_native;
 use crate::babyjub::point::{base_point, ExtendedPointBigInt};
-
-/// Evaluate OPRF on a masked request point.
-///
-/// # Arguments
-/// * `share` - Server's share of the TOPRF key
-/// * `request` - Masked client request point (H * mask)
-///
-/// # Returns
-/// * OPRFResponse containing evaluated point and DLEQ proof
-/// * Returns None if point is invalid (in small subgroup)
-pub fn evaluate_oprf<R: Rng>(
-    rng: &mut R,
-    share: &Share,
-    request: &ExtendedPointBigInt,
-) -> Option<OPRFResponse> {
-    // Validate request is on curve and not in small subgroup
-    let _cleared = clear_cofactor(request)?;
-
-    // Evaluate: response = request * private_key
-    let evaluated_point = point_native::scalar_mul(request, &share.private_key);
-
-    // Generate DLEQ proof
-    let (c, r) = prove_dleq(rng, &share.private_key, request)?;
-
-    Some(OPRFResponse {
-        evaluated_point,
-        c,
-        r,
-    })
-}
 
 /// Evaluate OPRF using MiMC-based DLEQ (gnark-compatible).
 ///
@@ -108,115 +77,6 @@ pub fn threshold_mul(
     }
 
     result
-}
-
-/// Finalize TOPRF computation (client-side).
-///
-/// # Arguments
-/// * `indices` - Indices of shares that responded
-/// * `responses` - OPRF responses from servers
-/// * `share_public_keys` - Public keys for each responding share
-/// * `masked_request` - Original masked request point
-/// * `secret_elements` - Secret data being processed
-/// * `mask` - Client's blinding mask
-///
-/// # Returns
-/// * TOPRFResult with unmasked point and final hash
-/// * Returns None if any verification fails
-pub fn finalize_toprf(
-    indices: &[usize],
-    responses: &[OPRFResponse],
-    share_public_keys: &[ExtendedPointBigInt],
-    masked_request: &ExtendedPointBigInt,
-    secret_elements: &[BigInt256; 2],
-    mask: &BigInt256,
-) -> Option<TOPRFResult> {
-    let modulus = modulus();
-
-    // Verify all DLEQ proofs
-    for (i, response) in responses.iter().enumerate() {
-        let valid = verify_dleq(
-            &response.c,
-            &response.r,
-            &share_public_keys[i],
-            &response.evaluated_point,
-            masked_request,
-        );
-        if !valid {
-            return None;
-        }
-    }
-
-    // Combine responses
-    let evaluated_points: Vec<_> = responses
-        .iter()
-        .map(|r| r.evaluated_point.clone())
-        .collect();
-    let combined = threshold_mul(indices, &evaluated_points);
-
-    // Unmask: compute mask^(-1) in the scalar field and multiply
-    // Note: mask is a scalar reduced mod scalar_order, so its inverse must also be mod scalar_order
-    let order = scalar_order();
-    let mask_inv = mask.inv_mod(&order)?;
-    let unmasked = point_native::scalar_mul(&combined, &mask_inv);
-
-    // Convert unmasked to affine for hashing
-    let (unmasked_x, unmasked_y) = unmasked.to_affine(&modulus);
-
-    // Compute final hash: H(unmasked.x, unmasked.y, secret_elements[0], secret_elements[1])
-    let hash_inputs = vec![
-        unmasked_x.clone(),
-        unmasked_y.clone(),
-        secret_elements[0].clone(),
-        secret_elements[1].clone(),
-    ];
-
-    let hash_output = hash_field256_native(&hash_inputs);
-
-    Some(TOPRFResult {
-        unmasked_point: unmasked,
-        output: hash_output.0,
-    })
-}
-
-/// Hash secret data to a curve point (for client-side use).
-///
-/// # Arguments
-/// * `secret_data` - Two Field256 values to hash
-/// * `domain_separator` - Domain separator for the hash
-///
-/// # Returns
-/// * Point on the curve
-pub fn hash_to_point(
-    secret_data: &[BigInt256; 2],
-    domain_separator: &BigInt256,
-) -> ExtendedPointBigInt {
-    // Hash the inputs to get a scalar
-    let hash_inputs = vec![
-        secret_data[0].clone(),
-        secret_data[1].clone(),
-        domain_separator.clone(),
-    ];
-
-    // Use multiple hash calls to generate a full scalar
-    let modulus = modulus();
-    let mut scalar_limbs = [0u32; 9];
-    for (i, limb) in scalar_limbs.iter_mut().enumerate() {
-        let mut input = hash_inputs.clone();
-        input.push(BigInt256::from_limbs([i as u32, 0, 0, 0, 0, 0, 0, 0, 0]));
-        let hash = hash_field256_native(&input);
-        *limb = hash.0 & 0x1FFFFFFF;
-    }
-
-    // Reduce and multiply base point
-    let mut scalar = BigInt256::from_limbs(scalar_limbs);
-    while scalar.cmp(&modulus) >= 0 {
-        let (diff, _) = scalar.sub_no_reduce(&modulus);
-        scalar = diff;
-    }
-
-    let base = base_point();
-    point_native::scalar_mul(&base, &scalar)
 }
 
 /// Mask a data point with a random mask (client-side).
@@ -359,7 +219,7 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
 
     #[test]
-    fn test_evaluate_oprf() {
+    fn test_evaluate_oprf_mimc() {
         let mut rng = ChaCha20Rng::seed_from_u64(12345);
 
         // Generate a shared key
@@ -371,12 +231,12 @@ mod tests {
         let request = point_native::scalar_mul(&base, &request_scalar);
 
         // Evaluate with first share
-        let response = evaluate_oprf(&mut rng, &shared_key.shares[0], &request);
+        let response = evaluate_oprf_mimc(&mut rng, &shared_key.shares[0], &request);
         assert!(response.is_some());
 
         let response = response.unwrap();
         // Verify the DLEQ proof
-        let valid = verify_dleq(
+        let valid = verify_dleq_mimc(
             &response.c,
             &response.r,
             &shared_key.shares[0].public_key,
@@ -399,8 +259,8 @@ mod tests {
         let request = point_native::scalar_mul(&base, &request_scalar);
 
         // Evaluate with shares 1 and 2
-        let resp1 = evaluate_oprf(&mut rng, &shared_key.shares[0], &request).unwrap();
-        let resp2 = evaluate_oprf(&mut rng, &shared_key.shares[1], &request).unwrap();
+        let resp1 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[0], &request).unwrap();
+        let resp2 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[1], &request).unwrap();
 
         // Combine responses
         let indices = vec![1, 2];
@@ -433,15 +293,15 @@ mod tests {
         let domain_separator = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
 
         // Hash to point
-        let data_point = hash_to_point(&secret_data, &domain_separator);
+        let data_point = hash_to_point_mimc(&secret_data, &domain_separator);
 
         // Generate mask
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
 
         // === Server side: evaluate ===
-        let resp1 = evaluate_oprf(&mut rng, &shared_key.shares[0], &masked_request).unwrap();
-        let resp2 = evaluate_oprf(&mut rng, &shared_key.shares[1], &masked_request).unwrap();
+        let resp1 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[0], &masked_request).unwrap();
+        let resp2 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[1], &masked_request).unwrap();
 
         // === Client side: finalize ===
         let indices = vec![1, 2];
@@ -451,7 +311,7 @@ mod tests {
             shared_key.shares[1].public_key.clone(),
         ];
 
-        let result = finalize_toprf(
+        let result = finalize_toprf_mimc(
             &indices,
             &responses,
             &pub_keys,
@@ -462,6 +322,6 @@ mod tests {
 
         assert!(result.is_some());
         let result = result.unwrap();
-        println!("TOPRF output: {}", result.output);
+        println!("TOPRF output: {:?}", result.output);
     }
 }

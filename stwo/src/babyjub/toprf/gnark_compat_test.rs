@@ -2,12 +2,11 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
+    use crate::babyjub::field256::gen::{modulus, BigInt256};
     use crate::babyjub::point::{base_point, ExtendedPointBigInt};
     use crate::toprf_server::dkg::{generate_shared_key, random_scalar};
     use crate::toprf_server::eval::{
-        evaluate_oprf, evaluate_oprf_mimc, finalize_toprf, finalize_toprf_mimc, hash_to_point,
-        hash_to_point_mimc, mask_point,
+        evaluate_oprf_mimc, finalize_toprf_mimc, hash_to_point_mimc, mask_point,
     };
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
@@ -105,7 +104,7 @@ mod tests {
         let secret_data = bytes_to_field_elements(secret_bytes);
         let domain = BigInt256::from_limbs([12345, 0, 0, 0, 0, 0, 0, 0, 0]);
 
-        let data_point = hash_to_point(&secret_data, &domain);
+        let data_point = hash_to_point_mimc(&secret_data, &domain);
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
 
@@ -120,7 +119,7 @@ mod tests {
         // 3. Evaluate (simulates toprf_evaluate for each share)
         let mut responses = Vec::new();
         for i in 0..2 {
-            let response = evaluate_oprf(&mut rng, &shared_key.shares[i], &masked_request)
+            let response = evaluate_oprf_mimc(&mut rng, &shared_key.shares[i], &masked_request)
                 .expect("Evaluation should succeed");
 
             // Verify serialization (compressed format: 32 bytes)
@@ -143,7 +142,7 @@ mod tests {
             .map(|s| s.public_key.clone())
             .collect();
 
-        let result = finalize_toprf(
+        let result = finalize_toprf_mimc(
             &indices,
             &responses,
             &pub_keys,
@@ -154,10 +153,10 @@ mod tests {
         .expect("Finalization should succeed");
 
         println!("Finalization: OK");
-        println!("  Output: {}", result.output);
+        println!("  Output: {:?}", result.output);
 
         // Verify output is deterministic
-        let result2 = finalize_toprf(
+        let result2 = finalize_toprf_mimc(
             &indices,
             &responses,
             &pub_keys,

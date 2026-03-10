@@ -8,7 +8,6 @@
 //! where a = -1 (equivalently 168700) and d = 168696.
 
 pub mod field256;
-pub mod mimc;
 pub mod mimc_compat;
 pub mod point;
 pub mod toprf;

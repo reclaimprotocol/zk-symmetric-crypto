@@ -8,8 +8,8 @@ mod tests {
     use crate::babyjub::field256::gen::{modulus, BigInt256};
     use crate::chacha::block::{chacha20_block_from_key, state_to_bytes};
     use crate::toprf_server::dkg::{generate_shared_key, random_scalar};
-    use crate::toprf_server::dleq::verify_dleq;
-    use crate::toprf_server::eval::{evaluate_oprf, finalize_toprf, hash_to_point, mask_point};
+    use crate::toprf_server::dleq::verify_dleq_mimc;
+    use crate::toprf_server::eval::{evaluate_oprf_mimc, finalize_toprf_mimc, hash_to_point_mimc, mask_point};
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -190,7 +190,7 @@ mod tests {
         ]);
 
         // Hash secret to curve point
-        let data_point = hash_to_point(&secret_elements, &domain_separator);
+        let data_point = hash_to_point_mimc(&secret_elements, &domain_separator);
         println!("Data point x: {:?}", data_point.x.limbs);
 
         // Generate random mask
@@ -210,11 +210,11 @@ mod tests {
 
         for &idx in &participating_indices {
             let share = &shared_key.shares[idx - 1];
-            let response = evaluate_oprf(&mut rng, share, &masked_request)
+            let response = evaluate_oprf_mimc(&mut rng, share, &masked_request)
                 .expect("OPRF evaluation should succeed");
 
             // Verify DLEQ proof immediately
-            let valid = verify_dleq(
+            let valid = verify_dleq_mimc(
                 &response.c,
                 &response.r,
                 &share.public_key,
@@ -230,7 +230,7 @@ mod tests {
         println!("All {} DLEQ proofs verified", participating_indices.len());
 
         // === Client: Finalize TOPRF ===
-        let result = finalize_toprf(
+        let result = finalize_toprf_mimc(
             &participating_indices,
             &responses,
             &pub_keys,
@@ -242,7 +242,7 @@ mod tests {
         assert!(result.is_some(), "TOPRF finalization should succeed");
         let toprf_result = result.unwrap();
 
-        println!("TOPRF output: {}", toprf_result.output);
+        println!("TOPRF output: {:?}", toprf_result.output);
         println!(
             "Unmasked point x: {:?}",
             toprf_result.unmasked_point.x.limbs
@@ -257,12 +257,12 @@ mod tests {
         let mut responses2 = Vec::new();
         for &idx in &participating_indices {
             let share = &shared_key.shares[idx - 1];
-            let response = evaluate_oprf(&mut rng2, share, &masked_request2)
+            let response = evaluate_oprf_mimc(&mut rng2, share, &masked_request2)
                 .expect("OPRF evaluation should succeed");
             responses2.push(response);
         }
 
-        let result2 = finalize_toprf(
+        let result2 = finalize_toprf_mimc(
             &participating_indices,
             &responses2,
             &pub_keys,
@@ -341,7 +341,7 @@ mod tests {
 
         // Hash to point
         let domain_separator = BigInt256::from_limbs([0x12345678, 0, 0, 0, 0, 0, 0, 0, 0]);
-        let data_point = hash_to_point(&secret_elements, &domain_separator);
+        let data_point = hash_to_point_mimc(&secret_elements, &domain_separator);
 
         // Mask
         let mask = random_scalar(&mut rng);
@@ -355,10 +355,10 @@ mod tests {
 
         for &idx in &participating_indices {
             let share = &shared_key.shares[idx - 1];
-            let response = evaluate_oprf(&mut rng, share, &masked_request)
+            let response = evaluate_oprf_mimc(&mut rng, share, &masked_request)
                 .expect("OPRF evaluation should succeed");
 
-            let valid = verify_dleq(
+            let valid = verify_dleq_mimc(
                 &response.c,
                 &response.r,
                 &share.public_key,
@@ -372,7 +372,7 @@ mod tests {
         }
 
         // Finalize
-        let result = finalize_toprf(
+        let result = finalize_toprf_mimc(
             &participating_indices,
             &responses,
             &pub_keys,
@@ -383,7 +383,7 @@ mod tests {
 
         assert!(result.is_some(), "3-of-5 TOPRF should succeed");
         println!(
-            "3-of-5 TOPRF with block-spanning secret: output = {}",
+            "3-of-5 TOPRF with block-spanning secret: output = {:?}",
             result.unwrap().output
         );
     }
@@ -401,16 +401,16 @@ mod tests {
         let secret_elements = bytes_to_field256_elements(secret_str.as_bytes());
 
         let domain_separator = BigInt256::from_limbs([0xABCDEF, 0, 0, 0, 0, 0, 0, 0, 0]);
-        let data_point = hash_to_point(&secret_elements, &domain_separator);
+        let data_point = hash_to_point_mimc(&secret_elements, &domain_separator);
 
         // First run: use shares 1 and 2
         let mask1 = random_scalar(&mut rng);
         let masked1 = mask_point(&data_point, &mask1);
 
-        let resp1_1 = evaluate_oprf(&mut rng, &shared_key.shares[0], &masked1).unwrap();
-        let resp1_2 = evaluate_oprf(&mut rng, &shared_key.shares[1], &masked1).unwrap();
+        let resp1_1 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[0], &masked1).unwrap();
+        let resp1_2 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[1], &masked1).unwrap();
 
-        let result1 = finalize_toprf(
+        let result1 = finalize_toprf_mimc(
             &[1, 2],
             &[resp1_1, resp1_2],
             &[
@@ -427,10 +427,10 @@ mod tests {
         let mask2 = random_scalar(&mut rng);
         let masked2 = mask_point(&data_point, &mask2);
 
-        let resp2_1 = evaluate_oprf(&mut rng, &shared_key.shares[0], &masked2).unwrap();
-        let resp2_3 = evaluate_oprf(&mut rng, &shared_key.shares[2], &masked2).unwrap();
+        let resp2_1 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[0], &masked2).unwrap();
+        let resp2_3 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[2], &masked2).unwrap();
 
-        let result2 = finalize_toprf(
+        let result2 = finalize_toprf_mimc(
             &[1, 3],
             &[resp2_1, resp2_3],
             &[
@@ -447,10 +447,10 @@ mod tests {
         let mask3 = random_scalar(&mut rng);
         let masked3 = mask_point(&data_point, &mask3);
 
-        let resp3_2 = evaluate_oprf(&mut rng, &shared_key.shares[1], &masked3).unwrap();
-        let resp3_3 = evaluate_oprf(&mut rng, &shared_key.shares[2], &masked3).unwrap();
+        let resp3_2 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[1], &masked3).unwrap();
+        let resp3_3 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[2], &masked3).unwrap();
 
-        let result3 = finalize_toprf(
+        let result3 = finalize_toprf_mimc(
             &[2, 3],
             &[resp3_2, resp3_3],
             &[
@@ -488,7 +488,7 @@ mod tests {
             "All subsets should give same output"
         );
 
-        println!("All 3 subsets of 2-of-3 shares produce same TOPRF output: {}", result1.output);
+        println!("All 3 subsets of 2-of-3 shares produce same TOPRF output: {:?}", result1.output);
     }
 
     /// Test with maximum secret size (62 bytes = 2 x 31 bytes).
@@ -507,18 +507,18 @@ mod tests {
 
         // Hash to point
         let domain_separator = BigInt256::zero();
-        let data_point = hash_to_point(&secret_elements, &domain_separator);
+        let data_point = hash_to_point_mimc(&secret_elements, &domain_separator);
 
         // Mask
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
 
         // Evaluate
-        let resp1 = evaluate_oprf(&mut rng, &shared_key.shares[0], &masked_request).unwrap();
-        let resp2 = evaluate_oprf(&mut rng, &shared_key.shares[1], &masked_request).unwrap();
+        let resp1 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[0], &masked_request).unwrap();
+        let resp2 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[1], &masked_request).unwrap();
 
         // Finalize
-        let result = finalize_toprf(
+        let result = finalize_toprf_mimc(
             &[1, 2],
             &[resp1, resp2],
             &[
@@ -531,7 +531,7 @@ mod tests {
         );
 
         assert!(result.is_some(), "62-byte secret should work");
-        println!("Max secret size (62 bytes) TOPRF output: {}", result.unwrap().output);
+        println!("Max secret size (62 bytes) TOPRF output: {:?}", result.unwrap().output);
     }
 
     /// Test that different secrets produce different outputs.
@@ -544,14 +544,14 @@ mod tests {
 
         // First secret
         let secret1 = bytes_to_field256_elements(b"secret_one");
-        let point1 = hash_to_point(&secret1, &domain_separator);
+        let point1 = hash_to_point_mimc(&secret1, &domain_separator);
         let mask1 = random_scalar(&mut rng);
         let masked1 = mask_point(&point1, &mask1);
 
-        let resp1_1 = evaluate_oprf(&mut rng, &shared_key.shares[0], &masked1).unwrap();
-        let resp1_2 = evaluate_oprf(&mut rng, &shared_key.shares[1], &masked1).unwrap();
+        let resp1_1 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[0], &masked1).unwrap();
+        let resp1_2 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[1], &masked1).unwrap();
 
-        let result1 = finalize_toprf(
+        let result1 = finalize_toprf_mimc(
             &[1, 2],
             &[resp1_1, resp1_2],
             &[
@@ -566,14 +566,14 @@ mod tests {
 
         // Second secret (different)
         let secret2 = bytes_to_field256_elements(b"secret_two");
-        let point2 = hash_to_point(&secret2, &domain_separator);
+        let point2 = hash_to_point_mimc(&secret2, &domain_separator);
         let mask2 = random_scalar(&mut rng);
         let masked2 = mask_point(&point2, &mask2);
 
-        let resp2_1 = evaluate_oprf(&mut rng, &shared_key.shares[0], &masked2).unwrap();
-        let resp2_2 = evaluate_oprf(&mut rng, &shared_key.shares[1], &masked2).unwrap();
+        let resp2_1 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[0], &masked2).unwrap();
+        let resp2_2 = evaluate_oprf_mimc(&mut rng, &shared_key.shares[1], &masked2).unwrap();
 
-        let result2 = finalize_toprf(
+        let result2 = finalize_toprf_mimc(
             &[1, 2],
             &[resp2_1, resp2_2],
             &[

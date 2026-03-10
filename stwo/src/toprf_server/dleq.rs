@@ -9,12 +9,8 @@ use rand::Rng;
 
 use super::dkg::random_scalar;
 use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
-use crate::babyjub::mimc::gen::hash_field256_native;
 use crate::babyjub::point::gen::native as point_native;
 use crate::babyjub::point::{base_point, ExtendedPointBigInt};
-
-/// Baby Jubjub cofactor (8).
-const COFACTOR: u32 = 8;
 
 /// Clear cofactor by multiplying point by 8.
 /// Returns None if the result is the identity (point was in small subgroup).
@@ -31,161 +27,6 @@ pub fn clear_cofactor(p: &ExtendedPointBigInt) -> Option<ExtendedPointBigInt> {
     } else {
         Some(result)
     }
-}
-
-/// Generate a DLEQ proof that log_G(xG) = log_H(xH).
-///
-/// # Arguments
-/// * `x` - The secret scalar (private key)
-/// * `h` - The base point H (masked client point)
-///
-/// # Returns
-/// * `(c, r)` - The DLEQ proof components
-/// * Returns None if any point is in the small subgroup
-pub fn prove_dleq<R: Rng>(
-    rng: &mut R,
-    x: &BigInt256,
-    h: &ExtendedPointBigInt,
-) -> Option<(BigInt256, BigInt256)> {
-    let modulus = modulus();
-    let base = base_point();
-
-    // Compute xG = G * x
-    let x_g = point_native::scalar_mul(&base, x);
-
-    // Compute xH = H * x
-    let x_h = point_native::scalar_mul(h, x);
-
-    // Clear cofactors (per RFC 9497)
-    let x_g_cleared = clear_cofactor(&x_g)?;
-    let x_h_cleared = clear_cofactor(&x_h)?;
-
-    // Generate random v
-    let v = random_scalar(rng);
-
-    // Compute vG = G * v
-    let v_g = point_native::scalar_mul(&base, &v);
-
-    // Compute vH = H * v
-    let v_h = point_native::scalar_mul(h, &v);
-
-    // Convert points to affine for hashing
-    let (base_x, base_y) = base.to_affine(&modulus);
-    let (xg_x, xg_y) = x_g_cleared.to_affine(&modulus);
-    let (vg_x, vg_y) = v_g.to_affine(&modulus);
-    let (vh_x, vh_y) = v_h.to_affine(&modulus);
-    let (h_x, h_y) = h.to_affine(&modulus);
-    let (xh_x, xh_y) = x_h_cleared.to_affine(&modulus);
-
-    // Compute challenge: c = Hash(G, xG_cleared, vG, vH, H, xH_cleared)
-    let hash_inputs = vec![
-        base_x, base_y, xg_x, xg_y, vg_x, vg_y, vh_x, vh_y, h_x, h_y, xh_x, xh_y,
-    ];
-
-    let c = hash_to_scalar(&hash_inputs);
-
-    // Compute r = v - c * (8 * x) mod scalar_order
-    // The factor of 8 is for cofactor clearing in the verification
-    // Note: Scalar arithmetic uses the Baby Jubjub subgroup order, not the base field modulus
-    let order = scalar_order();
-    let cofactor_x = {
-        let cofactor = BigInt256::from_limbs([COFACTOR, 0, 0, 0, 0, 0, 0, 0, 0]);
-        x.mul_mod(&cofactor, &order)
-    };
-    let c_times_8x = c.mul_mod(&cofactor_x, &order);
-    let r = v.sub_mod(&c_times_8x, &order);
-
-    Some((c, r))
-}
-
-/// Verify a DLEQ proof.
-///
-/// # Arguments
-/// * `c` - The challenge from the proof
-/// * `r` - The response from the proof
-/// * `x_g` - Point xG (server public key or G * share_key)
-/// * `x_h` - Point xH (evaluated point = H * share_key)
-/// * `h` - Point H (masked client request)
-///
-/// # Returns
-/// * `true` if the proof is valid
-pub fn verify_dleq(
-    c: &BigInt256,
-    r: &BigInt256,
-    x_g: &ExtendedPointBigInt,
-    x_h: &ExtendedPointBigInt,
-    h: &ExtendedPointBigInt,
-) -> bool {
-    let modulus = modulus();
-    let base = base_point();
-
-    // Clear cofactors
-    let x_g_cleared = match clear_cofactor(x_g) {
-        Some(p) => p,
-        None => return false,
-    };
-    let x_h_cleared = match clear_cofactor(x_h) {
-        Some(p) => p,
-        None => return false,
-    };
-
-    // Reconstruct vG = r*G + c*xG_cleared
-    let r_g = point_native::scalar_mul(&base, r);
-    let c_xg = point_native::scalar_mul(&x_g_cleared, c);
-    let v_g = point_native::add_points(&r_g, &c_xg);
-
-    // Reconstruct vH = r*H + c*xH_cleared
-    let r_h = point_native::scalar_mul(h, r);
-    let c_xh = point_native::scalar_mul(&x_h_cleared, c);
-    let v_h = point_native::add_points(&r_h, &c_xh);
-
-    // Convert to affine for hashing
-    let (base_x, base_y) = base.to_affine(&modulus);
-    let (xg_x, xg_y) = x_g_cleared.to_affine(&modulus);
-    let (vg_x, vg_y) = v_g.to_affine(&modulus);
-    let (vh_x, vh_y) = v_h.to_affine(&modulus);
-    let (h_x, h_y) = h.to_affine(&modulus);
-    let (xh_x, xh_y) = x_h_cleared.to_affine(&modulus);
-
-    // Recompute hash
-    let hash_inputs = vec![
-        base_x, base_y, xg_x, xg_y, vg_x, vg_y, vh_x, vh_y, h_x, h_y, xh_x, xh_y,
-    ];
-
-    let expected_c = hash_to_scalar(&hash_inputs);
-
-    // Check c == expected_c
-    c.limbs == expected_c.limbs
-}
-
-/// Hash multiple Field256 values to a scalar using MiMC.
-///
-/// This hashes the Field256 values and expands the result to a full scalar
-/// by hashing with different domain separators.
-fn hash_to_scalar(inputs: &[BigInt256]) -> BigInt256 {
-    // Generate 9 limbs by hashing with different domain separators
-    // The index is prepended to ensure each call produces different output
-    let mut result_limbs = [0u32; 9];
-
-    for (i, limb) in result_limbs.iter_mut().enumerate() {
-        // Create deterministic input: [index, ...original_inputs]
-        let mut extended_input: Vec<BigInt256> = Vec::with_capacity(inputs.len() + 1);
-        extended_input.push(BigInt256::from_limbs([i as u32, 0, 0, 0, 0, 0, 0, 0, 0]));
-        extended_input.extend(inputs.iter().cloned());
-
-        let hash = hash_field256_native(&extended_input);
-        *limb = hash.0 & 0x1FFFFFFF;
-    }
-
-    // Reduce modulo scalar order
-    let mut result = BigInt256::from_limbs(result_limbs);
-    let order = scalar_order();
-    while result.cmp(&order) >= 0 {
-        let (diff, _) = result.sub_no_reduce(&order);
-        result = diff;
-    }
-
-    result
 }
 
 /// Hash points to scalar using MiMC (gnark-compatible).
@@ -746,40 +587,6 @@ mod tests {
     }
 
     #[test]
-    fn test_prove_verify_dleq() {
-        let mut rng = ChaCha20Rng::seed_from_u64(12345);
-
-        // Generate a random secret
-        let x = random_scalar(&mut rng);
-        println!("x = {:?}", x.limbs);
-
-        // Use a random point H (would be client's masked point in practice)
-        let h_scalar = random_scalar(&mut rng);
-        let base = base_point();
-        let h = point_native::scalar_mul(&base, &h_scalar);
-        println!("h.x = {:?}", h.x.limbs);
-
-        // Compute xG and xH - these should match what prove_dleq computes internally
-        let x_g = point_native::scalar_mul(&base, &x);
-        let x_h = point_native::scalar_mul(&h, &x);
-        println!("x_g.x = {:?}", x_g.x.limbs);
-        println!("x_h.x = {:?}", x_h.x.limbs);
-
-        // Generate DLEQ proof
-        let proof = prove_dleq(&mut rng, &x, &h);
-        assert!(proof.is_some());
-
-        let (c, r) = proof.unwrap();
-        println!("c = {:?}", c.limbs);
-        println!("r = {:?}", r.limbs);
-
-        // Verify proof
-        let valid = verify_dleq(&c, &r, &x_g, &x_h, &h);
-        println!("valid = {}", valid);
-        assert!(valid, "DLEQ proof should be valid");
-    }
-
-    #[test]
     fn test_prove_verify_dleq_mimc() {
         let mut rng = ChaCha20Rng::seed_from_u64(12345);
 
@@ -813,25 +620,6 @@ mod tests {
         assert!(valid, "MiMC DLEQ proof should be valid");
     }
 
-    #[test]
-    fn test_dleq_invalid_proof() {
-        let mut rng = ChaCha20Rng::seed_from_u64(12345);
-
-        let x = random_scalar(&mut rng);
-        let h_scalar = random_scalar(&mut rng);
-        let base = base_point();
-
-        let h = point_native::scalar_mul(&base, &h_scalar);
-        let x_g = point_native::scalar_mul(&base, &x);
-        let x_h = point_native::scalar_mul(&h, &x);
-
-        let (c, _r) = prove_dleq(&mut rng, &x, &h).unwrap();
-
-        // Use wrong r value
-        let wrong_r = random_scalar(&mut rng);
-        let valid = verify_dleq(&c, &wrong_r, &x_g, &x_h, &h);
-        assert!(!valid, "DLEQ proof with wrong r should be invalid");
-    }
 }
 
     #[test]

@@ -6,8 +6,6 @@
 //! - Response combination with Lagrange coefficients
 //! - Final output hash computation
 
-pub mod air;
-pub mod constraints;
 pub mod gen;
 
 #[cfg(test)]
@@ -15,9 +13,6 @@ mod integration_test;
 
 #[cfg(test)]
 mod gnark_compat_test;
-
-#[cfg(test)]
-mod underconstraint_test;
 
 use crate::babyjub::field256::gen::BigInt256;
 pub use crate::babyjub::point::AffinePointBigInt;

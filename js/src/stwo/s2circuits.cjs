@@ -465,7 +465,6 @@ exports.toprf_finalize = toprf_finalize;
  * # Arguments
  * * `nodes` - Total number of nodes
  * * `threshold` - Minimum nodes required to reconstruct
- * * `seed` - Random seed for deterministic key generation (for testing)
  *
  * # Returns
  * JSON string with:
@@ -473,14 +472,13 @@ exports.toprf_finalize = toprf_finalize;
  * - shares: Array of share objects with index, privateKey, publicKey
  * @param {number} nodes
  * @param {number} threshold
- * @param {bigint} seed
  * @returns {string}
  */
-function toprf_generate_keys(nodes, threshold, seed) {
+function toprf_generate_keys(nodes, threshold) {
     let deferred1_0;
     let deferred1_1;
     try {
-        const ret = wasm.toprf_generate_keys(nodes, threshold, seed);
+        const ret = wasm.toprf_generate_keys(nodes, threshold);
         deferred1_0 = ret[0];
         deferred1_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);

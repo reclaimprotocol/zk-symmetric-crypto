@@ -93,11 +93,17 @@ impl TOPRFTraceGen {
             let cleared_response = native::clear_cofactor(&response);
             let cleared_pub_key = native::clear_cofactor(&share_pub_key);
 
-            // Append c and r bits
+            // Append c scalar and bits
+            self.field_gen.append_field256(&inputs.public.c[share_idx]);
             let c_bits = scalar_to_bits(&inputs.public.c[share_idx]);
-            let r_bits = scalar_to_bits(&inputs.public.r[share_idx]);
+            for bit in &c_bits {
+                self.field_gen.append_limb(*bit as u32);
+            }
 
-            for bit in c_bits.iter().chain(r_bits.iter()) {
+            // Append r scalar and bits
+            self.field_gen.append_field256(&inputs.public.r[share_idx]);
+            let r_bits = scalar_to_bits(&inputs.public.r[share_idx]);
+            for bit in &r_bits {
                 self.field_gen.append_limb(*bit as u32);
             }
 
@@ -160,6 +166,7 @@ impl TOPRFTraceGen {
 
         // 9. Combine responses with Lagrange coefficients
         // For threshold=1, just use responses[0] * coefficients[0]
+        self.field_gen.append_field256(&inputs.public.coefficients[0]);
         let coeff_bits = scalar_to_bits(&inputs.public.coefficients[0]);
         for bit in &coeff_bits {
             self.field_gen.append_limb(*bit as u32);
@@ -176,6 +183,7 @@ impl TOPRFTraceGen {
         // 10. Compute mask inverse (in the scalar field, not base field)
         let order = scalar_order();
         let mask_inv = inputs.private.mask.inv_mod(&order).expect("mask should be nonzero");
+        self.field_gen.append_field256(&mask_inv);
         let mask_inv_bits = scalar_to_bits(&mask_inv);
         for bit in &mask_inv_bits {
             self.field_gen.append_limb(*bit as u32);

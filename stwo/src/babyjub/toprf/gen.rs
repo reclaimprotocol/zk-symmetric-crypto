@@ -23,12 +23,44 @@ impl TOPRFTraceGen {
         }
     }
 
-    /// Append an extended point to field_gen trace (36 limbs = 4 * 9).
+    /// Append an extended point to field_gen trace (80 limbs = 4 * 20).
     fn append_extended_point(&mut self, p: &ExtendedPointBigInt) {
         self.field_gen.append_field256(&p.x);
         self.field_gen.append_field256(&p.y);
         self.field_gen.append_field256(&p.t);
         self.field_gen.append_field256(&p.z);
+    }
+
+    /// Generate trace for on-curve verification of an affine point (x, y).
+    ///
+    /// Baby Jubjub curve equation: -x² + y² = 1 + d*x²*y²
+    /// Rearranged: y² - x² = 1 + d*x²*y²
+    ///
+    /// This generates multiplication traces for:
+    /// 1. x² = x * x
+    /// 2. y² = y * y
+    /// 3. x²*y² = x² * y²
+    /// 4. d*x²*y² = d * x²*y²
+    /// 5. LHS = y² - x² (subtraction)
+    /// 6. RHS = 1 + d*x²*y² (addition)
+    fn gen_on_curve_check(&mut self, x: &BigInt256, y: &BigInt256) {
+        use crate::babyjub::point::curve_d;
+
+        let d = curve_d();
+
+        // Generate multiplication traces (these also append intermediate values)
+        let x_sq = self.field_gen.gen_mul(x, x);        // x²
+        let y_sq = self.field_gen.gen_mul(y, y);        // y²
+        let x_sq_y_sq = self.field_gen.gen_mul(&x_sq, &y_sq);  // x²*y²
+        let d_x_sq_y_sq = self.field_gen.gen_mul(&d, &x_sq_y_sq); // d*x²*y²
+
+        // Generate subtraction and addition traces
+        let lhs = self.field_gen.gen_sub(&y_sq, &x_sq); // y² - x²
+        let one = BigInt256::one();
+        let rhs = self.field_gen.gen_add(&one, &d_x_sq_y_sq); // 1 + d*x²*y²
+
+        // Verify LHS == RHS (the constraint evaluator will check this)
+        debug_assert_eq!(lhs, rhs, "Point ({:?}, {:?}) not on curve", x, y);
     }
 
     /// Generate trace for TOPRF verification.
@@ -87,7 +119,21 @@ impl TOPRFTraceGen {
 
             // Append points (using field_gen directly to keep trace in one place)
             self.append_extended_point(&response);
+
+            // Generate on-curve verification trace for response point
+            // For affine point (x, y), verify: -x² + y² = 1 + d*x²*y²
+            self.gen_on_curve_check(
+                &inputs.public.responses[share_idx].x,
+                &inputs.public.responses[share_idx].y,
+            );
+
             self.append_extended_point(&share_pub_key);
+
+            // Generate on-curve verification trace for public key point
+            self.gen_on_curve_check(
+                &inputs.public.share_public_keys[share_idx].x,
+                &inputs.public.share_public_keys[share_idx].y,
+            );
 
             // Clear cofactors
             let cleared_response = native::clear_cofactor(&response);

@@ -985,12 +985,12 @@ pub fn get_circuits_info() -> String {
 #[wasm_bindgen]
 pub fn bench_toprf_native(secret_bytes: &[u8], domain_separator: u32) -> String {
     use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
-    use crate::babyjub::mimc::gen::hash_field256_native;
+    use crate::babyjub::mimc_compat::mimc_hash;
     use crate::babyjub::point::gen::native as point_native;
     use crate::babyjub::toprf::{AffinePointBigInt, TOPRFInputs, TOPRFPrivateInputs, TOPRFPublicInputs};
     use crate::babyjub::toprf::gen::verify_toprf_native;
     use crate::toprf_server::dkg::{generate_shared_key, random_scalar};
-    use crate::toprf_server::eval::{evaluate_oprf, hash_to_point, mask_point};
+    use crate::toprf_server::eval::{evaluate_oprf_mimc, hash_to_point_mimc, mask_point};
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -1007,15 +1007,15 @@ pub fn bench_toprf_native(secret_bytes: &[u8], domain_separator: u32) -> String 
     let shared_key = generate_shared_key(&mut rng, 1, 1);
     let share = &shared_key.shares[0];
 
-    // Client: hash to point
-    let data_point = hash_to_point(&secret_data, &domain);
+    // Client: hash to point using MiMC (gnark-compatible)
+    let data_point = hash_to_point_mimc(&secret_data, &domain);
 
     // Client: generate mask
     let mask = random_scalar(&mut rng);
     let masked_request = mask_point(&data_point, &mask);
 
-    // Server: evaluate OPRF
-    let response = match evaluate_oprf(&mut rng, share, &masked_request) {
+    // Server: evaluate OPRF using MiMC-based DLEQ
+    let response = match evaluate_oprf_mimc(&mut rng, share, &masked_request) {
         Some(r) => r,
         None => return json_error("OPRF eval failed: invalid point"),
     };
@@ -1027,9 +1027,9 @@ pub fn bench_toprf_native(secret_bytes: &[u8], domain_separator: u32) -> String 
     };
     let unmasked = point_native::scalar_mul(&response.evaluated_point, &mask_inv);
 
-    // Compute output
+    // Compute output using MiMC (gnark-compatible)
     let (unmasked_x, unmasked_y) = unmasked.to_affine(&p);
-    let output_hash = hash_field256_native(&[
+    let output_hash = mimc_hash(&[
         unmasked_x.clone(),
         unmasked_y.clone(),
         secret_data[0].clone(),
@@ -1052,7 +1052,7 @@ pub fn bench_toprf_native(secret_bytes: &[u8], domain_separator: u32) -> String 
             share_public_keys: [AffinePointBigInt { x: pub_x, y: pub_y }],
             c: [response.c],
             r: [response.r],
-            output: output_hash.0,
+            output: output_hash.clone(),
         },
     };
 
@@ -1064,7 +1064,7 @@ pub fn bench_toprf_native(secret_bytes: &[u8], domain_separator: u32) -> String 
     match result {
         Ok(output) => json!({
             "success": true,
-            "output": output.0,
+            "output": format!("{:?}", output),
             "time_ms": elapsed,
             "secret_len": secret_bytes.len(),
         }).to_string(),

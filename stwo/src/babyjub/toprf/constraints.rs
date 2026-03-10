@@ -152,7 +152,7 @@ impl<E: EvalAtRow> TOPRFEvalAtRow<E> {
         self.eval
     }
 
-    /// Read next Field256 from trace (9 limbs).
+    /// Read next Field256 from trace (N_LIMBS limbs).
     fn next_field256(&mut self) -> Field256<E::F> {
         Field256::new(std::array::from_fn(|_| self.eval.next_trace_mask()))
     }
@@ -160,30 +160,28 @@ impl<E: EvalAtRow> TOPRFEvalAtRow<E> {
     /// Verify field inversion using Field256EvalAtRow.
     ///
     /// Trace format (from gen_inv):
-    /// - inverse: 17 limbs
+    /// - inverse: N_LIMBS limbs
     /// - mul trace for a * inv (result_checked + quotient + sub-products + carries)
     ///
     /// Uses the verified multiplication from field256 constraints module.
     fn verify_inv(&mut self, a: &Field256<E::F>) -> Field256<E::F> {
-        // Create a Field256EvalAtRow wrapper to use its inv_field256 method
-        // We need to read the inverse first, then verify a * inv = 1
+        // Read the inverse first, then verify a * inv = 1
         let inv = self.next_field256();
 
-        // Create a field256 evaluator that shares our eval
-        // We need to manually read and verify the multiplication trace
+        // Verify the multiplication trace
         self.verify_mul_equals_one(a, &inv);
 
         inv
     }
 
-    /// Verify that a * b = 1 using the new 16-bit limb multiplication format.
+    /// Verify that a * b = 1 using 13-bit limb multiplication format.
     ///
     /// Trace format (from gen_mul):
-    /// 1. result_checked: 17 limbs + 17*16 bits = 289 columns
-    /// 2. quotient: 17 limbs = 17 columns
-    /// 3. a*b sub-products: 17*17 = 289 columns
-    /// 4. q*p sub-products: 17*17 = 289 columns
-    /// 5. carries: 33 * 3 = 99 columns (sign + lo16 + hi16)
+    /// 1. result_checked: N_LIMBS limbs + N_LIMBS*LIMB_BITS bits
+    /// 2. quotient: N_LIMBS limbs
+    /// 3. a*b sub-products: N_LIMBS*N_LIMBS columns
+    /// 4. q*p sub-products: N_LIMBS*N_LIMBS columns
+    /// 5. carries: (2*N_LIMBS-1) * 3 columns (sign + lo + hi)
     fn verify_mul_equals_one(&mut self, a: &Field256<E::F>, b: &Field256<E::F>) {
         let one = E::F::from(BaseField::from_u32_unchecked(1));
 
@@ -325,14 +323,16 @@ pub fn toprf_trace_columns() -> usize {
 
 /// Estimate total constraint count for TOPRF verification.
 pub fn toprf_constraint_count() -> usize {
+    use crate::babyjub::field256::LIMB_BITS;
+
     let mut total = 0;
 
     // Mask inversion verification:
-    // - result_checked: 17 limbs * (1 reconstruction + 16 boolean) = 17 * 17 = 289
-    // - a*b sub-product constraints: 17*17 = 289
-    // - sign boolean constraints: 33
-    // - Result = 1 check: 17 constraints
-    total += N_LIMBS * (1 + 16);  // result_checked
+    // - result_checked: N_LIMBS * (1 reconstruction + LIMB_BITS boolean)
+    // - a*b sub-product constraints: N_LIMBS * N_LIMBS
+    // - sign boolean constraints: N_PRODUCT_LIMBS
+    // - Result = 1 check: N_LIMBS constraints
+    total += N_LIMBS * (1 + LIMB_BITS as usize);  // result_checked
     total += N_LIMBS * N_LIMBS;  // a*b sub-products
     total += N_PRODUCT_LIMBS;  // sign boolean
     total += N_LIMBS;  // result = 1
@@ -345,7 +345,7 @@ pub fn toprf_constraint_count() -> usize {
         + SCALAR_BITS; // mask inverse
     total += n_scalar_bits;
 
-    // Output equality check (17)
+    // Output equality check
     total += N_LIMBS;
 
     total

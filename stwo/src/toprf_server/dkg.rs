@@ -6,7 +6,7 @@ use rand::Rng;
 
 use super::{Share, SharedKey};
 use crate::babyjub::field256::gen::{scalar_order, BigInt256};
-use crate::babyjub::field256::N_LIMBS;
+use crate::babyjub::field256::{LIMB_MASK, N_LIMBS};
 use crate::babyjub::point::gen::native as point_native;
 use crate::babyjub::point::base_point;
 
@@ -15,9 +15,9 @@ pub fn random_scalar<R: Rng>(rng: &mut R) -> BigInt256 {
     let order = scalar_order();
     let mut limbs = [0u32; N_LIMBS];
 
-    // Generate random limbs (16-bit each)
+    // Generate random limbs (13-bit each)
     for limb in &mut limbs {
-        *limb = rng.gen::<u32>() & 0xFFFF; // 16-bit limbs
+        *limb = rng.gen::<u32>() & LIMB_MASK;
     }
 
     // Reduce modulo scalar order

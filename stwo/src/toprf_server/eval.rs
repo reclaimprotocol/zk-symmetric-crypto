@@ -189,7 +189,13 @@ pub fn finalize_toprf_mimc(
 
     // Unmask: compute mask^(-1) in the scalar field and multiply
     let order = scalar_order();
-    let mask_inv = mask.inv_mod(&order)?;
+    let mask_inv = match mask.inv_mod(&order) {
+        Some(inv) => inv,
+        None => {
+            eprintln!("DEBUG: mask.inv_mod(&order) returned None");
+            return None;
+        }
+    };
     let unmasked = point_native::scalar_mul(&combined, &mask_inv);
 
     // Convert unmasked to affine for hashing

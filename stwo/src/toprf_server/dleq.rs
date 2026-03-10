@@ -92,6 +92,7 @@ pub fn prove_dleq_mimc<R: Rng>(
     h: &ExtendedPointBigInt,
 ) -> Option<(BigInt256, BigInt256)> {
     let base = base_point();
+    let order = scalar_order();
 
     // Compute xG = G * x
     let x_g = point_native::scalar_mul(&base, x);
@@ -114,7 +115,6 @@ pub fn prove_dleq_mimc<R: Rng>(
 
     // Compute r = v - c * x mod scalar_order
     // NOTE: No cofactor multiplication - matches old gnark binary
-    let order = scalar_order();
     let c_times_x = c.mul_mod(x, &order);
     let r = v.sub_mod(&c_times_x, &order);
 

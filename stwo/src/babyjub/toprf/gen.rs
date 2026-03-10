@@ -2,6 +2,7 @@
 
 use super::{TOPRFInputs, THRESHOLD};
 use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256, Field256TraceGen};
+use crate::babyjub::field256::{LIMB_MASK, N_LIMBS};
 use crate::babyjub::mimc_compat::mimc_hash;
 use crate::babyjub::point::gen::{native, scalar_to_bits, PointTraceGen};
 use crate::babyjub::point::{base_point, ExtendedPointBigInt};
@@ -237,11 +238,10 @@ fn hash_to_scalar(secret_data: &[BigInt256; 2], domain_separator: &BigInt256) ->
 /// Hash point coordinates to scalar for DLEQ challenge using MiMC.
 ///
 /// This computes a 256-bit scalar from 12 Field256 values (6 points × 2 coordinates) by:
-/// 1. Hashing 17 times with domain separators 0-16
-/// 2. Each hash produces one 16-bit limb (using low bits of MiMC output)
+/// 1. Hashing N_LIMBS times with domain separators 0 to N_LIMBS-1
+/// 2. Each hash produces one 13-bit limb (using low bits of MiMC output)
 /// 3. The result is reduced modulo the scalar order
 fn hash_to_scalar_dleq(coords: &[BigInt256; 12]) -> BigInt256 {
-    use super::super::field256::N_LIMBS;
 
     let mut result_limbs = [0u32; N_LIMBS];
 
@@ -252,8 +252,8 @@ fn hash_to_scalar_dleq(coords: &[BigInt256; 12]) -> BigInt256 {
         extended_input.extend(coords.iter().cloned());
 
         let hash = mimc_hash(&extended_input);
-        // Use low 16 bits of the MiMC hash (from limb 0)
-        result_limbs[limb_idx] = hash.limbs[0] & 0xFFFF;
+        // Use low 13 bits of the MiMC hash (from limb 0)
+        result_limbs[limb_idx] = hash.limbs[0] & LIMB_MASK;
     }
 
     // Reduce modulo scalar order

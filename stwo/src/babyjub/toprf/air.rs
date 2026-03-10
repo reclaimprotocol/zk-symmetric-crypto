@@ -22,7 +22,7 @@ impl FrameworkEval for TOPRFEval {
     }
 
     fn max_constraint_log_degree_bound(&self) -> u32 {
-        // Constraint degree is at most 5 (from Poseidon2 x^5)
+        // Constraint degree is at most 5 (from MiMC x^5)
         self.log_size + 3
     }
 
@@ -43,12 +43,11 @@ pub fn toprf_info() -> InfoEvaluator {
 }
 
 /// Benchmark native TOPRF operations (no proof generation).
-/// Returns the output hash value.
-pub fn bench_native_toprf(inputs: &TOPRFInputs) -> Result<u32, String> {
+/// Returns the output hash value as BigInt256.
+pub fn bench_native_toprf(inputs: &TOPRFInputs) -> Result<crate::babyjub::field256::gen::BigInt256, String> {
     use super::gen::verify_toprf_native;
 
-    let result = verify_toprf_native(inputs).map_err(|e| e.to_string())?;
-    Ok(result.0)
+    verify_toprf_native(inputs).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

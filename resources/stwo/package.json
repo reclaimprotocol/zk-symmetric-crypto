@@ -1,0 +1,11 @@
+{
+  "name": "s2circuits",
+  "version": "0.1.0",
+  "files": [
+    "s2circuits_bg.wasm",
+    "s2circuits.js",
+    "s2circuits.d.ts"
+  ],
+  "main": "s2circuits.js",
+  "types": "s2circuits.d.ts"
+}

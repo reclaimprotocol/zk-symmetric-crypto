@@ -16,6 +16,9 @@ mod integration_test;
 #[cfg(test)]
 mod gnark_compat_test;
 
+#[cfg(test)]
+mod underconstraint_test;
+
 use crate::babyjub::field256::gen::BigInt256;
 pub use crate::babyjub::point::AffinePointBigInt;
 
@@ -46,8 +49,8 @@ pub struct TOPRFPublicInputs {
     /// DLEQ response values.
     pub r: [BigInt256; THRESHOLD],
 
-    /// Expected output hash (as M31 field element, stored as u32).
-    pub output: u32,
+    /// Expected output hash (MiMC hash output, gnark-compatible).
+    pub output: BigInt256,
 }
 
 /// TOPRF private inputs.
@@ -76,7 +79,7 @@ impl Default for TOPRFPublicInputs {
             share_public_keys: [AffinePointBigInt::default(); THRESHOLD],
             c: [BigInt256::zero(); THRESHOLD],
             r: [BigInt256::zero(); THRESHOLD],
-            output: 0,
+            output: BigInt256::zero(),
         }
     }
 }

@@ -15,6 +15,9 @@
 pub mod constraints;
 pub mod gen;
 
+#[cfg(test)]
+mod underconstraint_test;
+
 use super::field256::{gen::BigInt256, Field256, N_LIMBS};
 
 use std::fmt::Debug;

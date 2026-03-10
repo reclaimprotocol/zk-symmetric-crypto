@@ -7,6 +7,9 @@
 pub mod constraints;
 pub mod gen;
 
+#[cfg(test)]
+mod underconstraint_test;
+
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Mul, Sub};
 

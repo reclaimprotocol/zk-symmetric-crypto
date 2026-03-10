@@ -92,13 +92,14 @@ impl ExtractionTraceGen {
             self.append(contrib1);
             self.append(contrib2);
 
-            // Accumulate
+            // Accumulate (matching extract_native behavior)
             if is_set == 1 {
-                if total_selected < BYTES_PER_FIELD as u32 {
+                if res1_bytes.len() < BYTES_PER_FIELD {
                     res1_bytes.push(selected);
-                } else {
+                } else if res2_bytes.len() < BYTES_PER_FIELD {
                     res2_bytes.push(selected);
                 }
+                // Ignore bytes beyond 62 (matching extract_native)
                 total_selected += 1;
             }
         }
@@ -375,5 +376,61 @@ mod tests {
         // Verify output matches native
         let native_output = extract_native(&public, &private);
         assert_eq!(output.secret_data_0.limbs, native_output.secret_data_0.limbs);
+    }
+
+    #[test]
+    fn test_gen_extraction_matches_native() {
+        let mut public = ExtractionPublicInputs::default();
+        let mut private = ExtractionPrivateInputs::default();
+
+        // Select 62 bytes (max)
+        for i in 0..62 {
+            public.bitmask[i] = 0xFF;
+            private.plaintext[i] = (i + 1) as u8;
+        }
+        public.len = 62;
+
+        let mut gen = ExtractionTraceGen::new();
+        let gen_output = gen.gen_extraction(&public, &private);
+        let native_output = extract_native(&public, &private);
+
+        assert_eq!(gen_output.secret_data_0.limbs, native_output.secret_data_0.limbs,
+            "secret_data_0 mismatch");
+        assert_eq!(gen_output.secret_data_1.limbs, native_output.secret_data_1.limbs,
+            "secret_data_1 mismatch");
+    }
+
+    #[test]
+    fn test_gen_extraction_caps_at_62_bytes() {
+        // Test that selecting more than 62 bytes doesn't overflow
+        // (even though validation would normally reject this)
+        let mut public = ExtractionPublicInputs::default();
+        let mut private = ExtractionPrivateInputs::default();
+
+        // Select all 128 bytes (exceeds max)
+        for i in 0..TOTAL_PLAINTEXT_BYTES {
+            public.bitmask[i] = 0xFF;
+            private.plaintext[i] = (i + 1) as u8;
+        }
+        public.len = TOTAL_PLAINTEXT_BYTES as u32;
+
+        let mut gen = ExtractionTraceGen::new();
+        let gen_output = gen.gen_extraction(&public, &private);
+        let native_output = extract_native(&public, &private);
+
+        // Both should produce identical results (capped at 62 bytes)
+        assert_eq!(gen_output.secret_data_0.limbs, native_output.secret_data_0.limbs,
+            "secret_data_0 mismatch with overflow");
+        assert_eq!(gen_output.secret_data_1.limbs, native_output.secret_data_1.limbs,
+            "secret_data_1 mismatch with overflow");
+
+        // Verify the output contains exactly 31 bytes in each field
+        let bytes0 = field256_to_bytes(&gen_output.secret_data_0, 31);
+        let bytes1 = field256_to_bytes(&gen_output.secret_data_1, 31);
+
+        assert_eq!(bytes0[0], 1);
+        assert_eq!(bytes0[30], 31);
+        assert_eq!(bytes1[0], 32);
+        assert_eq!(bytes1[30], 62);
     }
 }

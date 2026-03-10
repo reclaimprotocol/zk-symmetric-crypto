@@ -25,20 +25,50 @@ impl<E: EvalAtRow> Field256EvalAtRow<'_, E> {
     }
 
     /// Read next Field256 from trace with range checks on each limb.
-    /// Each limb is constrained to be < 2^LIMB_BITS.
+    /// Each limb is constrained to be < 2^LIMB_BITS via bit decomposition.
     ///
-    /// Note: Full range checking requires decomposing each limb into bits,
-    /// which is expensive. For now, we rely on the prover providing valid values
-    /// and check relations hold modulo the field.
+    /// For each limb:
+    /// 1. Read the limb value
+    /// 2. Read LIMB_BITS (29) bits from trace
+    /// 3. Constrain each bit to be boolean (bit * (bit - 1) = 0)
+    /// 4. Constrain limb = sum(bit_i * 2^i)
+    ///
+    /// This adds 29 boolean constraints + 1 reconstruction constraint per limb,
+    /// totaling 30 * 9 = 270 constraints.
     pub fn next_field256_checked(&mut self) -> Field256<E::F> {
-        // For a full implementation, we would:
-        // 1. Read the limb
-        // 2. Decompose into bits and constrain each bit to be boolean
-        // 3. Verify the limb equals the sum of bits
-        //
-        // This adds ~29 constraints per limb, ~261 constraints total.
-        // For now, we read without explicit range checks.
-        self.next_field256()
+        let one = E::F::from(BaseField::from_u32_unchecked(1));
+
+        let mut limbs: [E::F; N_LIMBS] = std::array::from_fn(|_| {
+            E::F::from(BaseField::from_u32_unchecked(0))
+        });
+
+        for limb_idx in 0..N_LIMBS {
+            // Read the limb value
+            let limb = self.eval.next_trace_mask();
+
+            // Read LIMB_BITS bits and constrain each to be boolean
+            let mut reconstructed = E::F::from(BaseField::from_u32_unchecked(0));
+            let mut power_of_two = E::F::from(BaseField::from_u32_unchecked(1));
+
+            for _bit_idx in 0..LIMB_BITS {
+                let bit = self.eval.next_trace_mask();
+
+                // Constrain bit is boolean: bit * (bit - 1) = 0
+                self.eval
+                    .add_constraint(bit.clone() * (bit.clone() - one.clone()));
+
+                // Accumulate: reconstructed += bit * 2^bit_idx
+                reconstructed = reconstructed + bit * power_of_two.clone();
+                power_of_two = power_of_two * E::F::from(BaseField::from_u32_unchecked(2));
+            }
+
+            // Constrain limb equals reconstructed value
+            self.eval.add_constraint(limb.clone() - reconstructed);
+
+            limbs[limb_idx] = limb;
+        }
+
+        Field256::new(limbs)
     }
 
     /// Constrain two Field256 values to be equal.
@@ -51,11 +81,13 @@ impl<E: EvalAtRow> Field256EvalAtRow<'_, E> {
 
     /// Constrain Field256 addition: result = a + b (mod p).
     ///
-    /// Non-deterministic: prover provides result and borrow flag.
-    /// Verifier checks: a + b = result + borrow * p
+    /// Non-deterministic: prover provides result and reduction flag.
+    /// Verifier checks: a + b = result + reduced * p (with proper carry handling)
     ///
-    /// This is a simplified version that assumes no reduction needed
-    /// (result < p). For full correctness, need to handle reduction.
+    /// Carries are constrained to be in {0, 1, 2} via two-bit decomposition:
+    /// - carry = carry_bit0 + 2 * carry_bit1
+    /// - Both bits are boolean
+    /// - carry_bit0 * carry_bit1 = 0 (excludes carry = 3)
     pub fn add_field256(
         &mut self,
         a: &Field256<E::F>,
@@ -64,26 +96,50 @@ impl<E: EvalAtRow> Field256EvalAtRow<'_, E> {
         // Read result from trace (prover-provided)
         let result = self.next_field256();
 
-        // Read carries from trace (one per limb)
-        // carry[i] = floor((a[i] + b[i] + carry[i-1] - result[i]) / 2^29)
-        let carries: [E::F; N_LIMBS] = std::array::from_fn(|_| self.eval.next_trace_mask());
+        // Read carry bits from trace (two bits per limb for values 0, 1, 2)
+        // carry[i] = carry_bit0[i] + 2 * carry_bit1[i]
+        let carry_bits: [(E::F, E::F); N_LIMBS] = std::array::from_fn(|_| {
+            let bit0 = self.eval.next_trace_mask();
+            let bit1 = self.eval.next_trace_mask();
+            (bit0, bit1)
+        });
 
         // Read reduction flag: 0 if result < p, 1 if we subtracted p
         let reduced = self.eval.next_trace_mask();
 
         let one = E::F::from(BaseField::from_u32_unchecked(1));
+        let two = E::F::from(BaseField::from_u32_unchecked(2));
         let two_pow_limb = E::F::from(BaseField::from_u32_unchecked(1 << LIMB_BITS));
 
         // Constrain reduction flag is boolean
         self.eval
             .add_constraint(reduced.clone() * (one.clone() - reduced.clone()));
 
-        // Constrain carries are boolean (in practice they can be 0, 1, or 2 for addition)
-        // More precisely: carry[i] in {0, 1, 2} for unreduced, then after reduction carry <= 1
-        // For simplicity, we constrain: carry * (carry - 1) * (carry - 2) = 0
-        // But this is degree 3. Instead we'll verify the relation holds.
+        // Constrain carry bits and compute carries
+        let mut carries: [E::F; N_LIMBS] = std::array::from_fn(|_| {
+            E::F::from(BaseField::from_u32_unchecked(0))
+        });
+
+        for i in 0..N_LIMBS {
+            let (bit0, bit1) = &carry_bits[i];
+
+            // Constrain bit0 is boolean: bit0 * (bit0 - 1) = 0
+            self.eval
+                .add_constraint(bit0.clone() * (bit0.clone() - one.clone()));
+
+            // Constrain bit1 is boolean: bit1 * (bit1 - 1) = 0
+            self.eval
+                .add_constraint(bit1.clone() * (bit1.clone() - one.clone()));
+
+            // Constrain carry != 3: bit0 * bit1 = 0
+            self.eval.add_constraint(bit0.clone() * bit1.clone());
+
+            // Compute carry = bit0 + 2 * bit1
+            carries[i] = bit0.clone() + two.clone() * bit1.clone();
+        }
 
         // Verify limb-wise: a[i] + b[i] + carry[i-1] = result[i] + reduced * p[i] + carry[i] * 2^29
+        // This formulation ensures non-negative carries (0, 1, or 2)
         let modulus_limbs: [E::F; N_LIMBS] = std::array::from_fn(|i| {
             E::F::from(BaseField::from_u32_unchecked(super::MODULUS[i]))
         });
@@ -110,7 +166,9 @@ impl<E: EvalAtRow> Field256EvalAtRow<'_, E> {
     /// Constrain Field256 subtraction: result = a - b (mod p).
     ///
     /// Non-deterministic: prover provides result and borrow flag.
-    /// Verifier checks: a = result + b - borrow * p
+    /// Verifier checks: a + borrowed * p = result + b (with proper borrow handling)
+    ///
+    /// Borrows are constrained to be boolean (0 or 1).
     pub fn sub_field256(
         &mut self,
         a: &Field256<E::F>,
@@ -131,6 +189,13 @@ impl<E: EvalAtRow> Field256EvalAtRow<'_, E> {
         // Constrain borrow flag is boolean
         self.eval
             .add_constraint(borrowed.clone() * (one.clone() - borrowed.clone()));
+
+        // Constrain each borrow is boolean (0 or 1)
+        for i in 0..N_LIMBS {
+            self.eval.add_constraint(
+                borrows[i].clone() * (borrows[i].clone() - one.clone()),
+            );
+        }
 
         let modulus_limbs: [E::F; N_LIMBS] = std::array::from_fn(|i| {
             E::F::from(BaseField::from_u32_unchecked(super::MODULUS[i]))
@@ -303,9 +368,37 @@ pub fn mul_constraint_count() -> usize {
 
 /// Count constraints for a Field256 addition.
 pub fn add_constraint_count() -> usize {
-    // Reduction flag: 1 boolean constraint
-    // Limb verification: N_LIMBS constraints
-    N_LIMBS + 1
+    // Per limb:
+    // - carry_bit0 boolean: 1
+    // - carry_bit1 boolean: 1
+    // - carry != 3 (bit0 * bit1 = 0): 1
+    // - limb verification: 1
+    // Total per limb: 4
+    //
+    // Plus:
+    // - Reduction flag boolean: 1
+    N_LIMBS * 4 + 1
+}
+
+/// Count constraints for a Field256 subtraction.
+pub fn sub_constraint_count() -> usize {
+    // Per limb:
+    // - borrow boolean: 1
+    // - limb verification: 1
+    // Total per limb: 2
+    //
+    // Plus:
+    // - Borrowed flag boolean: 1
+    N_LIMBS * 2 + 1
+}
+
+/// Count constraints for a range-checked Field256 read.
+pub fn field256_checked_constraint_count() -> usize {
+    // Per limb:
+    // - LIMB_BITS boolean constraints (bit * (bit - 1) = 0)
+    // - 1 reconstruction constraint (limb = sum of bits)
+    // Total: (LIMB_BITS + 1) * N_LIMBS
+    (LIMB_BITS as usize + 1) * N_LIMBS
 }
 
 #[cfg(test)]
@@ -315,6 +408,11 @@ mod tests {
     #[test]
     fn test_constraint_counts() {
         assert_eq!(mul_constraint_count(), 17);
-        assert_eq!(add_constraint_count(), 10);
+        // 9 * 4 + 1 = 37
+        assert_eq!(add_constraint_count(), 37);
+        // 9 * 2 + 1 = 19
+        assert_eq!(sub_constraint_count(), 19);
+        // (29 + 1) * 9 = 270
+        assert_eq!(field256_checked_constraint_count(), 270);
     }
 }

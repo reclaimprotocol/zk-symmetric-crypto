@@ -6,7 +6,7 @@
 //! - finalize_toprf: Client-side finalization and verification
 //!
 //! For gnark compatibility, use the *_mimc variants which use MiMC hash
-//! instead of Poseidon2.
+//! (compatible with gnark's native MiMC implementation).
 
 use rand::Rng;
 

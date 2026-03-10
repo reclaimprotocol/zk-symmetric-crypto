@@ -158,9 +158,9 @@ pub fn verify_dleq(
     c.limbs == expected_c.limbs
 }
 
-/// Hash multiple Field256 values to a scalar using Poseidon2.
+/// Hash multiple Field256 values to a scalar using MiMC.
 ///
-/// This hashes all the M31 limbs and expands the result to a full scalar
+/// This hashes the Field256 values and expands the result to a full scalar
 /// by hashing with different domain separators.
 fn hash_to_scalar(inputs: &[BigInt256]) -> BigInt256 {
     // Generate 9 limbs by hashing with different domain separators

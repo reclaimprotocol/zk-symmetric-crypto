@@ -519,31 +519,76 @@ impl Field256TraceGen {
         }
     }
 
+    /// Append a Field256 to trace with bit decomposition for range checking.
+    ///
+    /// For each limb, appends:
+    /// 1. The limb value
+    /// 2. LIMB_BITS (29) bits of the limb decomposition
+    ///
+    /// This matches the trace format expected by `next_field256_checked`.
+    pub fn append_field256_checked(&mut self, val: &BigInt256) {
+        for i in 0..N_LIMBS {
+            let limb = val.limbs[i];
+
+            // Append the limb value
+            self.append_limb(limb);
+
+            // Append bit decomposition (LSB first)
+            let mut remaining = limb;
+            for _bit_idx in 0..LIMB_BITS {
+                let bit = remaining & 1;
+                self.append_limb(bit);
+                remaining >>= 1;
+            }
+        }
+    }
+
     /// Generate trace for addition: a + b (mod p).
     /// Returns the result and appends all trace values.
+    ///
+    /// Trace format:
+    /// - result: 9 limbs
+    /// - carry bits: 2 bits per limb (bit0, bit1 where carry = bit0 + 2*bit1)
+    /// - reduced: 1 bit
+    ///
+    /// Constraint: a[i] + b[i] + carry[i-1] = result[i] + reduced * p[i] + carry[i] * 2^29
     pub fn gen_add(&mut self, a: &BigInt256, b: &BigInt256) -> BigInt256 {
         let p = modulus();
         let result = a.add_mod(b, &p);
 
-        // Compute carries for the addition
+        // Determine if reduction occurred (a + b >= p)
+        let reduced = if a.add_no_reduce(b).0.gte(&p) { 1u32 } else { 0u32 };
+
+        // Compute carries to satisfy: a[i] + b[i] + carry[i-1] = result[i] + reduced * p[i] + carry[i] * 2^29
+        // Rearranging: carry[i] = (a[i] + b[i] + carry[i-1] - result[i] - reduced * p[i]) / 2^29
         let mut carries = [0u32; N_LIMBS];
         let mut carry: u64 = 0;
-        let reduced = if a.add_no_reduce(b).0.gte(&p) { 1u32 } else { 0u32 };
 
         for i in 0..N_LIMBS {
             let sum = a.limbs[i] as u64
                 + b.limbs[i] as u64
-                + carry
+                + carry;
+            let rhs = result.limbs[i] as u64
                 + if reduced == 1 { p.limbs[i] as u64 } else { 0 };
-            carries[i] = (sum >> LIMB_BITS) as u32;
+            // carry[i] * 2^29 = sum - rhs, so carry[i] = (sum - rhs) >> 29
+            // Note: sum >= rhs is guaranteed by the math (a + b = result + reduced * p)
+            debug_assert!(sum >= rhs, "sum ({}) should be >= rhs ({}) at limb {}", sum, rhs, i);
+            carries[i] = ((sum - rhs) >> LIMB_BITS) as u32;
             carry = carries[i] as u64;
         }
 
         // Append to trace
         self.append_field256(&result);
+
+        // Append carry bits (2 bits per carry, values 0, 1, or 2)
         for c in carries {
-            self.append_limb(c);
+            debug_assert!(c <= 2, "Carry should be at most 2, got {}", c);
+            let bit0 = c & 1;
+            let bit1 = (c >> 1) & 1;
+            self.append_limb(bit0);
+            self.append_limb(bit1);
         }
+
         self.append_limb(reduced);
 
         result

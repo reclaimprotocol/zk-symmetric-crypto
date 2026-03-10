@@ -1144,7 +1144,7 @@ pub fn get_toprf_info() -> String {
         "cols": info.mask_offsets[1].len(),
         "constraints": info.n_constraints,
         "estimated_constraints": toprf_constraint_count(),
-        "algorithm": "poseidon2_m31",
+        "algorithm": "mimc_bn254",
         "curve": "babyjub",
         "threshold": 1,
     }).to_string()

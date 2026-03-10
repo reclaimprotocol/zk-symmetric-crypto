@@ -3,15 +3,15 @@
 #[cfg(test)]
 mod tests {
     use crate::babyjub::field256::gen::{modulus, scalar_order, BigInt256};
-    use crate::babyjub::mimc::gen::hash_field256_native;
+    use crate::babyjub::mimc_compat::mimc_hash;
     use crate::babyjub::point::gen::native as point_native;
-    use crate::babyjub::point::{base_point, ExtendedPointBigInt};
+    use crate::babyjub::point::ExtendedPointBigInt;
     use crate::babyjub::toprf::{
-        AffinePointBigInt, TOPRFInputs, TOPRFPrivateInputs, TOPRFPublicInputs, THRESHOLD,
+        AffinePointBigInt, TOPRFInputs, TOPRFPrivateInputs, TOPRFPublicInputs,
     };
     use crate::babyjub::toprf::gen::{verify_toprf_native, TOPRFTraceGen};
     use crate::toprf_server::dkg::{generate_shared_key, random_scalar};
-    use crate::toprf_server::eval::{evaluate_oprf, hash_to_point, mask_point};
+    use crate::toprf_server::eval::{evaluate_oprf_mimc, hash_to_point_mimc, mask_point};
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -60,7 +60,7 @@ mod tests {
     fn create_circuit_inputs(
         secret_bytes: &[u8],
         domain_separator: &BigInt256,
-    ) -> (TOPRFInputs, u32) {
+    ) -> (TOPRFInputs, BigInt256) {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
         let p = modulus();
         let order = scalar_order();
@@ -72,24 +72,24 @@ mod tests {
         let shared_key = generate_shared_key(&mut rng, 1, 1);
         let share = &shared_key.shares[0];
 
-        // Client: hash to point
-        let data_point = hash_to_point(&secret_data, domain_separator);
+        // Client: hash to point using MiMC (gnark-compatible)
+        let data_point = hash_to_point_mimc(&secret_data, domain_separator);
 
         // Client: generate mask and mask the data point
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
 
-        // Server: evaluate OPRF
-        let response = evaluate_oprf(&mut rng, share, &masked_request)
+        // Server: evaluate OPRF using MiMC-based DLEQ (gnark-compatible)
+        let response = evaluate_oprf_mimc(&mut rng, share, &masked_request)
             .expect("OPRF evaluation should succeed");
 
         // Client: unmask to get final point
         let mask_inv = mask.inv_mod(&order).expect("mask should have inverse");
         let unmasked = point_native::scalar_mul(&response.evaluated_point, &mask_inv);
 
-        // Compute final hash
+        // Compute final hash using MiMC
         let (unmasked_x, unmasked_y) = unmasked.to_affine(&p);
-        let output_hash = hash_field256_native(&[
+        let output_hash = mimc_hash(&[
             unmasked_x.clone(),
             unmasked_y.clone(),
             secret_data[0].clone(),
@@ -115,11 +115,11 @@ mod tests {
                 share_public_keys: [AffinePointBigInt { x: pub_x, y: pub_y }],
                 c: [response.c],
                 r: [response.r],
-                output: output_hash.0,
+                output: output_hash.clone(),
             },
         };
 
-        (inputs, output_hash.0)
+        (inputs, output_hash)
     }
 
     #[test]
@@ -139,8 +139,8 @@ mod tests {
 
         let (inputs, expected_output) = create_circuit_inputs(secret, &domain_separator);
 
-        println!("Expected output: {}", expected_output);
-        println!("Public output in inputs: {}", inputs.public.output);
+        println!("Expected output: {:?}", expected_output);
+        println!("Public output in inputs: {:?}", inputs.public.output);
 
         // Verify using native computation
         let result = verify_toprf_native(&inputs);
@@ -151,7 +151,7 @@ mod tests {
 
         // The computed output should match
         assert_eq!(
-            computed_output.0, inputs.public.output,
+            computed_output, inputs.public.output,
             "Output mismatch"
         );
     }
@@ -167,10 +167,10 @@ mod tests {
         let output = gen.gen_toprf(&inputs);
 
         println!("Trace gen output: {:?}", output);
-        println!("Expected output: {}", inputs.public.output);
+        println!("Expected output: {:?}", inputs.public.output);
 
         // Output should match
-        assert_eq!(output.0, inputs.public.output, "Trace gen output mismatch");
+        assert_eq!(output, inputs.public.output, "Trace gen output mismatch");
     }
 
     #[test]

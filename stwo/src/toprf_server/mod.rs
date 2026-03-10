@@ -59,13 +59,13 @@ pub struct OPRFResponse {
     pub r: BigInt256,
 }
 
-/// TOPRF verification result (Poseidon2/M31 output).
+/// TOPRF verification result (M31 output).
 #[derive(Clone, Debug)]
 pub struct TOPRFResult {
     /// Unmasked point (after deblinding).
     pub unmasked_point: ExtendedPointBigInt,
 
-    /// Final hash output (as u32 since M31).
+    /// Final hash output (as u32, M31 field element).
     pub output: u32,
 }
 

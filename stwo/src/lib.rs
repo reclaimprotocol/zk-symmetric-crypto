@@ -7,5 +7,8 @@ pub mod babyjub;
 pub mod chacha;
 pub mod toprf_server;
 
+#[cfg(test)]
+pub mod tests;
+
 #[cfg(target_arch = "wasm32")]
 pub mod wasm_api;

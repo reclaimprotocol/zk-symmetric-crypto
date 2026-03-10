@@ -98,13 +98,10 @@ describe('gnark-stwo TOPRF compatibility tests', () => {
 
 	describe('output format compatibility', () => {
 		it('stwo produces 32-byte (256-bit) outputs', async() => {
-			// Run full TOPRF flow with stwo keys, stwo evaluate, gnark finalize
-			// (stwo's verify has issues, and gnark only supports threshold=1)
 			const secret = 'test@example.com'
 			const domain = 'reclaim'
 			const threshold = 1
 
-			// stwo flow
 			const stwoKeys = await stwoOp.generateThresholdKeys(5, threshold)
 			const stwoReq = await stwoOp.generateOPRFRequestData(strToUint8Array(secret), domain)
 
@@ -119,8 +116,7 @@ describe('gnark-stwo TOPRF compatibility tests', () => {
 				r: evalResult.r,
 			}]
 
-			// Use gnark to finalize (stwo's verify has issues)
-			const stwoOutput = await gnarkOp.finaliseOPRF(stwoKeys.publicKey, stwoReq, stwoResps)
+			const stwoOutput = await stwoOp.finaliseOPRF(stwoKeys.publicKey, stwoReq, stwoResps)
 
 			// stwo output should be 32 bytes (256-bit MiMC hash)
 			assert.strictEqual(stwoOutput.length, 32, 'stwo output should be 32 bytes')
@@ -148,9 +144,8 @@ describe('gnark-stwo TOPRF compatibility tests', () => {
 				r: resp.r,
 			}]
 
-			// Use gnark to finalize (stwo's verify has issues)
-			const output1 = await gnarkOp.finaliseOPRF(keys.publicKey, req, resps)
-			const output2 = await gnarkOp.finaliseOPRF(keys.publicKey, req, resps)
+			const output1 = await stwoOp.finaliseOPRF(keys.publicKey, req, resps)
+			const output2 = await stwoOp.finaliseOPRF(keys.publicKey, req, resps)
 
 			assert.ok(arraysEqual(output1, output2), 'Same inputs should produce same output')
 			console.log('  Deterministic output:', toHex(output1))
@@ -172,15 +167,14 @@ describe('gnark-stwo TOPRF compatibility tests', () => {
 			const resp1 = await stwoOp.evaluateOPRF(keys.shares[0].privateKey, req1.maskedData)
 			const resp2 = await stwoOp.evaluateOPRF(keys.shares[0].privateKey, req2.maskedData)
 
-			// Use gnark to finalize (stwo's verify has issues)
-			const output1 = await gnarkOp.finaliseOPRF(keys.publicKey, req1, [{
+			const output1 = await stwoOp.finaliseOPRF(keys.publicKey, req1, [{
 				publicKeyShare: keys.shares[0].publicKey,
 				evaluated: resp1.evaluated,
 				c: resp1.c,
 				r: resp1.r,
 			}])
 
-			const output2 = await gnarkOp.finaliseOPRF(keys.publicKey, req2, [{
+			const output2 = await stwoOp.finaliseOPRF(keys.publicKey, req2, [{
 				publicKeyShare: keys.shares[0].publicKey,
 				evaluated: resp2.evaluated,
 				c: resp2.c,
@@ -232,9 +226,9 @@ describe('gnark-stwo TOPRF compatibility tests', () => {
 				r: gnarkResp.r,
 			}])
 
-			// Finalize with gnark using stwo's response (stwo's verify has issues)
+			// Finalize with stwo using stwo's response
 			// Both should produce the same output since evaluated points match
-			const stwoOutput = await gnarkOp.finaliseOPRF(gnarkKeys.publicKey, gnarkReq, [{
+			const stwoOutput = await stwoOp.finaliseOPRF(gnarkKeys.publicKey, gnarkReq, [{
 				publicKeyShare: gnarkKeys.shares[0].publicKey,
 				evaluated: stwoResp.evaluated,
 				c: stwoResp.c,
@@ -282,8 +276,8 @@ describe('gnark-stwo TOPRF compatibility tests', () => {
 			console.log('  stwo evaluated:', toHex(stwoResp.evaluated))
 			console.log('  gnark evaluated:', toHex(gnarkResp.evaluated))
 
-			// Finalize with gnark using stwo's response (stwo's verify has issues)
-			const stwoOutput = await gnarkOp.finaliseOPRF(stwoKeys.publicKey, stwoReq, [{
+			// Finalize with stwo using stwo's response
+			const stwoOutput = await stwoOp.finaliseOPRF(stwoKeys.publicKey, stwoReq, [{
 				publicKeyShare: stwoKeys.shares[0].publicKey,
 				evaluated: stwoResp.evaluated,
 				c: stwoResp.c,
@@ -310,12 +304,10 @@ describe('gnark-stwo TOPRF compatibility tests', () => {
 		})
 
 		it('gnark can verify stwo DLEQ proof and vice versa', async() => {
-			// This tests that DLEQ proofs from one system are valid in the other
 			const secret = 'dleq-test@example.com'
 			const domain = 'dleq-domain'
 			const threshold = 1
 
-			// Generate with gnark
 			const keys = await gnarkOp.generateThresholdKeys(3, threshold)
 			const req = await gnarkOp.generateOPRFRequestData(strToUint8Array(secret), domain)
 
@@ -332,48 +324,33 @@ describe('gnark-stwo TOPRF compatibility tests', () => {
 			console.log('  publicKeyShare:', toHex(keys.shares[0].publicKey))
 			console.log('  maskedData:', toHex(req.maskedData))
 
-			// Step 1: gnark verifies stwo's DLEQ proof
-			let gnarkVerifiedStwo = false
-			try {
-				await gnarkOp.finaliseOPRF(keys.publicKey, req, [{
-					publicKeyShare: keys.shares[0].publicKey,
-					evaluated: stwoResp.evaluated,
-					c: stwoResp.c,
-					r: stwoResp.r,
-				}])
-				gnarkVerifiedStwo = true
-				console.log('  gnark verifying stwo DLEQ: PASS')
-			} catch(e) {
-				console.log('  gnark verifying stwo DLEQ: FAIL -', (e as Error).message)
-			}
+			// gnark verifies stwo's DLEQ proof
+			const gnarkOutput = await gnarkOp.finaliseOPRF(keys.publicKey, req, [{
+				publicKeyShare: keys.shares[0].publicKey,
+				evaluated: stwoResp.evaluated,
+				c: stwoResp.c,
+				r: stwoResp.r,
+			}])
+			console.log('  gnark verifying stwo DLEQ: PASS')
 
-			// Step 2: stwo verifies gnark's DLEQ proof
-			let stwoVerifiedGnark = false
-			try {
-				await stwoOp.finaliseOPRF(keys.publicKey, req, [{
-					publicKeyShare: keys.shares[0].publicKey,
-					evaluated: gnarkResp.evaluated,
-					c: gnarkResp.c,
-					r: gnarkResp.r,
-				}])
-				stwoVerifiedGnark = true
-				console.log('  stwo verifying gnark DLEQ: PASS')
-			} catch(e) {
-				console.log('  stwo verifying gnark DLEQ: FAIL -', (e as Error).message)
-			}
+			// stwo verifies gnark's DLEQ proof
+			const stwoOutput = await stwoOp.finaliseOPRF(keys.publicKey, req, [{
+				publicKeyShare: keys.shares[0].publicKey,
+				evaluated: gnarkResp.evaluated,
+				c: gnarkResp.c,
+				r: gnarkResp.r,
+			}])
+			console.log('  stwo verifying gnark DLEQ: PASS')
 
-			if(!gnarkVerifiedStwo || !stwoVerifiedGnark) {
-				console.log('  NOTE: Cross-systemmam DLEQ verification not yet fully compatible')
-				console.log('  Each system can verify its own DLEQ proofs.')
-			}
-			// assert.ok(gnarkVerifiedStwo && stwoVerifiedGnark, 'Cross-verification should succeed')
+			// Both should produce the same output
+			assert.ok(arraysEqual(gnarkOutput, stwoOutput), 'Cross-verification outputs should match')
+			console.log('  Cross-verification outputs match!')
 		})
 	})
 })
 
 describe('stwo TOPRF standalone tests', () => {
 	const stwoOp = makeStwoOPRFOperator({ fetcher })
-	const gnarkOp = makeGnarkOPRFOperator({ fetcher, algorithm: 'chacha20' })
 
 	it('should handle maximum secret size (62 bytes)', async() => {
 		const maxSecret = 'A'.repeat(62)
@@ -386,8 +363,7 @@ describe('stwo TOPRF standalone tests', () => {
 		assert.strictEqual(req.maskedData.length, 32, 'maskedData should be 32 bytes (compressed)')
 
 		const resp = await stwoOp.evaluateOPRF(keys.shares[0].privateKey, req.maskedData)
-		// Use gnark to finalize since stwo's standalone verify has issues
-		const output = await gnarkOp.finaliseOPRF(keys.publicKey, req, [{
+		const output = await stwoOp.finaliseOPRF(keys.publicKey, req, [{
 			publicKeyShare: keys.shares[0].publicKey,
 			evaluated: resp.evaluated,
 			c: resp.c,
@@ -399,10 +375,6 @@ describe('stwo TOPRF standalone tests', () => {
 	})
 
 	it('should handle empty domain separator', async() => {
-		// Skip: DLEQ verification has a known issue with certain edge cases
-		// when using stwo's standalone finalize. Cross-system tests show the
-		// hash function is correct (gnark can verify stwo's proofs).
-		// TODO: Debug why stwo's own verify doesn't match its prove for some cases.
 		const secret = 'test@example.com'
 		const domain = ''
 		const threshold = 1
@@ -411,8 +383,7 @@ describe('stwo TOPRF standalone tests', () => {
 		const req = await stwoOp.generateOPRFRequestData(strToUint8Array(secret), domain)
 		const resp = await stwoOp.evaluateOPRF(keys.shares[0].privateKey, req.maskedData)
 
-		// Use gnark to finalize since stwo's standalone verify has issues
-		const output = await gnarkOp.finaliseOPRF(keys.publicKey, req, [{
+		const output = await stwoOp.finaliseOPRF(keys.publicKey, req, [{
 			publicKeyShare: keys.shares[0].publicKey,
 			evaluated: resp.evaluated,
 			c: resp.c,
@@ -424,10 +395,7 @@ describe('stwo TOPRF standalone tests', () => {
 	})
 
 	it('should work with threshold=nodes (all shares required)', async() => {
-		// gnark's toprfFinalize only supports threshold=1 ("Must provide exactly 1 responses")
-		// and stwo's verify_dleq_mimc has issues. Skip this test until multi-share
-		// finalization is implemented.
-		// TODO: Implement multi-share Lagrange combination in stwo's finalize
-		console.log('  SKIP: gnark toprfFinalize only supports threshold=1')
+		// Multi-share Lagrange combination not yet implemented
+		console.log('  SKIP: Multi-share finalization not yet implemented')
 	})
 })

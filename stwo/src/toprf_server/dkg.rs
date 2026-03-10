@@ -6,17 +6,18 @@ use rand::Rng;
 
 use super::{Share, SharedKey};
 use crate::babyjub::field256::gen::{scalar_order, BigInt256};
+use crate::babyjub::field256::N_LIMBS;
 use crate::babyjub::point::gen::native as point_native;
 use crate::babyjub::point::base_point;
 
 /// Generate a random scalar in the Baby Jubjub scalar field.
 pub fn random_scalar<R: Rng>(rng: &mut R) -> BigInt256 {
     let order = scalar_order();
-    let mut limbs = [0u32; 9];
+    let mut limbs = [0u32; N_LIMBS];
 
-    // Generate random limbs
+    // Generate random limbs (16-bit each)
     for limb in &mut limbs {
-        *limb = rng.gen::<u32>() & 0x1FFFFFFF; // 29-bit limbs
+        *limb = rng.gen::<u32>() & 0xFFFF; // 16-bit limbs
     }
 
     // Reduce modulo scalar order
@@ -88,7 +89,7 @@ pub fn create_shares<R: Rng>(
 
     for i in 1..=n {
         // Compute f(i) = a_0 + a_1*i + a_2*i^2 + ...
-        let x = BigInt256::from_limbs([i as u32, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let x = BigInt256::from_u32(i as u32);
         let private_key = evaluate_polynomial(&coefficients, &x, &order);
 
         // Compute public key: G * private_key
@@ -139,18 +140,18 @@ pub fn lagrange_coefficient(idx: usize, peers: &[usize]) -> BigInt256 {
     for &j in peers {
         if j != idx {
             // numerator *= j
-            let j_val = BigInt256::from_limbs([j as u32, 0, 0, 0, 0, 0, 0, 0, 0]);
+            let j_val = BigInt256::from_u32(j as u32);
             numerator = numerator.mul_mod(&j_val, &order);
 
             // denominator *= (j - idx)
-            let idx_val = BigInt256::from_limbs([idx as u32, 0, 0, 0, 0, 0, 0, 0, 0]);
+            let idx_val = BigInt256::from_u32(idx as u32);
             let diff = if j > idx {
-                let j_big = BigInt256::from_limbs([j as u32, 0, 0, 0, 0, 0, 0, 0, 0]);
+                let j_big = BigInt256::from_u32(j as u32);
                 j_big.sub_mod(&idx_val, &order)
             } else {
                 // j < idx, need to compute (j - idx) mod p = p - (idx - j)
-                let idx_big = BigInt256::from_limbs([idx as u32, 0, 0, 0, 0, 0, 0, 0, 0]);
-                let j_big = BigInt256::from_limbs([j as u32, 0, 0, 0, 0, 0, 0, 0, 0]);
+                let idx_big = BigInt256::from_u32(idx as u32);
+                let j_big = BigInt256::from_u32(j as u32);
                 let diff_abs = idx_big.sub_mod(&j_big, &order);
                 order.sub_mod(&diff_abs, &order)
             };
@@ -204,7 +205,7 @@ mod tests {
         let coeff = lagrange_coefficient(1, &peers);
 
         // l_1 = 2 / (2 - 1) = 2
-        let expected = BigInt256::from_limbs([2, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let expected = BigInt256::from_u32(2);
         assert_eq!(coeff.limbs, expected.limbs);
     }
 
@@ -214,17 +215,17 @@ mod tests {
 
         // f(x) = 5 + 3x (secret=5, one random coeff=3)
         let coeffs = vec![
-            BigInt256::from_limbs([5, 0, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([3, 0, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u32(5),
+            BigInt256::from_u32(3),
         ];
 
         // f(1) = 5 + 3*1 = 8
-        let x1 = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let x1 = BigInt256::from_u32(1);
         let y1 = evaluate_polynomial(&coeffs, &x1, &order);
         assert_eq!(y1.limbs[0], 8);
 
         // f(2) = 5 + 3*2 = 11
-        let x2 = BigInt256::from_limbs([2, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let x2 = BigInt256::from_u32(2);
         let y2 = evaluate_polynomial(&coeffs, &x2, &order);
         assert_eq!(y2.limbs[0], 11);
     }
@@ -236,10 +237,10 @@ mod tests {
 
         // f(x) = 5 + 3x (secret=5, coefficient=3)
         // f(1) = 8, f(2) = 11, f(3) = 14
-        let secret = BigInt256::from_limbs([5, 0, 0, 0, 0, 0, 0, 0, 0]);
-        let share1 = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
-        let share2 = BigInt256::from_limbs([11, 0, 0, 0, 0, 0, 0, 0, 0]);
-        let share3 = BigInt256::from_limbs([14, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let secret = BigInt256::from_u32(5);
+        let share1 = BigInt256::from_u32(8);
+        let share2 = BigInt256::from_u32(11);
+        let share3 = BigInt256::from_u32(14);
 
         // Reconstruct using shares 1 and 2
         let indices12 = vec![1, 2];

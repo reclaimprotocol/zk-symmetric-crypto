@@ -287,10 +287,10 @@ mod tests {
 
         // === Client side: prepare request ===
         let secret_data = [
-            BigInt256::from_limbs([111, 222, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([333, 444, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u64(0x00DE_006F),
+            BigInt256::from_u64(0x01BC_014D),
         ];
-        let domain_separator = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_separator = BigInt256::from_u32(1);
 
         // Hash to point
         let data_point = hash_to_point_mimc(&secret_data, &domain_separator);

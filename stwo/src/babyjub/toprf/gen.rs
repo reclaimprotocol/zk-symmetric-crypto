@@ -237,21 +237,23 @@ fn hash_to_scalar(secret_data: &[BigInt256; 2], domain_separator: &BigInt256) ->
 /// Hash point coordinates to scalar for DLEQ challenge using MiMC.
 ///
 /// This computes a 256-bit scalar from 12 Field256 values (6 points × 2 coordinates) by:
-/// 1. Hashing 9 times with domain separators 0-8
-/// 2. Each hash produces one 29-bit limb (using low bits of MiMC output)
+/// 1. Hashing 17 times with domain separators 0-16
+/// 2. Each hash produces one 16-bit limb (using low bits of MiMC output)
 /// 3. The result is reduced modulo the scalar order
 fn hash_to_scalar_dleq(coords: &[BigInt256; 12]) -> BigInt256 {
-    let mut result_limbs = [0u32; 9];
+    use super::super::field256::N_LIMBS;
 
-    for limb_idx in 0..9 {
+    let mut result_limbs = [0u32; N_LIMBS];
+
+    for limb_idx in 0..N_LIMBS {
         // Create input with domain separator prepended
         let mut extended_input: Vec<BigInt256> = Vec::with_capacity(coords.len() + 1);
-        extended_input.push(BigInt256::from_limbs([limb_idx as u32, 0, 0, 0, 0, 0, 0, 0, 0]));
+        extended_input.push(BigInt256::from_u32(limb_idx as u32));
         extended_input.extend(coords.iter().cloned());
 
         let hash = mimc_hash(&extended_input);
-        // Use low 29 bits of the MiMC hash (from limb 0)
-        result_limbs[limb_idx] = hash.limbs[0] & 0x1FFFFFFF;
+        // Use low 16 bits of the MiMC hash (from limb 0)
+        result_limbs[limb_idx] = hash.limbs[0] & 0xFFFF;
     }
 
     // Reduce modulo scalar order
@@ -363,10 +365,10 @@ mod tests {
         let order = scalar_order();
 
         let secret_data = [
-            BigInt256::from_limbs([111, 222, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([333, 444, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u64(0x00DE_006F),
+            BigInt256::from_u64(0x01BC_014D),
         ];
-        let domain_separator = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_separator = BigInt256::from_u32(1);
 
         // Generate key (threshold=1)
         let shared_key = generate_shared_key(&mut rng, 1, 1);

@@ -444,10 +444,10 @@ mod tests {
         let order = scalar_order();
 
         let secret_data = [
-            BigInt256::from_limbs([111, 222, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([333, 444, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u64(0x00DE_006F),
+            BigInt256::from_u64(0x01BC_014D),
         ];
-        let domain_separator = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_separator = BigInt256::from_u32(1);
 
         let shared_key = generate_shared_key(&mut rng, 1, 1);
         let share = &shared_key.shares[0];

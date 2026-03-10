@@ -998,7 +998,7 @@ pub fn bench_toprf_native(secret_bytes: &[u8], domain_separator: u32) -> String 
 
     // Convert secret to field elements
     let secret_data = bytes_to_field256_elements(secret_bytes);
-    let domain = BigInt256::from_limbs([domain_separator, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let domain = BigInt256::from_u32(domain_separator);
 
     // Generate key (threshold=1)
     let shared_key = generate_shared_key(&mut rng, 1, 1);

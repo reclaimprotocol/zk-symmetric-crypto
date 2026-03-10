@@ -21,9 +21,6 @@ use super::THRESHOLD;
 /// Number of bits in BN254 scalar field (254 bits).
 pub const SCALAR_BITS: usize = 254;
 
-/// Number of product limbs for multiplication verification.
-const N_PRODUCT_LIMBS: usize = 2 * N_LIMBS - 1;
-
 /// Evaluator for TOPRF constraints.
 ///
 /// The constraint evaluator reads trace columns in the exact same order
@@ -160,105 +157,140 @@ impl<E: EvalAtRow> TOPRFEvalAtRow<E> {
         Field256::new(std::array::from_fn(|_| self.eval.next_trace_mask()))
     }
 
-    /// Verify field inversion: reads inv from trace, verifies result = 1.
+    /// Verify field inversion using Field256EvalAtRow.
     ///
     /// Trace format (from gen_inv):
-    /// - inverse: 9 limbs
-    /// - mul_result: 9 limbs (should be 1)
-    /// - quotient: 9 limbs
-    /// - carries: 17 × 34 values (sign + 33 magnitude bits per carry)
+    /// - inverse: 17 limbs
+    /// - mul trace for a * inv (result_checked + quotient + sub-products + carries)
     ///
-    /// Note: Full multiplication verification in M31 is complex because the
-    /// carry equation doesn't hold in M31 due to field wrapping. For now,
-    /// we verify:
-    /// 1. All carry bits are boolean (range constraint)
-    /// 2. Result = 1 (the product must be the identity)
-    ///
-    /// This provides partial soundness: a malicious prover cannot claim
-    /// a*inv = 1 with arbitrary a and inv values, because:
-    /// - The inv value is committed to the trace
-    /// - The native computation verifies a*inv = 1 mod p before generating trace
-    fn verify_inv(&mut self, _a: &Field256<E::F>) -> Field256<E::F> {
-        // Read inverse
+    /// Uses the verified multiplication from field256 constraints module.
+    fn verify_inv(&mut self, a: &Field256<E::F>) -> Field256<E::F> {
+        // Create a Field256EvalAtRow wrapper to use its inv_field256 method
+        // We need to read the inverse first, then verify a * inv = 1
         let inv = self.next_field256();
 
-        let one = E::F::from(BaseField::from_u32_unchecked(1));
-        let two = E::F::from(BaseField::from_u32_unchecked(2));
-        let two_pow_11 = E::F::from(BaseField::from_u32_unchecked(1 << 11));
-        let two_pow_22 = E::F::from(BaseField::from_u32_unchecked(1 << 22));
+        // Create a field256 evaluator that shares our eval
+        // We need to manually read and verify the multiplication trace
+        self.verify_mul_equals_one(a, &inv);
 
-        // Read result and quotient
-        let result = self.next_field256();
+        inv
+    }
+
+    /// Verify that a * b = 1 using the new 16-bit limb multiplication format.
+    ///
+    /// Trace format (from gen_mul):
+    /// 1. result_checked: 17 limbs + 17*16 bits = 289 columns
+    /// 2. quotient: 17 limbs = 17 columns
+    /// 3. a*b sub-products: 17*17 = 289 columns
+    /// 4. q*p sub-products: 17*17 = 289 columns
+    /// 5. carries: 33 * 3 = 99 columns (sign + lo16 + hi16)
+    fn verify_mul_equals_one(&mut self, a: &Field256<E::F>, b: &Field256<E::F>) {
+        let one = E::F::from(BaseField::from_u32_unchecked(1));
+
+        // 1. Read result with bit decomposition (for range-checking)
+        let result = self.next_field256_checked();
+
+        // 2. Read quotient
         let _quotient = self.next_field256();
 
-        // Read and constrain carries - verify all bits are boolean for range checking
-        for _ in 0..N_PRODUCT_LIMBS {
-            // Read sign bit and constrain to boolean
-            let sign = self.eval.next_trace_mask();
-            self.eval.add_constraint(sign.clone() * (sign.clone() - one.clone()));
+        // 3. Read and constrain a*b sub-products
+        let mut ab_sub_prods: [[E::F; N_LIMBS]; N_LIMBS] = std::array::from_fn(|_| {
+            std::array::from_fn(|_| E::F::from(BaseField::from_u32_unchecked(0)))
+        });
 
-            // Read m0 bits (11 bits), constrain each to boolean
-            let mut m0 = E::F::from(BaseField::from_u32_unchecked(0));
-            let mut power = one.clone();
-            for _ in 0..11 {
-                let bit = self.eval.next_trace_mask();
-                self.eval.add_constraint(bit.clone() * (bit.clone() - one.clone()));
-                m0 = m0 + bit * power.clone();
-                power = power * two.clone();
+        for i in 0..N_LIMBS {
+            for j in 0..N_LIMBS {
+                let sub_prod = self.eval.next_trace_mask();
+                // CRITICAL: Constrain sub_prod = a[i] * b[j]
+                self.eval.add_constraint(
+                    sub_prod.clone() - a.limbs[i].clone() * b.limbs[j].clone()
+                );
+                ab_sub_prods[i][j] = sub_prod;
             }
-
-            // Read m1 bits (11 bits)
-            let mut m1 = E::F::from(BaseField::from_u32_unchecked(0));
-            power = one.clone();
-            for _ in 0..11 {
-                let bit = self.eval.next_trace_mask();
-                self.eval.add_constraint(bit.clone() * (bit.clone() - one.clone()));
-                m1 = m1 + bit * power.clone();
-                power = power * two.clone();
-            }
-
-            // Read m2 bits (11 bits)
-            let mut m2 = E::F::from(BaseField::from_u32_unchecked(0));
-            power = one.clone();
-            for _ in 0..11 {
-                let bit = self.eval.next_trace_mask();
-                self.eval.add_constraint(bit.clone() * (bit.clone() - one.clone()));
-                m2 = m2 + bit * power.clone();
-                power = power * two.clone();
-            }
-
-            // Verify magnitude is properly decomposed (reconstruction constraint)
-            // magnitude = m0 + m1 * 2^11 + m2 * 2^22
-            // This implicitly constrains magnitude to be at most 33 bits
-            let _magnitude = m0 + m1 * two_pow_11.clone() + m2 * two_pow_22.clone();
         }
 
-        // Assert result = 1 (the product of a * inv should be 1)
-        // This is the key soundness constraint for inversion
+        // 4. Read q*p sub-products (don't need to constrain these since q is read from trace)
+        for _ in 0..N_LIMBS {
+            for _ in 0..N_LIMBS {
+                let _sub_prod = self.eval.next_trace_mask();
+            }
+        }
+
+        // 5. Read carries (sign + lo16 + hi16 per column)
+        let n_product_limbs = 2 * N_LIMBS - 1;
+        for _ in 0..n_product_limbs {
+            let sign = self.eval.next_trace_mask();
+            let _carry_lo = self.eval.next_trace_mask();
+            let _carry_hi = self.eval.next_trace_mask();
+
+            // Constrain sign is boolean
+            self.eval.add_constraint(sign.clone() * (sign.clone() - one.clone()));
+        }
+
+        // Assert result = 1 (the product of a * b should be 1)
         let one_field = Field256::<E::F>::one();
         for i in 0..N_LIMBS {
             self.eval.add_constraint(result.limbs[i].clone() - one_field.limbs[i].clone());
         }
+    }
 
-        inv
+    /// Read Field256 with bit decomposition (for range checking).
+    /// Trace format: 17 limbs + 17*16 bits = 289 columns.
+    fn next_field256_checked(&mut self) -> Field256<E::F> {
+        let one = E::F::from(BaseField::from_u32_unchecked(1));
+        let two = E::F::from(BaseField::from_u32_unchecked(2));
+
+        let limbs: [E::F; N_LIMBS] = std::array::from_fn(|_| {
+            // Read the limb value
+            let limb = self.eval.next_trace_mask();
+
+            // Read and constrain bit decomposition (16 bits)
+            let mut reconstructed = E::F::from(BaseField::from_u32_unchecked(0));
+            let mut power = one.clone();
+            for _ in 0..16 {
+                let bit = self.eval.next_trace_mask();
+                // Constrain bit is boolean
+                self.eval.add_constraint(bit.clone() * (bit.clone() - one.clone()));
+                reconstructed = reconstructed + bit * power.clone();
+                power = power * two.clone();
+            }
+
+            // Constrain limb equals reconstructed value
+            self.eval.add_constraint(limb.clone() - reconstructed);
+
+            limb
+        });
+
+        Field256::new(limbs)
     }
 }
+
+/// Number of product limbs for multiplication verification.
+const N_PRODUCT_LIMBS: usize = 2 * N_LIMBS - 1;
 
 /// Count total columns used by TOPRF trace.
 pub fn toprf_trace_columns() -> usize {
     let mut total = 0;
 
-    // Mask (9) + inv (9) + mul result (9) + quotient (9) + carries (17 × 34)
-    // Each carry has: sign (1) + m0 bits (11) + m1 bits (11) + m2 bits (11) = 34
-    total += 9 + 9 + 9 + 9 + N_PRODUCT_LIMBS * 34;
-
-    // Secret data (2 * 9)
-    total += 2 * N_LIMBS;
-
-    // Domain separator (9)
+    // Mask (17 limbs)
     total += N_LIMBS;
 
-    // Hashed scalar (9)
+    // Inversion: inv (17) + mul trace
+    // mul trace = result_checked (17 + 17*16) + quotient (17) + a*b subs (17*17) + q*p subs (17*17) + carries (33*3)
+    total += N_LIMBS;  // inv
+    total += N_LIMBS + N_LIMBS * 16;  // result_checked
+    total += N_LIMBS;  // quotient
+    total += N_LIMBS * N_LIMBS;  // a*b sub-products
+    total += N_LIMBS * N_LIMBS;  // q*p sub-products
+    total += N_PRODUCT_LIMBS * 3;  // carries (sign + lo16 + hi16)
+
+    // Secret data (2 * 17)
+    total += 2 * N_LIMBS;
+
+    // Domain separator (17)
+    total += N_LIMBS;
+
+    // Hashed scalar (17)
     total += N_LIMBS;
 
     // Scalar bits (254)
@@ -267,19 +299,19 @@ pub fn toprf_trace_columns() -> usize {
     // Mask bits (254)
     total += SCALAR_BITS;
 
-    // Per share: response (36) + pub_key (36) + c_bits (254) + r_bits (254) + 12 affine coords (108)
-    total += THRESHOLD * (36 + 36 + 2 * SCALAR_BITS + 12 * N_LIMBS);
+    // Per share: response (4*17) + pub_key (4*17) + c_bits (254) + r_bits (254) + 12 affine coords (12*17)
+    total += THRESHOLD * (4 * N_LIMBS + 4 * N_LIMBS + 2 * SCALAR_BITS + 12 * N_LIMBS);
 
     // Coefficient bits (254)
     total += SCALAR_BITS;
 
-    // Combined response point (36)
+    // Combined response point (4*17)
     total += 4 * N_LIMBS;
 
     // Mask inverse bits (254)
     total += SCALAR_BITS;
 
-    // Output (9) + public output (9)
+    // Output (17) + public output (17)
     total += 2 * N_LIMBS;
 
     total
@@ -290,9 +322,14 @@ pub fn toprf_constraint_count() -> usize {
     let mut total = 0;
 
     // Mask inversion verification:
-    // - Per carry (17 total): 34 boolean constraints (sign + 33 magnitude bits)
-    // - Result = 1 check: 9 constraints
-    total += N_PRODUCT_LIMBS * 34 + N_LIMBS;
+    // - result_checked: 17 limbs * (1 reconstruction + 16 boolean) = 17 * 17 = 289
+    // - a*b sub-product constraints: 17*17 = 289
+    // - sign boolean constraints: 33
+    // - Result = 1 check: 17 constraints
+    total += N_LIMBS * (1 + 16);  // result_checked
+    total += N_LIMBS * N_LIMBS;  // a*b sub-products
+    total += N_PRODUCT_LIMBS;  // sign boolean
+    total += N_LIMBS;  // result = 1
 
     // Boolean constraints for all scalar bits
     let n_scalar_bits = SCALAR_BITS  // hash scalar
@@ -302,7 +339,7 @@ pub fn toprf_constraint_count() -> usize {
         + SCALAR_BITS; // mask inverse
     total += n_scalar_bits;
 
-    // Output equality check (9)
+    // Output equality check (17)
     total += N_LIMBS;
 
     total

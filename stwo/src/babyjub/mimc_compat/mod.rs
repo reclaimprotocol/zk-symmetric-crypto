@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn test_mimc_encrypt_basic() {
         let p = modulus();
-        let message = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let message = BigInt256::from_u32(1);
         let key = BigInt256::zero();
 
         let result = mimc_encrypt(&message, &key);
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_mimc_hash_single_element() {
-        let input = BigInt256::from_limbs([42, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let input = BigInt256::from_u32(42);
         let hash = mimc_hash(&[input]);
 
         // Hash should be deterministic
@@ -123,9 +123,9 @@ mod tests {
 
     #[test]
     fn test_mimc_hash_multiple_elements() {
-        let a = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
-        let b = BigInt256::from_limbs([2, 0, 0, 0, 0, 0, 0, 0, 0]);
-        let c = BigInt256::from_limbs([3, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let a = BigInt256::from_u32(1);
+        let b = BigInt256::from_u32(2);
+        let c = BigInt256::from_u32(3);
 
         let hash1 = mimc_hash(&[a, b, c]);
         let hash2 = mimc_hash(&[a, b, c]);

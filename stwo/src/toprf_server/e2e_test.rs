@@ -43,33 +43,7 @@ mod tests {
 
     /// Convert bytes (little-endian) to BigInt256.
     fn bytes_to_bigint256_le(bytes: &[u8]) -> BigInt256 {
-        // Each limb is 29 bits, we need to pack bytes into limbs
-        let mut limbs = [0u32; 9];
-        let mut bit_pos = 0;
-
-        for &byte in bytes {
-            // Add this byte at the current bit position
-            let limb_idx = bit_pos / 29;
-            let bit_offset = bit_pos % 29;
-
-            if limb_idx < 9 {
-                limbs[limb_idx] |= (byte as u32) << bit_offset;
-
-                // Handle overflow to next limb
-                if bit_offset > 21 && limb_idx + 1 < 9 {
-                    limbs[limb_idx + 1] |= (byte as u32) >> (29 - bit_offset);
-                }
-            }
-
-            bit_pos += 8;
-        }
-
-        // Mask to 29 bits per limb
-        for limb in &mut limbs {
-            *limb &= 0x1FFFFFFF;
-        }
-
-        BigInt256::from_limbs(limbs)
+        BigInt256::from_bytes_le(bytes)
     }
 
     /// XOR two byte slices (for ChaCha encryption).
@@ -176,18 +150,11 @@ mod tests {
         println!("Server public key x: {:?}", shared_key.server_public_key.x.limbs);
 
         // === Client: Prepare OPRF request ===
-        let domain_separator = BigInt256::from_limbs([
+        let domain_separator = BigInt256::from_u64(
             // "reclaim" encoded as little-endian
-            0x7265636c, // "recl" = 0x6c636572 LE
-            0x61696d00, // "aim\0" = 0x006d6961 LE
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        ]);
+            // "recl" = 0x6c636572 LE, "aim\0" = 0x006d6961 LE
+            0x61696d00_7265636c,
+        );
 
         // Hash secret to curve point
         let data_point = hash_to_point_mimc(&secret_elements, &domain_separator);
@@ -340,7 +307,7 @@ mod tests {
         let shared_key = generate_shared_key(&mut rng, nodes, threshold);
 
         // Hash to point
-        let domain_separator = BigInt256::from_limbs([0x12345678, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_separator = BigInt256::from_u32(0x12345678);
         let data_point = hash_to_point_mimc(&secret_elements, &domain_separator);
 
         // Mask
@@ -400,7 +367,7 @@ mod tests {
         let secret_str = "same_secret";
         let secret_elements = bytes_to_field256_elements(secret_str.as_bytes());
 
-        let domain_separator = BigInt256::from_limbs([0xABCDEF, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_separator = BigInt256::from_u32(0xABCDEF);
         let data_point = hash_to_point_mimc(&secret_elements, &domain_separator);
 
         // First run: use shares 1 and 2

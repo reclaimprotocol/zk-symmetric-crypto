@@ -224,7 +224,7 @@ mod tests {
         let doubled = point_native::double_point(&p);
 
         // Method 2: scalar_mul by 2
-        let two = BigInt256::from_limbs([2, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let two = BigInt256::from_u32(2);
         let scalar_2 = point_native::scalar_mul(&p, &two);
 
         // Convert to affine
@@ -252,7 +252,7 @@ mod tests {
         let via_double = point_native::clear_cofactor(&p);
 
         // Method 2: scalar_mul by 8
-        let eight = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let eight = BigInt256::from_u32(8);
         let via_scalar = point_native::scalar_mul(&p, &eight);
 
         // Convert to affine
@@ -273,7 +273,7 @@ mod tests {
         let base = base_point();
 
         // Method 1: scalar_mul(G, 8)
-        let eight = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let eight = BigInt256::from_u32(8);
         let g_times_8 = point_native::scalar_mul(&base, &eight);
 
         // Method 2: clear_cofactor(G) = 8 * G
@@ -298,7 +298,7 @@ mod tests {
         let base = base_point();
 
         let b = random_scalar(&mut rng);
-        let eight = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let eight = BigInt256::from_u32(8);
 
         // Compute 8*b using mul_mod
         let eight_b = eight.mul_mod(&b, &modulus);
@@ -324,7 +324,7 @@ mod tests {
         let base = base_point();
 
         let b = random_scalar(&mut rng);
-        let one = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let one = BigInt256::from_u32(1);
 
         // G * b
         let g_b = point_native::scalar_mul(&base, &b);
@@ -349,7 +349,7 @@ mod tests {
         let base = base_point();
 
         let b = random_scalar(&mut rng);
-        let two = BigInt256::from_limbs([2, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let two = BigInt256::from_u32(2);
 
         // G * b
         let g_b = point_native::scalar_mul(&base, &b);
@@ -380,7 +380,7 @@ mod tests {
         let base = base_point();
 
         let b = random_scalar(&mut rng);
-        let eight = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let eight = BigInt256::from_u32(8);
         let eight_b = eight.mul_mod(&b, &order);
 
         // Get bits for 8*b
@@ -423,7 +423,7 @@ mod tests {
         let order = scalar_order();
         let base = base_point();
 
-        let a = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]); // Use 8 like cofactor
+        let a = BigInt256::from_u32(8); // Use 8 like cofactor
         let b = random_scalar(&mut rng);
 
         // Method 1: (a*b)*G - first compute scalar product, then multiply G
@@ -476,7 +476,7 @@ mod tests {
         let eight_g_x_via_double = point_native::clear_cofactor(&g_x);
 
         // Method 2: G*(8*x) via scalar multiplication
-        let eight = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let eight = BigInt256::from_u32(8);
         let eight_x = eight.mul_mod(&x, &order);
         let g_eight_x = point_native::scalar_mul(&base, &eight_x);
 
@@ -535,7 +535,7 @@ mod tests {
         let v = random_scalar(&mut rng);
 
         // Compute 8*x
-        let eight = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let eight = BigInt256::from_u32(8);
         let eight_x = eight.mul_mod(&x, &order);
 
         // r = v - c*8*x
@@ -776,10 +776,10 @@ mod tests {
         
         // === Step 2: toprf_create_request ===
         let secret_data = [
-            BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u32(123),
+            BigInt256::from_u32(456),
         ];
-        let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_sep = BigInt256::from_u32(1);
         let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
@@ -960,7 +960,7 @@ mod tests {
         
         // Compute r
         let cofactor_x = {
-            let cofactor = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+            let cofactor = BigInt256::from_u32(8);
             x.mul_mod(&cofactor, &order)
         };
         let c_times_8x = c.mul_mod(&cofactor_x, &order);
@@ -1187,10 +1187,10 @@ mod tests {
         
         // Create masked request like WASM API (using hash_to_point_mimc)
         let secret_data = [
-            BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u32(123),
+            BigInt256::from_u32(456),
         ];
-        let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_sep = BigInt256::from_u32(1);
         let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
@@ -1303,10 +1303,10 @@ mod tests {
         
         // Create masked request
         let secret_data = [
-            BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u32(123),
+            BigInt256::from_u32(456),
         ];
-        let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_sep = BigInt256::from_u32(1);
         let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
@@ -1382,10 +1382,10 @@ mod tests {
         
         // Create masked request
         let secret_data = [
-            BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u32(123),
+            BigInt256::from_u32(456),
         ];
-        let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_sep = BigInt256::from_u32(1);
         let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
@@ -1443,7 +1443,7 @@ mod tests {
         
         // Compute r
         let cofactor_x = {
-            let cofactor = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+            let cofactor = BigInt256::from_u32(8);
             x.mul_mod(&cofactor, &order)
         };
         let c_times_8x = c.mul_mod(&cofactor_x, &order);
@@ -1520,7 +1520,7 @@ mod tests {
         let c = random_scalar(&mut rng);
         
         // Compute r = v - c*8*x
-        let cofactor = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let cofactor = BigInt256::from_u32(8);
         let cofactor_x = x.mul_mod(&cofactor, &order);  // 8x
         let c_times_8x = c.mul_mod(&cofactor_x, &order);  // c * 8x
         let r = v.sub_mod(&c_times_8x, &order);  // v - c*8x
@@ -1606,10 +1606,10 @@ mod tests {
         // Create values like in WASM flow
         let private_key = random_scalar(&mut rng);
         let secret_data = [
-            BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u32(123),
+            BigInt256::from_u32(456),
         ];
-        let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_sep = BigInt256::from_u32(1);
         let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
         let mask = random_scalar(&mut rng);
         let masked_request = mask_point(&data_point, &mask);
@@ -1680,10 +1680,10 @@ mod tests {
             let mut rng = ChaCha20Rng::seed_from_u64(42);
             let private_key = random_scalar(&mut rng);
             let secret_data = [
-                BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-                BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+                BigInt256::from_u32(123),
+                BigInt256::from_u32(456),
             ];
-            let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+            let domain_sep = BigInt256::from_u32(1);
             let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
             let mask = random_scalar(&mut rng);
             let masked_request = mask_point(&data_point, &mask);
@@ -1701,10 +1701,10 @@ mod tests {
             let mut rng = ChaCha20Rng::seed_from_u64(42);
             let private_key = random_scalar(&mut rng);
             let secret_data = [
-                BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-                BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+                BigInt256::from_u32(123),
+                BigInt256::from_u32(456),
             ];
-            let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+            let domain_sep = BigInt256::from_u32(1);
             let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
             // Use data_point directly without masking
             
@@ -1776,10 +1776,10 @@ mod tests {
         
         // Now test with hash_to_point
         let secret_data = [
-            BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u32(123),
+            BigInt256::from_u32(456),
         ];
-        let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_sep = BigInt256::from_u32(1);
         let h = hash_to_point_mimc(&secret_data, &domain_sep);
         
         let mask = random_scalar(&mut rng);
@@ -1844,10 +1844,10 @@ mod tests {
         
         // Test 2: hash_to_point * mask
         let secret_data = [
-            BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-            BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+            BigInt256::from_u32(123),
+            BigInt256::from_u32(456),
         ];
-        let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_sep = BigInt256::from_u32(1);
         let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
         let mask = random_scalar(&mut rng);
         let masked = mask_point(&data_point, &mask);
@@ -1861,7 +1861,7 @@ mod tests {
         println!("  after clear: {:?}", p2c_x.limbs);
         
         // Check if 8*P == 8 times P (i.e., clear_cofactor produces consistent results)
-        let eight = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let eight = BigInt256::from_u32(8);
         let p2_times_8 = point_native::scalar_mul(&masked_priv, &eight);
         let (p2x8_x, _) = p2_times_8.to_affine(&p);
         println!("  8 * (masked * priv) via scalar_mul: {:?}", p2x8_x.limbs);
@@ -1899,10 +1899,10 @@ mod tests {
             let mut rng = ChaCha20Rng::seed_from_u64(42);
             let private_key = random_scalar(&mut rng);
             let secret_data = [
-                BigInt256::from_limbs([123, 0, 0, 0, 0, 0, 0, 0, 0]),
-                BigInt256::from_limbs([456, 0, 0, 0, 0, 0, 0, 0, 0]),
+                BigInt256::from_u32(123),
+                BigInt256::from_u32(456),
             ];
-            let domain_sep = BigInt256::from_limbs([1, 0, 0, 0, 0, 0, 0, 0, 0]);
+            let domain_sep = BigInt256::from_u32(1);
             let data_point = hash_to_point_mimc(&secret_data, &domain_sep);
             let mask = random_scalar(&mut rng);
             let h = mask_point(&data_point, &mask);
@@ -1951,7 +1951,7 @@ mod tests {
             let prove_bytes = get_byte_stream(&[&base, &x_g_cleared, &v_g, &v_h, &h, &x_h_cleared]);
             let c = hash_bytes(&prove_bytes);
             
-            let cofactor = BigInt256::from_limbs([8, 0, 0, 0, 0, 0, 0, 0, 0]);
+            let cofactor = BigInt256::from_u32(8);
             let cofactor_x = x.mul_mod(&cofactor, &order);
             let c_times_8x = c.mul_mod(&cofactor_x, &order);
             let r = v.sub_mod(&c_times_8x, &order);

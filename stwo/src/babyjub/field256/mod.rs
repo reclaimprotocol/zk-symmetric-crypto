@@ -1,8 +1,11 @@
 //! 256-bit field arithmetic emulated over M31.
 //!
-//! Uses 9 limbs of 29 bits each (261 bits total, covering 254-bit BN254 scalar field).
-//! Each limb fits comfortably in M31 (2^31 - 1), and product of two 29-bit values
-//! is < 2^62, safe for intermediate computations.
+//! Uses 17 limbs of 16 bits each (272 bits total, covering 256-bit fields).
+//! Each limb fits in u16 (max 65535), and product of two 16-bit values
+//! is < 2^32, which fits safely in M31 (2^31 - 1) when accumulated carefully.
+//!
+//! This design enables verified multiplication: we can constrain a*b = q*p + r
+//! because sub-products (16-bit * 16-bit = 32-bit) stay within M31 bounds.
 
 pub mod constraints;
 pub mod gen;
@@ -14,10 +17,12 @@ use stwo::core::fields::m31::BaseField;
 use stwo::core::fields::FieldExpOps;
 
 /// Number of bits per limb.
-pub const LIMB_BITS: u32 = 29;
+/// Using 16 bits ensures sub-products fit in M31 for verified multiplication.
+pub const LIMB_BITS: u32 = 16;
 
 /// Number of limbs for 256-bit representation.
-pub const N_LIMBS: usize = 9;
+/// 17 * 16 = 272 bits, covering 256-bit field elements.
+pub const N_LIMBS: usize = 17;
 
 /// Mask for extracting LIMB_BITS bits.
 pub const LIMB_MASK: u32 = (1 << LIMB_BITS) - 1;
@@ -28,18 +33,26 @@ pub const TWO_POW_LIMB: u32 = 1 << LIMB_BITS;
 /// BN254 scalar field modulus (used as Baby Jubjub base field).
 /// r = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 ///
-/// In 29-bit limbs (little-endian):
-/// Computed as: r = sum(MODULUS[i] * 2^(29*i) for i in 0..9)
+/// In 16-bit limbs (little-endian):
+/// Computed as: r = sum(MODULUS[i] * 2^(16*i) for i in 0..17)
 pub const MODULUS: [u32; N_LIMBS] = [
-    0x10000001, // limb 0
-    0x1f0fac9f, // limb 1
-    0x0e5c2450, // limb 2
-    0x07d090f3, // limb 3
-    0x1585d283, // limb 4
-    0x02db40c0, // limb 5
-    0x00a6e141, // limb 6
-    0x0e5c2634, // limb 7
-    0x0030644e, // limb 8
+    0x0001, // limb 0:  bits 0-15
+    0xf000, // limb 1:  bits 16-31
+    0xf593, // limb 2:  bits 32-47
+    0x43e1, // limb 3:  bits 48-63
+    0x7091, // limb 4:  bits 64-79
+    0x79b9, // limb 5:  bits 80-95
+    0xe848, // limb 6:  bits 96-111
+    0x2833, // limb 7:  bits 112-127
+    0x585d, // limb 8:  bits 128-143
+    0x8181, // limb 9:  bits 144-159
+    0x45b6, // limb 10: bits 160-175
+    0xb850, // limb 11: bits 176-191
+    0xa029, // limb 12: bits 192-207
+    0xe131, // limb 13: bits 208-223
+    0x4e72, // limb 14: bits 224-239
+    0x3064, // limb 15: bits 240-255
+    0x0000, // limb 16: bits 256-271 (overflow)
 ];
 
 /// Baby Jubjub prime subgroup order (used for scalar multiplication).
@@ -48,17 +61,25 @@ pub const MODULUS: [u32; N_LIMBS] = [
 /// This is the order of the generator point G in the prime-order subgroup.
 /// The full curve has order 8 * ℓ (cofactor 8).
 ///
-/// In 29-bit limbs (little-endian):
+/// In 16-bit limbs (little-endian):
 pub const SCALAR_ORDER: [u32; N_LIMBS] = [
-    0x192126f1, // limb 0
-    0x1b94bee1, // limb 1
-    0x083b8299, // limb 2
-    0x1ddb7072, // limb 3
-    0x02b0bab3, // limb 4
-    0x045b6818, // limb 5
-    0x1014dc28, // limb 6
-    0x19cb84c6, // limb 7
-    0x00060c89, // limb 8
+    0x26f1, // limb 0
+    0x3921, // limb 1
+    0x97dc, // limb 2
+    0x6772, // limb 3
+    0xee0a, // limb 4
+    0x3920, // limb 5
+    0xedb8, // limb 6
+    0xab3e, // limb 7
+    0x2b0b, // limb 8
+    0xd030, // limb 9
+    0x08b6, // limb 10
+    0x370a, // limb 11
+    0x3405, // limb 12
+    0x5c26, // limb 13
+    0x89ce, // limb 14
+    0x060c, // limb 15
+    0x0000, // limb 16
 ];
 
 
@@ -117,63 +138,42 @@ where
 }
 
 /// Convert a u32 array (representing a 256-bit number in 32-bit limbs, little-endian)
-/// to 29-bit limbs for Field256.
-pub fn u256_to_limbs29(value: &[u32; 8]) -> [u32; N_LIMBS] {
-    // Combine all bits into a single computation
-    // value[i] contains bits [32*i, 32*(i+1))
-    // We need to extract 29-bit chunks
-
+/// to 16-bit limbs for Field256.
+pub fn u256_to_limbs16(value: &[u32; 8]) -> [u32; N_LIMBS] {
     let mut result = [0u32; N_LIMBS];
 
-    // Use u64 for intermediate calculations to avoid overflow
-    let mut bit_buffer: u64 = 0;
-    let mut buffer_bits: u32 = 0;
-    let mut input_idx = 0;
-    let mut output_idx = 0;
+    // Each 32-bit word gives us 2 x 16-bit limbs
+    for i in 0..8 {
+        result[2 * i] = value[i] & LIMB_MASK;
+        result[2 * i + 1] = (value[i] >> 16) & LIMB_MASK;
+    }
+    // Limb 16 is always 0 for 256-bit values
+    result[16] = 0;
 
-    while output_idx < N_LIMBS {
-        // Fill buffer if we need more bits
-        while buffer_bits < LIMB_BITS && input_idx < 8 {
-            bit_buffer |= (value[input_idx] as u64) << buffer_bits;
-            buffer_bits += 32;
-            input_idx += 1;
-        }
+    result
+}
 
-        // Extract 29-bit limb
-        result[output_idx] = (bit_buffer as u32) & LIMB_MASK;
-        bit_buffer >>= LIMB_BITS;
-        buffer_bits = buffer_bits.saturating_sub(LIMB_BITS);
-        output_idx += 1;
+/// Convert 16-bit limbs back to 32-bit limbs (little-endian).
+pub fn limbs16_to_u256(limbs: &[u32; N_LIMBS]) -> [u32; 8] {
+    let mut result = [0u32; 8];
+
+    // Combine pairs of 16-bit limbs into 32-bit words
+    for i in 0..8 {
+        result[i] = limbs[2 * i] | (limbs[2 * i + 1] << 16);
     }
 
     result
 }
 
-/// Convert 29-bit limbs back to 32-bit limbs (little-endian).
+// Legacy aliases for compatibility during transition
+#[inline]
+pub fn u256_to_limbs29(value: &[u32; 8]) -> [u32; N_LIMBS] {
+    u256_to_limbs16(value)
+}
+
+#[inline]
 pub fn limbs29_to_u256(limbs: &[u32; N_LIMBS]) -> [u32; 8] {
-    let mut result = [0u32; 8];
-
-    let mut bit_buffer: u64 = 0;
-    let mut buffer_bits: u32 = 0;
-    let mut input_idx = 0;
-    let mut output_idx = 0;
-
-    while output_idx < 8 {
-        // Fill buffer if we need more bits
-        while buffer_bits < 32 && input_idx < N_LIMBS {
-            bit_buffer |= (limbs[input_idx] as u64) << buffer_bits;
-            buffer_bits += LIMB_BITS;
-            input_idx += 1;
-        }
-
-        // Extract 32-bit word
-        result[output_idx] = bit_buffer as u32;
-        bit_buffer >>= 32;
-        buffer_bits = buffer_bits.saturating_sub(32);
-        output_idx += 1;
-    }
-
-    result
+    limbs16_to_u256(limbs)
 }
 
 /// Create Field256 constant from 29-bit limb array.
@@ -204,15 +204,15 @@ mod tests {
             0x00667788,
         ];
 
-        let limbs29 = u256_to_limbs29(&original);
-        let recovered = limbs29_to_u256(&limbs29);
+        let limbs16 = u256_to_limbs16(&original);
+        let recovered = limbs16_to_u256(&limbs16);
 
         assert_eq!(original, recovered, "Round-trip conversion failed");
     }
 
     #[test]
     fn test_modulus_size() {
-        // Verify each limb fits in 29 bits
+        // Verify each limb fits in 16 bits
         for (i, &limb) in MODULUS.iter().enumerate() {
             assert!(
                 limb < (1 << LIMB_BITS),
@@ -227,26 +227,43 @@ mod tests {
     #[test]
     fn test_zero_conversion() {
         let zero: [u32; 8] = [0; 8];
-        let limbs29 = u256_to_limbs29(&zero);
-        assert_eq!(limbs29, [0u32; N_LIMBS]);
+        let limbs16 = u256_to_limbs16(&zero);
+        assert_eq!(limbs16, [0u32; N_LIMBS]);
     }
 
     #[test]
     fn test_one_conversion() {
         let one: [u32; 8] = [1, 0, 0, 0, 0, 0, 0, 0];
-        let limbs29 = u256_to_limbs29(&one);
-        assert_eq!(limbs29[0], 1);
+        let limbs16 = u256_to_limbs16(&one);
+        assert_eq!(limbs16[0], 1);
         for i in 1..N_LIMBS {
-            assert_eq!(limbs29[i], 0);
+            assert_eq!(limbs16[i], 0);
         }
     }
 
     #[test]
     fn test_max_limb_value() {
-        // Test a value that fills all 29 bits of the first limb
-        let val: [u32; 8] = [0x1FFFFFFF, 0, 0, 0, 0, 0, 0, 0];
-        let limbs29 = u256_to_limbs29(&val);
-        assert_eq!(limbs29[0], 0x1FFFFFFF);
-        assert_eq!(limbs29[1], 0);
+        // Test a value that fills all 16 bits of the first limb
+        let val: [u32; 8] = [0xFFFF, 0, 0, 0, 0, 0, 0, 0];
+        let limbs16 = u256_to_limbs16(&val);
+        assert_eq!(limbs16[0], 0xFFFF);
+        assert_eq!(limbs16[1], 0);
+    }
+
+    #[test]
+    fn test_limb16_structure() {
+        // Test that 32-bit words are split correctly into 16-bit limbs
+        let val: [u32; 8] = [0xABCD1234, 0, 0, 0, 0, 0, 0, 0];
+        let limbs16 = u256_to_limbs16(&val);
+        assert_eq!(limbs16[0], 0x1234, "Low 16 bits");
+        assert_eq!(limbs16[1], 0xABCD, "High 16 bits");
+    }
+
+    #[test]
+    fn test_modulus_value() {
+        // Reconstruct modulus from 16-bit limbs and verify
+        let p = limbs16_to_u256(&MODULUS);
+        // First word of BN254 modulus is 0xf0000001
+        assert_eq!(p[0], 0xf0000001);
     }
 }

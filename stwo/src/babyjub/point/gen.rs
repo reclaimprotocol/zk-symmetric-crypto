@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_scalar_bits_roundtrip() {
-        let scalar = BigInt256::from_limbs([12345, 67890, 0, 0, 0, 0, 0, 0, 0]);
+        let scalar = BigInt256::from_u64(0x0001_0932_3039);
         let bits = scalar_to_bits(&scalar);
         let recovered = bits_to_scalar(&bits);
 
@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn test_scalar_mul_two() {
         let base = base_point();
-        let two = BigInt256::from_limbs([2, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let two = BigInt256::from_u32(2);
         let modulus = modulus();
 
         // 2 * P via scalar_mul

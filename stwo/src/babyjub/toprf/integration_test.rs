@@ -33,27 +33,8 @@ mod tests {
     }
 
     fn bytes_to_bigint256_le(bytes: &[u8]) -> BigInt256 {
-        let mut limbs = [0u32; 9];
-        let mut bit_pos = 0;
-
-        for &byte in bytes {
-            let limb_idx = bit_pos / 29;
-            let bit_offset = bit_pos % 29;
-
-            if limb_idx < 9 {
-                limbs[limb_idx] |= (byte as u32) << bit_offset;
-                if bit_offset > 21 && limb_idx + 1 < 9 {
-                    limbs[limb_idx + 1] |= (byte as u32) >> (29 - bit_offset);
-                }
-            }
-            bit_pos += 8;
-        }
-
-        for limb in &mut limbs {
-            *limb &= 0x1FFFFFFF;
-        }
-
-        BigInt256::from_limbs(limbs)
+        // Convert little-endian bytes to BigInt256
+        BigInt256::from_bytes_le(bytes)
     }
 
     /// Create TOPRF circuit inputs from toprf_server evaluation.
@@ -125,17 +106,9 @@ mod tests {
     #[test]
     fn test_integrated_toprf_with_server_params() {
         let secret = b"test@reclaim.com";
-        let domain_separator = BigInt256::from_limbs([
-            0x7265636c, // "recl"
-            0x61696d00, // "aim\0"
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        ]);
+        let domain_separator = BigInt256::from_u64(
+            0x61696d00_7265636c, // "recl" + "aim\0"
+        );
 
         let (inputs, expected_output) = create_circuit_inputs(secret, &domain_separator);
 
@@ -159,7 +132,7 @@ mod tests {
     #[test]
     fn test_trace_gen_with_real_params() {
         let secret = b"hello@example.org";
-        let domain_separator = BigInt256::from_limbs([12345, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_separator = BigInt256::from_u32(12345);
 
         let (inputs, _) = create_circuit_inputs(secret, &domain_separator);
 
@@ -175,7 +148,7 @@ mod tests {
 
     #[test]
     fn test_different_secrets_different_outputs() {
-        let domain_separator = BigInt256::from_limbs([999, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain_separator = BigInt256::from_u32(999);
 
         let (inputs1, output1) = create_circuit_inputs(b"secret_one", &domain_separator);
         let (inputs2, output2) = create_circuit_inputs(b"secret_two", &domain_separator);
@@ -190,7 +163,7 @@ mod tests {
     #[test]
     fn bench_native_toprf_verification() {
         let secret = b"benchmark@test.com";
-        let domain_separator = BigInt256::from_limbs([1, 2, 3, 0, 0, 0, 0, 0, 0]);
+        let domain_separator = BigInt256::from_u64(0x0003_0002_0001);
 
         let (inputs, _) = create_circuit_inputs(secret, &domain_separator);
 

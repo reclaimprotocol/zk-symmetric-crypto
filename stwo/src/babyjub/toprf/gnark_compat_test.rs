@@ -17,9 +17,9 @@ mod tests {
         let values = [
             BigInt256::zero(),
             BigInt256::one(),
-            BigInt256::from_limbs([
+            BigInt256::from_u256(&[
                 0x12345678, 0x09ABCDEF, 0x11111111, 0x22222222, 0x33333333, 0x44444444, 0x55555555,
-                0x66666666, 0x00777777,
+                0x00777777,
             ]),
         ];
 
@@ -42,7 +42,7 @@ mod tests {
     #[test]
     fn test_bigint256_trimmed_bytes() {
         // Small value should have few bytes
-        let small = BigInt256::from_limbs([0x42, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let small = BigInt256::from_u32(0x42);
         let trimmed = small.to_bytes_be_trimmed();
         assert!(trimmed.len() < 32, "Trimmed bytes should be shorter than 32");
         assert!(!trimmed.is_empty(), "Non-zero value should have bytes");
@@ -102,7 +102,7 @@ mod tests {
         // 2. Create request (simulates toprf_create_request)
         let secret_bytes = b"test@example.com";
         let secret_data = bytes_to_field_elements(secret_bytes);
-        let domain = BigInt256::from_limbs([12345, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain = BigInt256::from_u32(12345);
 
         let data_point = hash_to_point_mimc(&secret_data, &domain);
         let mask = random_scalar(&mut rng);
@@ -213,7 +213,7 @@ mod tests {
         // 2. Create request with MiMC hash_to_point
         let secret_bytes = b"test@example.com";
         let secret_data = bytes_to_field_elements(secret_bytes);
-        let domain = BigInt256::from_limbs([12345, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let domain = BigInt256::from_u32(12345);
 
         // Use MiMC-based hash_to_point for gnark compatibility
         let data_point = hash_to_point_mimc(&secret_data, &domain);
@@ -315,26 +315,6 @@ mod tests {
     }
 
     fn bytes_to_bigint_le(bytes: &[u8]) -> BigInt256 {
-        let mut limbs = [0u32; 9];
-        let mut bit_pos = 0;
-
-        for &byte in bytes {
-            let limb_idx = bit_pos / 29;
-            let bit_offset = bit_pos % 29;
-
-            if limb_idx < 9 {
-                limbs[limb_idx] |= (byte as u32) << bit_offset;
-                if bit_offset > 21 && limb_idx + 1 < 9 {
-                    limbs[limb_idx + 1] |= (byte as u32) >> (29 - bit_offset);
-                }
-            }
-            bit_pos += 8;
-        }
-
-        for limb in &mut limbs {
-            *limb &= 0x1FFFFFFF;
-        }
-
-        BigInt256::from_limbs(limbs)
+        BigInt256::from_bytes_le(bytes)
     }
 }

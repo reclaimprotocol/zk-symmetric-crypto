@@ -49,10 +49,21 @@ impl<E: EvalAtRow> ChaChaStreamEvalAtRow<E> {
         // Boolean constraints are added by next_u32()
         let plaintext: [BitU32<E::F>; STATE_SIZE] = std::array::from_fn(|_| self.next_u32());
 
-        // XOR keystream with plaintext to get ciphertext
-        // Read ciphertext from trace and constrain
+        // Read PUBLIC ciphertext from trace (16 u32s x 32 bits = 512 field elements)
+        // This is the claimed ciphertext that must match the computed value
+        let public_ciphertext: [BitU32<E::F>; STATE_SIZE] = std::array::from_fn(|_| self.next_u32());
+
+        // XOR keystream with plaintext to get computed ciphertext
+        // CRITICAL: Bind computed ciphertext to public ciphertext
         for i in 0..STATE_SIZE {
-            let _ciphertext = self.xor_u32(keystream[i].clone(), plaintext[i].clone());
+            let computed = self.xor_u32_no_trace(keystream[i].clone(), plaintext[i].clone());
+
+            // Constrain: computed_ciphertext == public_ciphertext (bit by bit)
+            for bit_idx in 0..32 {
+                self.eval.add_constraint(
+                    computed.bits[bit_idx].clone() - public_ciphertext[i].bits[bit_idx].clone()
+                );
+            }
         }
 
         self.eval
@@ -163,5 +174,18 @@ impl<E: EvalAtRow> ChaChaStreamEvalAtRow<E> {
         }
 
         result
+    }
+
+    /// XOR two u32s without reading result from trace.
+    /// Used when we want to compute the XOR and compare against a separately-read value.
+    /// Returns a BitU32 where each bit is computed as: a + b - 2*a*b
+    fn xor_u32_no_trace(&self, a: BitU32<E::F>, b: BitU32<E::F>) -> BitU32<E::F> {
+        let two = E::F::from(BaseField::from_u32_unchecked(2));
+
+        BitU32::new(std::array::from_fn(|i| {
+            // XOR formula: result = a + b - 2ab
+            a.bits[i].clone() + b.bits[i].clone()
+                - two.clone() * a.bits[i].clone() * b.bits[i].clone()
+        }))
     }
 }

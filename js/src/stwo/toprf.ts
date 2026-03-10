@@ -1,10 +1,12 @@
-import type { FileFetch, KeyShare, Logger, OPRFOperator } from '../types.ts'
+import type { EncryptionAlgorithm, FileFetch, KeyShare, Logger, OPRFOperator, ZKProofInputOPRF } from '../types.ts'
 import {
+	generate_cipher_toprf_proof,
 	get_toprf_info,
 	toprf_create_request,
 	toprf_evaluate,
 	toprf_finalize,
-	toprf_generate_keys
+	toprf_generate_keys,
+	verify_cipher_toprf_proof
 } from './s2circuits-wrapper.ts'
 
 // Node.js target auto-initializes WASM at import time, so no explicit init needed
@@ -46,6 +48,19 @@ type StwoFinalizeResult = {
 	error?: string
 }
 
+type StwoProofResult = {
+	success: boolean
+	algorithm: string
+	proof: string
+	error?: string
+}
+
+type StwoVerifyResult = {
+	valid: boolean
+	algorithm?: string
+	error?: string
+}
+
 function hexToUint8Array(hex: string): Uint8Array {
 	if(hex.startsWith('0x')) {
 		hex = hex.slice(2)
@@ -70,6 +85,87 @@ function uint8ArrayToHex(arr: Uint8Array): string {
 
 export interface MakeStwoOPRFOperatorOpts {
 	fetcher: FileFetch
+	algorithm: EncryptionAlgorithm
+}
+
+/**
+ * Serialize ZKProofInputOPRF to a witness buffer that can be passed to groth16Prove.
+ * This format is compatible with stwo's combined cipher+TOPRF proof API.
+ */
+function serializeStwoWitness(algorithm: EncryptionAlgorithm, input: ZKProofInputOPRF): Uint8Array {
+	// Build a JSON structure containing all inputs needed for prove
+	const witnessData = {
+		algorithm,
+		key: uint8ArrayToHex(input.key),
+		noncesAndCounters: input.noncesAndCounters.map(nc => ({
+			nonce: uint8ArrayToHex(nc.nonce),
+			counter: nc.counter,
+		})),
+		plaintext: uint8ArrayToHex(input.out),
+		ciphertext: uint8ArrayToHex(input.in),
+		toprf: {
+			locations: input.toprf.locations,
+			domainSeparator: input.toprf.domainSeparator,
+			output: uint8ArrayToHex(input.toprf.output),
+			responses: input.toprf.responses.map(resp => ({
+				publicKeyShare: uint8ArrayToHex(resp.publicKeyShare),
+				evaluated: uint8ArrayToHex(resp.evaluated),
+				c: uint8ArrayToHex(resp.c),
+				r: uint8ArrayToHex(resp.r),
+			})),
+			mask: uint8ArrayToHex(input.mask),
+		},
+	}
+
+	return new TextEncoder().encode(JSON.stringify(witnessData))
+}
+
+/**
+ * Deserialize witness back to components for proof generation.
+ */
+function deserializeStwoWitness(witness: Uint8Array): {
+	algorithm: EncryptionAlgorithm
+	key: Uint8Array
+	nonce: Uint8Array
+	counter: number
+	plaintext: Uint8Array
+	ciphertext: Uint8Array
+	toprfJson: string
+} {
+	const text = new TextDecoder().decode(witness)
+	const data = JSON.parse(text)
+
+	// Get first nonce/counter (for now we support single block)
+	const nc = data.noncesAndCounters[0]
+
+	// Build TOPRF JSON in the format expected by generate_cipher_toprf_proof
+	const toprfJson = JSON.stringify({
+		locations: data.toprf.locations,
+		domainSeparator: data.toprf.domainSeparator,
+		output: '0x' + data.toprf.output,
+		responses: data.toprf.responses.map((resp: {
+			publicKeyShare: string
+			evaluated: string
+			c: string
+			r: string
+		}) => ({
+			publicKeyShare: '0x' + resp.publicKeyShare,
+			evaluated: '0x' + resp.evaluated,
+			c: '0x' + resp.c,
+			r: '0x' + resp.r,
+		})),
+		mask: '0x' + data.toprf.mask,
+	})
+
+	return {
+		algorithm: data.algorithm,
+		key: hexToUint8Array(data.key),
+		nonce: hexToUint8Array(nc.nonce),
+		counter: nc.counter,
+		plaintext: hexToUint8Array(data.plaintext),
+		ciphertext: hexToUint8Array(data.ciphertext),
+		toprfJson,
+	}
 }
 
 /**
@@ -80,25 +176,81 @@ export interface MakeStwoOPRFOperatorOpts {
  */
 export function makeStwoOPRFOperator({
 	fetcher,
+	algorithm,
 }: MakeStwoOPRFOperatorOpts): OPRFOperator {
 	return {
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		async generateWitness(input) {
-			// Stwo combines witness generation and proving
-			// For OPRF, we don't need a separate witness step
-			throw new Error('generateWitness not supported for stwo OPRF - use groth16Prove directly')
+		async generateWitness(input, logger) {
+			await ensureWasmInitialized(fetcher, logger)
+			// Serialize the input to a witness buffer
+			return serializeStwoWitness(algorithm, input)
 		},
 
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		async groth16Prove(witness, logger) {
-			// STARK proof generation for cipher + TOPRF would go here
-			// For now, we only support the TOPRF operations (no ZK proof yet)
-			throw new Error('groth16Prove not yet implemented for stwo OPRF')
+			await ensureWasmInitialized(fetcher, logger)
+
+			// Deserialize witness to get components
+			const data = deserializeStwoWitness(witness)
+
+			// Call WASM to generate proof
+			const resultJson = generate_cipher_toprf_proof(
+				data.algorithm,
+				data.key,
+				data.nonce,
+				data.counter,
+				data.plaintext,
+				data.ciphertext,
+				data.toprfJson,
+			)
+
+			const result: StwoProofResult = JSON.parse(resultJson)
+
+			if(result.error || !result.success) {
+				throw new Error(`Proof generation failed: ${result.error || 'unknown error'}`)
+			}
+
+			// Return proof as Uint8Array (base64 decoded)
+			return { proof: result.proof }
 		},
 
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		async groth16Verify(publicSignals, proof, logger) {
-			throw new Error('groth16Verify not yet implemented for stwo OPRF')
+			await ensureWasmInitialized(fetcher, logger)
+
+			// Get first nonce/counter
+			const nc = publicSignals.noncesAndCounters[0]
+
+			// Build TOPRF JSON for verification (no mask needed)
+			const toprfJson = JSON.stringify({
+				locations: publicSignals.toprf.locations,
+				domainSeparator: publicSignals.toprf.domainSeparator,
+				output: '0x' + uint8ArrayToHex(publicSignals.toprf.output),
+				responses: publicSignals.toprf.responses.map(resp => ({
+					publicKeyShare: '0x' + uint8ArrayToHex(resp.publicKeyShare),
+					evaluated: '0x' + uint8ArrayToHex(resp.evaluated),
+					c: '0x' + uint8ArrayToHex(resp.c),
+					r: '0x' + uint8ArrayToHex(resp.r),
+				})),
+				mask: '0x00', // Not needed for verify, but required by parser
+			})
+
+			// Get proof string (either already string or convert from Uint8Array)
+			const proofStr = typeof proof === 'string'
+				? proof
+				: new TextDecoder().decode(proof)
+
+			// Call WASM to verify proof
+			const resultJson = verify_cipher_toprf_proof(
+				algorithm,
+				proofStr,
+				nc.nonce,
+				nc.counter,
+				publicSignals.out, // plaintext
+				publicSignals.in, // ciphertext
+				toprfJson,
+			)
+
+			const result: StwoVerifyResult = JSON.parse(resultJson)
+
+			return result.valid === true
 		},
 
 		async generateThresholdKeys(total, threshold, logger) {

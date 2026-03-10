@@ -146,6 +146,70 @@ export function toprf_evaluate(share_json: string, masked_request_hex: string): 
  */
 export function toprf_finalize(params_json: string): string;
 
+/**
+ * Debug DLEQ hash computation.
+ *
+ * @param points_json - JSON with points array
+ * @returns JSON string with hash computation details
+ */
+export function debug_dleq_hash(points_json: string): string;
+
+/**
+ * Debug DLEQ verification step by step.
+ *
+ * @param params_json - JSON with c, r, publicKey, evaluated, masked
+ * @returns JSON string with verification details
+ */
+export function debug_dleq_verify(params_json: string): string;
+
+// =============================================================================
+// Combined Cipher + TOPRF Functions
+// =============================================================================
+
+/**
+ * Generate combined cipher + TOPRF STARK proof.
+ *
+ * @param algorithm - "chacha20" | "aes-128-ctr" | "aes-256-ctr"
+ * @param key - Encryption key (16 or 32 bytes depending on algorithm)
+ * @param nonce - 12-byte nonce
+ * @param counter - Starting counter value
+ * @param plaintext - Plaintext bytes
+ * @param ciphertext - Ciphertext bytes (same length as plaintext)
+ * @param toprf_json - JSON with TOPRF parameters (locations, domainSeparator, output, responses, mask)
+ * @returns JSON string: {"success": true, "proof": "base64...", ...} or {"error": "..."}
+ */
+export function generate_cipher_toprf_proof(
+	algorithm: string,
+	key: Uint8Array,
+	nonce: Uint8Array,
+	counter: number,
+	plaintext: Uint8Array,
+	ciphertext: Uint8Array,
+	toprf_json: string
+): string;
+
+/**
+ * Verify combined cipher + TOPRF STARK proof.
+ *
+ * @param algorithm - "chacha20" | "aes-128-ctr" | "aes-256-ctr"
+ * @param proof_b64 - Base64-encoded proof
+ * @param nonce - 12-byte nonce
+ * @param counter - Starting counter value
+ * @param plaintext - Plaintext bytes
+ * @param ciphertext - Ciphertext bytes
+ * @param toprf_json - JSON with TOPRF public parameters (no mask needed)
+ * @returns JSON string: {"valid": true} or {"valid": false, "error": "..."}
+ */
+export function verify_cipher_toprf_proof(
+	algorithm: string,
+	proof_b64: string,
+	nonce: Uint8Array,
+	counter: number,
+	plaintext: Uint8Array,
+	ciphertext: Uint8Array,
+	toprf_json: string
+): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {

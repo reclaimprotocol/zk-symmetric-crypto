@@ -22,6 +22,14 @@ impl TOPRFTraceGen {
         }
     }
 
+    /// Append an extended point to field_gen trace (36 limbs = 4 * 9).
+    fn append_extended_point(&mut self, p: &ExtendedPointBigInt) {
+        self.field_gen.append_field256(&p.x);
+        self.field_gen.append_field256(&p.y);
+        self.field_gen.append_field256(&p.t);
+        self.field_gen.append_field256(&p.z);
+    }
+
     /// Generate trace for TOPRF verification.
     ///
     /// Returns the computed output hash as BigInt256 (gnark-compatible MiMC output).
@@ -76,9 +84,9 @@ impl TOPRFTraceGen {
                 &p,
             );
 
-            // Append points
-            self.point_gen.append_extended_point(&response);
-            self.point_gen.append_extended_point(&share_pub_key);
+            // Append points (using field_gen directly to keep trace in one place)
+            self.append_extended_point(&response);
+            self.append_extended_point(&share_pub_key);
 
             // Clear cofactors
             let cleared_response = native::clear_cofactor(&response);
@@ -162,7 +170,7 @@ impl TOPRFTraceGen {
             &p,
         );
         let combined_response = native::scalar_mul(&response_0, &inputs.public.coefficients[0]);
-        self.point_gen.append_extended_point(&combined_response);
+        self.append_extended_point(&combined_response);
 
         // 10. Compute mask inverse (in the scalar field, not base field)
         let order = scalar_order();

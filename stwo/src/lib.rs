@@ -5,6 +5,7 @@
 pub mod aes;
 pub mod babyjub;
 pub mod chacha;
+pub mod combined;
 pub mod toprf_server;
 
 #[cfg(target_arch = "wasm32")]

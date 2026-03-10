@@ -6,6 +6,8 @@
 //! - Response combination with Lagrange coefficients
 //! - Final output hash computation
 
+pub mod air;
+pub mod constraints;
 pub mod gen;
 
 #[cfg(test)]

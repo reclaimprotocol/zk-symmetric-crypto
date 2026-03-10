@@ -1775,3 +1775,324 @@ pub fn debug_dleq_verify(params_json: &str) -> String {
 
 // Note: WASM API tests are in babyjub/toprf/gnark_compat_test.rs
 // since wasm_bindgen functions can't be tested in native context.
+
+// ============================================================================
+// Combined Cipher + TOPRF API
+// ============================================================================
+
+/// Debug combined proof inputs - helps trace TOPRF verification issues.
+#[wasm_bindgen]
+pub fn debug_combined_toprf(
+    plaintext: &[u8],
+    locations_json: &str,
+    domain_separator: &str,
+    mask_hex: &str,
+) -> String {
+    use crate::babyjub::field256::gen::{modulus, BigInt256};
+    use crate::combined::extract_secret_data;
+    use crate::combined::DataLocation;
+    use crate::toprf_server::eval::hash_to_point_mimc;
+    use crate::babyjub::point::gen::native as point_native;
+
+    let p = modulus();
+
+    // Parse locations
+    let locations_val: serde_json::Value = match serde_json::from_str(locations_json) {
+        Ok(v) => v,
+        Err(e) => return json_error(format!("Invalid locations JSON: {}", e)),
+    };
+    let locations: Vec<DataLocation> = locations_val
+        .as_array()
+        .map(|arr| arr.iter().map(|loc| DataLocation {
+            pos: loc["pos"].as_u64().unwrap_or(0) as usize,
+            len: loc["len"].as_u64().unwrap_or(0) as usize,
+        }).collect())
+        .unwrap_or_default();
+
+    // Extract secret data
+    let secret_data = extract_secret_data(plaintext, &locations);
+
+    // Parse domain separator
+    let domain = bytes_to_bigint256_gnark(domain_separator.as_bytes());
+
+    // Compute data_point
+    let data_point = hash_to_point_mimc(&secret_data, &domain);
+    let (data_x, data_y) = data_point.to_affine(&p);
+
+    // Parse mask
+    let mask_bytes = match hex::decode(mask_hex.strip_prefix("0x").unwrap_or(mask_hex)) {
+        Ok(b) => b,
+        Err(e) => return json_error(format!("Invalid mask hex: {}", e)),
+    };
+    let mask = BigInt256::from_bytes_be(&mask_bytes);
+
+    // Compute masked
+    let masked = point_native::scalar_mul(&data_point, &mask);
+    let (masked_x, masked_y) = masked.to_affine(&p);
+    let masked_bytes = masked.to_bytes_gnark(&p);
+
+    json!({
+        "secret_data_0": hex::encode(secret_data[0].to_bytes_be_trimmed()),
+        "secret_data_1": hex::encode(secret_data[1].to_bytes_be_trimmed()),
+        "domain_separator": hex::encode(domain.to_bytes_be_trimmed()),
+        "data_point_x": hex::encode(data_x.to_bytes_be_trimmed()),
+        "data_point_y": hex::encode(data_y.to_bytes_be_trimmed()),
+        "mask": hex::encode(mask.to_bytes_be_trimmed()),
+        "masked_x": hex::encode(masked_x.to_bytes_be_trimmed()),
+        "masked_y": hex::encode(masked_y.to_bytes_be_trimmed()),
+        "masked_gnark": hex::encode(masked_bytes),
+    }).to_string()
+}
+
+/// Debug full TOPRF verification flow.
+/// Takes all TOPRF inputs and verifies DLEQ step by step.
+#[wasm_bindgen]
+pub fn debug_toprf_verify(
+    plaintext: &[u8],
+    toprf_json: &str,
+) -> String {
+    use crate::babyjub::field256::gen::{modulus, BigInt256};
+    use crate::combined::air::parse_toprf_json;
+    use crate::combined::extract_secret_data;
+    use crate::toprf_server::eval::hash_to_point_mimc;
+    use crate::toprf_server::dleq::verify_dleq_mimc;
+    use crate::babyjub::point::gen::native as point_native;
+    use crate::babyjub::point::ExtendedPointBigInt;
+
+    let p = modulus();
+
+    // Parse TOPRF JSON
+    let (locations, toprf_public, toprf_private) = match parse_toprf_json(toprf_json) {
+        Ok(r) => r,
+        Err(e) => return json_error(format!("Parse failed: {}", e)),
+    };
+
+    // Extract secret data from plaintext
+    let secret_data = extract_secret_data(plaintext, &locations);
+
+    // Compute data_point using extracted secret_data
+    let data_point = hash_to_point_mimc(&secret_data, &toprf_public.domain_separator);
+    let (data_x, data_y) = data_point.to_affine(&p);
+
+    // Compute masked
+    let masked = point_native::scalar_mul(&data_point, &toprf_private.mask);
+    let (masked_x, masked_y) = masked.to_affine(&p);
+    let masked_gnark = masked.to_bytes_gnark(&p);
+
+    // Construct response point
+    let response = ExtendedPointBigInt::from_affine(
+        toprf_public.responses[0].x,
+        toprf_public.responses[0].y,
+        &p,
+    );
+
+    // Construct public key point
+    let pub_key = ExtendedPointBigInt::from_affine(
+        toprf_public.share_public_keys[0].x,
+        toprf_public.share_public_keys[0].y,
+        &p,
+    );
+
+    // Verify DLEQ
+    let dleq_valid = verify_dleq_mimc(
+        &toprf_public.c[0],
+        &toprf_public.r[0],
+        &pub_key,
+        &response,
+        &masked,
+    );
+
+    // Get affine coords of parsed points
+    let (resp_x, resp_y) = response.to_affine(&p);
+    let (pk_x, pk_y) = pub_key.to_affine(&p);
+
+    json!({
+        "secret_data_0": hex::encode(secret_data[0].to_bytes_be_trimmed()),
+        "secret_data_1": hex::encode(secret_data[1].to_bytes_be_trimmed()),
+        "domain_separator": hex::encode(toprf_public.domain_separator.to_bytes_be_trimmed()),
+        "data_point_x": hex::encode(data_x.to_bytes_be_trimmed()),
+        "data_point_y": hex::encode(data_y.to_bytes_be_trimmed()),
+        "mask": hex::encode(toprf_private.mask.to_bytes_be_trimmed()),
+        "masked_x": hex::encode(masked_x.to_bytes_be_trimmed()),
+        "masked_y": hex::encode(masked_y.to_bytes_be_trimmed()),
+        "masked_gnark": hex::encode(masked_gnark),
+        "response_x": hex::encode(resp_x.to_bytes_be_trimmed()),
+        "response_y": hex::encode(resp_y.to_bytes_be_trimmed()),
+        "pub_key_x": hex::encode(pk_x.to_bytes_be_trimmed()),
+        "pub_key_y": hex::encode(pk_y.to_bytes_be_trimmed()),
+        "c": hex::encode(toprf_public.c[0].to_bytes_be_trimmed()),
+        "r": hex::encode(toprf_public.r[0].to_bytes_be_trimmed()),
+        "dleq_valid": dleq_valid,
+    }).to_string()
+}
+
+/// Generate combined cipher + TOPRF STARK proof.
+///
+/// This proves both:
+/// 1. Correct cipher decryption (key knowledge)
+/// 2. TOPRF verification on data extracted from plaintext
+///
+/// # Arguments
+/// * `algorithm` - "chacha20" | "aes-128-ctr" | "aes-256-ctr"
+/// * `key` - Encryption key (16 or 32 bytes depending on algorithm)
+/// * `nonce` - 12-byte nonce
+/// * `counter` - Starting counter value
+/// * `plaintext` - Plaintext bytes
+/// * `ciphertext` - Ciphertext bytes (same length as plaintext)
+/// * `toprf_json` - JSON with TOPRF parameters (see parse_toprf_json)
+///
+/// # Returns
+/// JSON string: {"success": true, "proof": "base64...", ...} or {"error": "..."}
+#[wasm_bindgen]
+pub fn generate_cipher_toprf_proof(
+    algorithm: &str,
+    key: &[u8],
+    nonce: &[u8],
+    counter: u32,
+    plaintext: &[u8],
+    ciphertext: &[u8],
+    toprf_json: &str,
+) -> String {
+    use crate::combined::air::{parse_toprf_json, prove_combined, serialize_combined_proof};
+    use crate::combined::{CipherAlgorithm, CombinedInputs};
+
+    // Parse algorithm
+    let alg = match CipherAlgorithm::from_str(algorithm) {
+        Some(a) => a,
+        None => return json_error(format!("Unknown algorithm: {}", algorithm)),
+    };
+
+    // Validate key size
+    let expected_key_size = alg.key_size();
+    if key.len() != expected_key_size {
+        return json_error(format!(
+            "Key must be {} bytes for {}, got {}",
+            expected_key_size, algorithm, key.len()
+        ));
+    }
+
+    // Validate nonce
+    if nonce.len() != 12 {
+        return json_error(format!("Nonce must be 12 bytes, got {}", nonce.len()));
+    }
+
+    // Validate plaintext/ciphertext
+    if plaintext.len() != ciphertext.len() {
+        return json_error(format!(
+            "Plaintext and ciphertext must have same length: {} vs {}",
+            plaintext.len(),
+            ciphertext.len()
+        ));
+    }
+
+    // Parse TOPRF JSON
+    let (locations, toprf_public, toprf_private) = match parse_toprf_json(toprf_json) {
+        Ok(r) => r,
+        Err(e) => return json_error(format!("Invalid TOPRF JSON: {}", e)),
+    };
+
+    // Build inputs
+    let nonce_arr: [u8; 12] = match nonce.try_into() {
+        Ok(n) => n,
+        Err(_) => return json_error("Invalid nonce"),
+    };
+
+    let inputs = CombinedInputs {
+        algorithm: alg,
+        key: key.to_vec(),
+        nonce: nonce_arr,
+        counter,
+        plaintext: plaintext.to_vec(),
+        ciphertext: ciphertext.to_vec(),
+        locations,
+        toprf_public,
+        toprf_private,
+    };
+
+    // Generate proof
+    let config = PcsConfig::default();
+    let proof = match prove_combined(config, &inputs) {
+        Ok(p) => p,
+        Err(e) => return json_error(e),
+    };
+
+    // Serialize and return
+    match serialize_combined_proof(&proof) {
+        Ok(json) => json,
+        Err(e) => json_error(e),
+    }
+}
+
+/// Verify combined cipher + TOPRF STARK proof.
+///
+/// # Arguments
+/// * `algorithm` - "chacha20" | "aes-128-ctr" | "aes-256-ctr"
+/// * `proof_b64` - Base64-encoded proof
+/// * `nonce` - 12-byte nonce
+/// * `counter` - Starting counter value
+/// * `plaintext` - Plaintext bytes
+/// * `ciphertext` - Ciphertext bytes
+/// * `toprf_json` - JSON with TOPRF public parameters (no mask needed for verify)
+///
+/// # Returns
+/// JSON string: {"valid": true} or {"valid": false, "error": "..."}
+#[wasm_bindgen]
+pub fn verify_cipher_toprf_proof(
+    algorithm: &str,
+    proof_b64: &str,
+    nonce: &[u8],
+    counter: u32,
+    _plaintext: &[u8], // Unused: plaintext is private in TOPRF mode
+    ciphertext: &[u8],
+    toprf_json: &str,
+) -> String {
+    use crate::combined::air::{deserialize_combined_proof, parse_toprf_json, verify_combined};
+    use crate::combined::CipherAlgorithm;
+
+    // Parse algorithm
+    let _alg = match CipherAlgorithm::from_str(algorithm) {
+        Some(a) => a,
+        None => return json!({"valid": false, "error": format!("Unknown algorithm: {}", algorithm)}).to_string(),
+    };
+
+    // Validate nonce
+    if nonce.len() != 12 {
+        return json!({"valid": false, "error": format!("Nonce must be 12 bytes, got {}", nonce.len())}).to_string();
+    }
+
+    let nonce_arr: [u8; 12] = match nonce.try_into() {
+        Ok(n) => n,
+        Err(_) => return json!({"valid": false, "error": "Invalid nonce"}).to_string(),
+    };
+
+    // Parse TOPRF JSON to get expected output
+    let (_locations, toprf_public, _toprf_private) = match parse_toprf_json(toprf_json) {
+        Ok(r) => r,
+        Err(e) => return json!({"valid": false, "error": format!("Invalid TOPRF JSON: {}", e)}).to_string(),
+    };
+
+    // Deserialize proof
+    let proof = match deserialize_combined_proof(proof_b64) {
+        Ok(p) => p,
+        Err(e) => return json!({"valid": false, "error": format!("Invalid proof: {}", e)}).to_string(),
+    };
+
+    // Verify proof matches algorithm
+    if proof.algorithm != algorithm {
+        return json!({
+            "valid": false,
+            "error": format!("Algorithm mismatch: proof is for {}, expected {}", proof.algorithm, algorithm)
+        }).to_string();
+    }
+
+    // Get expected output bytes
+    let expected_output = toprf_public.output.to_bytes_be();
+
+    // Verify - pass None for plaintext since it's private in TOPRF mode
+    // The proof's plaintext hash was verified at prove time
+    let min_config = PcsConfig::default();
+    match verify_combined(&proof, &min_config, &nonce_arr, counter, None, ciphertext, &expected_output) {
+        Ok(_) => json!({"valid": true, "algorithm": algorithm}).to_string(),
+        Err(e) => json!({"valid": false, "error": format!("{:?}", e)}).to_string(),
+    }
+}

@@ -591,19 +591,33 @@ impl Field256TraceGen {
     }
 
     /// Generate trace for multiplication: a * b (mod p).
+    ///
+    /// Verifies: a * b = q * p + r
+    ///
+    /// The constraint equation for each limb position k is:
+    /// ab_sum + carry_in = qp_sum + r_k + carry[k] * 2^29
+    ///
+    /// Carries are decomposed into sign-magnitude format:
+    /// - sign: 1 bit (0=positive, 1=negative)
+    /// - magnitude: 33 bits decomposed as m0 (11 bits) + m1 (11 bits) + m2 (11 bits)
+    ///
+    /// This allows constraining carries to be valid without negative field elements.
     pub fn gen_mul(&mut self, a: &BigInt256, b: &BigInt256) -> BigInt256 {
         let p = modulus();
         let product = a.mul_wide(b);
         let (quotient, result) = div_wide_by_modulus(&product, &p);
 
+        // Append result and quotient first
+        self.append_field256(&result);
+        self.append_field256(&quotient);
+
         // Compute carries for verification: a*b = q*p + r
         let qp = quotient.mul_wide(&p);
         let n_product_limbs = 2 * N_LIMBS - 1;
-        let mut carries = vec![0u32; n_product_limbs];
 
         let mut carry: i64 = 0;
         for k in 0..n_product_limbs {
-            // ab[k]
+            // ab[k] = sum of a[i]*b[j] for i+j=k
             let ab_k = product[k] as i64;
 
             // qp[k] + r[k]
@@ -614,17 +628,34 @@ impl Field256TraceGen {
                 0
             };
 
-            // ab[k] + carry_in = qp[k] + r[k] + carry[k] * 2^29
+            // Constraint: ab[k] + carry_in = qp[k] + r[k] + carry[k] * 2^29
+            // Rearranging: carry[k] = (ab[k] + carry_in - qp[k] - r[k]) / 2^29
             let total = ab_k + carry - qp_k - r_k;
-            carries[k] = ((total >> LIMB_BITS) & LIMB_MASK as i64) as u32;
-            carry = total >> LIMB_BITS;
-        }
 
-        // Append to trace
-        self.append_field256(&result);
-        self.append_field256(&quotient);
-        for c in carries {
-            self.append_limb(c);
+            // The next carry (can be positive or negative)
+            carry = total >> LIMB_BITS;
+
+            // Decompose carry into sign + magnitude
+            let sign = if carry < 0 { 1u32 } else { 0u32 };
+            let magnitude = carry.unsigned_abs() as u32;
+
+            // Append sign bit
+            self.append_limb(sign);
+
+            // Append m0 bits (bits 0-10, 11 bits)
+            for bit in 0..11 {
+                self.append_limb((magnitude >> bit) & 1);
+            }
+
+            // Append m1 bits (bits 11-21, 11 bits)
+            for bit in 0..11 {
+                self.append_limb((magnitude >> (11 + bit)) & 1);
+            }
+
+            // Append m2 bits (bits 22-32, 11 bits)
+            for bit in 0..11 {
+                self.append_limb((magnitude >> (22 + bit)) & 1);
+            }
         }
 
         result
@@ -713,6 +744,122 @@ mod tests {
     }
 
     #[test]
+    fn test_mul_carry_equation() {
+        // Test that the carry equation holds exactly
+        let p = modulus();
+        let a = BigInt256::from_limbs([123456, 789012, 333, 444, 555, 666, 777, 888, 0]);
+        let b = BigInt256::from_limbs([654321, 210987, 111, 222, 333, 444, 555, 666, 0]);
+
+        let product = a.mul_wide(&b);
+        let (quotient, result) = div_wide_by_modulus(&product, &p);
+        let qp = quotient.mul_wide(&p);
+
+        let n_product_limbs = 2 * N_LIMBS - 1;
+        let mut carry: i64 = 0;
+
+        for k in 0..n_product_limbs {
+            let ab_k = product[k] as i64;
+            let qp_k = qp[k] as i64;
+            let r_k = if k < N_LIMBS { result.limbs[k] as i64 } else { 0 };
+
+            let total = ab_k + carry - qp_k - r_k;
+            let remainder = total & ((1 << LIMB_BITS) - 1);
+            let carry_out = total >> LIMB_BITS;
+
+            // The remainder must be 0 for the equation to hold in finite fields
+            assert_eq!(remainder, 0, "Remainder at position {} should be 0, got {}", k, remainder);
+
+            carry = carry_out;
+        }
+
+        // Final carry should be 0
+        assert_eq!(carry, 0, "Final carry should be 0");
+    }
+
+    #[test]
+    fn test_mul_trace_values() {
+        // Verify that trace values match constraint expectations
+        let mut gen = Field256TraceGen::new();
+        let a = BigInt256::from_limbs([123456, 789012, 333, 444, 555, 666, 777, 888, 0]);
+        let b = BigInt256::from_limbs([654321, 210987, 111, 222, 333, 444, 555, 666, 0]);
+
+        let result = gen.gen_mul(&a, &b);
+
+        // Check that trace was generated with correct column count
+        let n_product_limbs = 2 * N_LIMBS - 1;
+        let expected_cols = 9 + 9 + n_product_limbs * 34; // result + quotient + carries
+        assert_eq!(gen.trace.len(), expected_cols,
+            "Expected {} columns, got {}", expected_cols, gen.trace.len());
+
+        // Verify result limbs are stored correctly
+        for i in 0..N_LIMBS {
+            assert_eq!(gen.trace[i][0], result.limbs[i],
+                "Result limb {} mismatch", i);
+        }
+
+        // Verify quotient limbs
+        let p = modulus();
+        let product = a.mul_wide(&b);
+        let (quotient, _) = div_wide_by_modulus(&product, &p);
+        let qp = quotient.mul_wide(&p);
+
+        for i in 0..N_LIMBS {
+            assert_eq!(gen.trace[9 + i][0], quotient.limbs[i],
+                "Quotient limb {} mismatch", i);
+        }
+
+        // Verify carry equations hold over INTEGERS
+        let two_pow_29 = 1u64 << LIMB_BITS;
+        let mut col_idx = 18;
+        let mut carry_prev: i64 = 0;
+
+        for k in 0..n_product_limbs {
+            // Read carry decomposition from trace
+            let sign = gen.trace[col_idx][0];
+            col_idx += 1;
+
+            let mut magnitude: u32 = 0;
+            for bit in 0..33 {
+                let bit_val = gen.trace[col_idx][0];
+                col_idx += 1;
+                magnitude |= bit_val << bit;
+            }
+
+            // Reconstruct carry value
+            let carry: i64 = if sign == 1 {
+                -(magnitude as i64)
+            } else {
+                magnitude as i64
+            };
+
+            // Verify sign is boolean
+            assert!(sign <= 1, "Sign must be 0 or 1");
+
+            // Verify magnitude fits in 33 bits
+            assert!((magnitude as u64) < (1u64 << 33), "Magnitude must fit in 33 bits");
+
+            // Compute ab_sum and qp_sum
+            let ab_k = product[k] as i64;
+            let qp_k = qp[k] as i64;
+            let r_k = if k < N_LIMBS { result.limbs[k] as i64 } else { 0 };
+
+            // Verify: ab_k + carry_prev = qp_k + r_k + carry * 2^29
+            let lhs = ab_k + carry_prev;
+            let rhs = qp_k + r_k + carry * (two_pow_29 as i64);
+
+            assert_eq!(lhs, rhs,
+                "Integer carry equation mismatch at position {}: lhs={}, rhs={}", k, lhs, rhs);
+
+            carry_prev = carry;
+        }
+
+        println!("All carry equations verified over integers!");
+        // Note: The carry equation does NOT hold in M31 field arithmetic due to
+        // intermediate values exceeding 2^31 and wrapping differently on each side.
+        // This is a fundamental limitation of using M31 for 256-bit arithmetic.
+    }
+
+    #[test]
     fn test_bigint_inv() {
         let p = modulus();
         let a = BigInt256::from_limbs([12345, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -745,4 +892,5 @@ mod tests {
         // First limb should be 0x10000001
         assert_eq!(p.limbs[0], 0x10000001);
     }
+
 }

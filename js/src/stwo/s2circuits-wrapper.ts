@@ -46,6 +46,14 @@ export const debug_dleq_verify = s2circuits.debug_dleq_verify
 export const verify_aes_ctr_proof = s2circuits.verify_aes_ctr_proof
 // eslint-disable-next-line camelcase
 export const verify_chacha20_proof = s2circuits.verify_chacha20_proof
+// eslint-disable-next-line camelcase
+export const generate_cipher_toprf_proof = s2circuits.generate_cipher_toprf_proof
+// eslint-disable-next-line camelcase
+export const verify_cipher_toprf_proof = s2circuits.verify_cipher_toprf_proof
+// eslint-disable-next-line camelcase
+export const debug_combined_toprf = s2circuits.debug_combined_toprf
+// eslint-disable-next-line camelcase
+export const debug_toprf_verify = s2circuits.debug_toprf_verify
 
 // For init compatibility (nodejs target auto-initializes)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

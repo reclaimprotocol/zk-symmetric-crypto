@@ -26,6 +26,7 @@
 //! ```
 
 pub mod constants;
+pub mod constraints;
 
 use crate::babyjub::field256::gen::{modulus, BigInt256};
 

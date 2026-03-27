@@ -102,17 +102,29 @@ function encodeRPCMessages(...messages: Uint8Array[]): Uint8Array {
   return result
 }
 
-// Decode varint from buffer
+// Debug logging (enable with DEBUG_TESTS=1)
+const debug = process.env.DEBUG_TESTS
+  ? (...args: unknown[]) => console.log(...args)
+  : () => {}
+
+// Decode varint from buffer with bounds checking
 function decodeVarint(buffer: Uint8Array, offset: number): { value: number; bytesRead: number } {
   let value = 0
   let shift = 0
   let bytesRead = 0
-  while (offset + bytesRead < buffer.length) {
+  const maxBytes = 5 // 32-bit varint max
+  while (offset + bytesRead < buffer.length && bytesRead < maxBytes) {
     const byte = buffer[offset + bytesRead]
     value |= (byte & 0x7f) << shift
     bytesRead++
     if ((byte & 0x80) === 0) break
     shift += 7
+  }
+  if (bytesRead === 0) {
+    throw new Error('Unexpected end of buffer while decoding varint')
+  }
+  if (bytesRead === maxBytes && (buffer[offset + bytesRead - 1] & 0x80) !== 0) {
+    throw new Error('Varint too long')
   }
   return { value, bytesRead }
 }
@@ -216,7 +228,7 @@ async function connectToAttestor(): Promise<AttestorConnection> {
             if (initResponse instanceof Uint8Array) {
               const initFields = decodeFields(initResponse)
               serverPublicKey = initFields.get(1) as Uint8Array
-              console.log('Init response received, public key:', Buffer.from(serverPublicKey).toString('hex'))
+              debug('Init response received, public key:', Buffer.from(serverPublicKey).toString('hex'))
               resolve({
                 ws,
                 serverPublicKey,
@@ -240,12 +252,12 @@ async function connectToAttestor(): Promise<AttestorConnection> {
             const toprfResponse = rpcMsg.get(19)
             if (toprfResponse instanceof Uint8Array) {
               const toprfFields = decodeFields(toprfResponse)
-              console.log('TOPRF Response raw fields:')
+              debug('TOPRF Response raw fields:')
               for (const [fieldNum, value] of toprfFields) {
                 if (value instanceof Uint8Array) {
-                  console.log(`  field ${fieldNum}: ${Buffer.from(value).toString('hex')} (${value.length} bytes)`)
+                  debug(`  field ${fieldNum}: ${Buffer.from(value).toString('hex')} (${value.length} bytes)`)
                 } else {
-                  console.log(`  field ${fieldNum}: ${value}`)
+                  debug(`  field ${fieldNum}: ${value}`)
                 }
               }
               const pending = pendingRequests.get(msgId)
@@ -316,13 +328,13 @@ describe.skipIf(!(await attestorAvailable()))('Integration with attestor-core', 
     // Generate request using our ts-oprf library
     const request: OPRFRequest = generateOPRFRequest(secret, domainSeparator)
 
-    console.log('Sending OPRF request...')
-    console.log('  maskedData:', Buffer.from(request.maskedData).toString('hex'))
+    debug('Sending OPRF request...')
+    debug('  maskedData:', Buffer.from(request.maskedData).toString('hex'))
 
     // Send TOPRF request to attestor
     const response = await conn.sendToprf(request.maskedData)
 
-    console.log('Received OPRF response')
+    debug('Received OPRF response')
 
     // Build response object
     const oprfResponse: OPRFResponse = {
@@ -335,7 +347,7 @@ describe.skipIf(!(await attestorAvailable()))('Integration with attestor-core', 
     // Finalize OPRF using publicKeyShare from response
     const output = finalizeOPRF(response.publicKeyShare, request, oprfResponse)
 
-    console.log('OPRF output (nullifier):', output.nullifier.toString())
+    debug('OPRF output (nullifier):', output.nullifier.toString())
 
     // Verify output is valid
     expect(output.nullifier).toBeGreaterThan(0n)
@@ -376,8 +388,8 @@ describe.skipIf(!(await attestorAvailable()))('Integration with attestor-core', 
       r: response2.r,
     })
 
-    console.log('Nullifier 1:', output1.nullifier.toString())
-    console.log('Nullifier 2:', output2.nullifier.toString())
+    debug('Nullifier 1:', output1.nullifier.toString())
+    debug('Nullifier 2:', output2.nullifier.toString())
 
     // Different inputs should produce different nullifiers
     expect(output1.nullifier).not.toBe(output2.nullifier)
@@ -415,9 +427,9 @@ describe.skipIf(!(await attestorAvailable()))('Integration with attestor-core', 
       r: response2.r,
     })
 
-    console.log('Same input, different masks:')
-    console.log('  Nullifier 1:', output1.nullifier.toString())
-    console.log('  Nullifier 2:', output2.nullifier.toString())
+    debug('Same input, different masks:')
+    debug('  Nullifier 1:', output1.nullifier.toString())
+    debug('  Nullifier 2:', output2.nullifier.toString())
 
     // Same input should produce same nullifier regardless of mask
     expect(output1.nullifier).toBe(output2.nullifier)

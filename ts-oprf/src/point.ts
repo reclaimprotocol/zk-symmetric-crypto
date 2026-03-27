@@ -40,6 +40,11 @@ export function unmarshalPoint(bytes: Uint8Array): Point {
     y = (y << 8n) | BigInt(yBytes[i])
   }
 
+  // Reject non-canonical encodings
+  if (y >= FIELD_MODULUS) {
+    throw new Error('Invalid point: y coordinate exceeds field modulus')
+  }
+
   // Compute x² = (y² - 1) / (1 + d·y²)
   const y2 = mulMod(y, y)
   const numerator = mod(y2 - 1n)

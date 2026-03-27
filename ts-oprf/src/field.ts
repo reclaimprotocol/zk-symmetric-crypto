@@ -31,6 +31,10 @@ export function powMod(base: bigint, exp: bigint, p: bigint = FIELD_MODULUS): bi
 }
 
 export function invMod(a: bigint, p: bigint = FIELD_MODULUS): bigint {
+  a = mod(a, p)
+  if (a === 0n) {
+    throw new Error('Cannot compute modular inverse of zero')
+  }
   // Fermat's little theorem: a^(p-2) = a^(-1) mod p
   return powMod(a, p - 2n, p)
 }

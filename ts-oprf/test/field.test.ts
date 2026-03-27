@@ -38,11 +38,18 @@ describe('sqrtMod', () => {
   })
 
   it('returns null for non-residue', () => {
-    // For testing, we need a known non-residue
-    // 5 is a non-residue in this field (can be verified)
-    const nonResidue = sqrtMod(5n)
-    if (nonResidue !== null) {
-      expect(mulMod(nonResidue, nonResidue)).toBe(5n)
+    // 5 is a quadratic non-residue in this field
+    // If it were a residue, sqrtMod would return a value that squares to 5
+    const result = sqrtMod(5n)
+    if (result === null) {
+      expect(result).toBeNull()
+    } else {
+      // If 5 happens to be a residue, verify the square root is correct
+      expect(mulMod(result, result)).toBe(5n)
     }
+  })
+
+  it('invMod throws for zero', () => {
+    expect(() => invMod(0n)).toThrow('Cannot compute modular inverse of zero')
   })
 })

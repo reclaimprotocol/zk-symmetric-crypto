@@ -4,6 +4,7 @@ import { marshalPoint, unmarshalPoint } from './point.js'
 import { hashToScalar } from './mimc.js'
 import { verifyDLEQ } from './dleq.js'
 import { mod, invMod } from './field.js'
+import { bytesToBigInt, beToLe } from './bytes.js'
 import type { OPRFRequest, OPRFResponse, Point } from './types.js'
 
 function getRandomScalar(): bigint {
@@ -14,23 +15,6 @@ function getRandomScalar(): bigint {
     value = (value << 8n) | BigInt(bytes[i])
   }
   return mod(value, CURVE_ORDER)
-}
-
-function beToLe(bytes: Uint8Array): Uint8Array {
-  const result = new Uint8Array(bytes.length)
-  for (let i = 0; i < bytes.length; i++) {
-    result[i] = bytes[bytes.length - 1 - i]
-  }
-  return result
-}
-
-function bytesToBigInt(bytes: Uint8Array): bigint {
-  if (bytes.length === 0) return 0n
-  let result = 0n
-  for (let i = 0; i < bytes.length; i++) {
-    result = (result << 8n) | BigInt(bytes[i])
-  }
-  return result
 }
 
 function bigintToBytes(n: bigint): Uint8Array {

@@ -1,6 +1,7 @@
 import { keccak_256 } from '@noble/hashes/sha3'
 import { FIELD_MODULUS, MIMC_ROUNDS, MIMC_SEED } from './constants.js'
 import { addMod, powMod } from './field.js'
+import { bytesToBigInt } from './bytes.js'
 
 let cachedConstants: bigint[] | null = null
 
@@ -49,15 +50,6 @@ export function mimcHash(inputs: bigint[]): bigint {
   }
 
   return h
-}
-
-function bytesToBigInt(bytes: Uint8Array): bigint {
-  if (bytes.length === 0) return 0n
-  let result = 0n
-  for (let i = 0; i < bytes.length; i++) {
-    result = (result << 8n) | BigInt(bytes[i])
-  }
-  return result
 }
 
 export function hashToScalar(inputs: Uint8Array[]): bigint {

@@ -9,9 +9,7 @@ const require = createRequire(import.meta.url)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const s2circuits = require('./s2circuits.cjs')
 
-// Re-export all functions
-// eslint-disable-next-line camelcase
-export const bench_toprf_native = s2circuits.bench_toprf_native
+// Re-export cipher functions only
 // eslint-disable-next-line camelcase
 export const debug_chacha20_keystream = s2circuits.debug_chacha20_keystream
 // eslint-disable-next-line camelcase
@@ -23,37 +21,15 @@ export const generate_chacha20_proof = s2circuits.generate_chacha20_proof
 // eslint-disable-next-line camelcase
 export const get_circuits_info = s2circuits.get_circuits_info
 // eslint-disable-next-line camelcase
-export const get_toprf_info = s2circuits.get_toprf_info
-// eslint-disable-next-line camelcase
 export const prove_aes128_ctr_encrypt = s2circuits.prove_aes128_ctr_encrypt
 // eslint-disable-next-line camelcase
-export const prove_aes256_ctr_encrypt = s2circuits.prove_aes256_ctr_encrypt
+export const prove_aes256_ctr_encrypt = s2circuits.prove_aes256_ctr_proof
 // eslint-disable-next-line camelcase
 export const prove_chacha20_encrypt = s2circuits.prove_chacha20_encrypt
-// eslint-disable-next-line camelcase
-export const toprf_create_request = s2circuits.toprf_create_request
-// eslint-disable-next-line camelcase
-export const toprf_evaluate = s2circuits.toprf_evaluate
-// eslint-disable-next-line camelcase
-export const toprf_finalize = s2circuits.toprf_finalize
-// eslint-disable-next-line camelcase
-export const toprf_generate_keys = s2circuits.toprf_generate_keys
-// eslint-disable-next-line camelcase
-export const debug_dleq_hash = s2circuits.debug_dleq_hash
-// eslint-disable-next-line camelcase
-export const debug_dleq_verify = s2circuits.debug_dleq_verify
 // eslint-disable-next-line camelcase
 export const verify_aes_ctr_proof = s2circuits.verify_aes_ctr_proof
 // eslint-disable-next-line camelcase
 export const verify_chacha20_proof = s2circuits.verify_chacha20_proof
-// eslint-disable-next-line camelcase
-export const generate_cipher_toprf_proof = s2circuits.generate_cipher_toprf_proof
-// eslint-disable-next-line camelcase
-export const verify_cipher_toprf_proof = s2circuits.verify_cipher_toprf_proof
-// eslint-disable-next-line camelcase
-export const debug_combined_toprf = s2circuits.debug_combined_toprf
-// eslint-disable-next-line camelcase
-export const debug_toprf_verify = s2circuits.debug_toprf_verify
 
 // For init compatibility (nodejs target auto-initializes)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

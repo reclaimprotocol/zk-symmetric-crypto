@@ -4,7 +4,6 @@ import { CONFIG } from '../config.ts'
 import { makeLocalFileFetch } from '../file-fetch.ts'
 import { makeGnarkOPRFOperator } from '../gnark/toprf.ts'
 import { strToUint8Array } from '../gnark/utils.ts'
-import { makeStwoOPRFOperator } from '../stwo/toprf.ts'
 import type { EncryptionAlgorithm, OPRFOperator, OPRFResponseData, ZKEngine, ZKTOPRFPublicSignals } from '../types.ts'
 import { ceilToBlockSizeMultiple, getBlockSizeBytes } from '../utils.ts'
 import { generateProof, verifyProof } from '../zk.ts'
@@ -27,10 +26,6 @@ const OPRF_ZK_ENGINES_MAP: { [E in ZKEngine]?: Config } = {
 		make: algorithm => makeGnarkOPRFOperator({ fetcher, algorithm }),
 		algorithms: ['chacha20', 'aes-128-ctr', 'aes-256-ctr'],
 	},
-	'stwo': {
-		make: algorithm => makeStwoOPRFOperator({ fetcher, algorithm }),
-		algorithms: ['chacha20', 'aes-128-ctr', 'aes-256-ctr'],
-	}
 }
 
 const OPRF_ENGINES = Object.keys(OPRF_ZK_ENGINES_MAP) as ZKEngine[]

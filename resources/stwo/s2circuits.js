@@ -7,7 +7,7 @@
  * @param {number} counter
  * @returns {string}
  */
-function debug_chacha20_keystream(key, nonce, counter) {
+export function debug_chacha20_keystream(key, nonce, counter) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -23,7 +23,6 @@ function debug_chacha20_keystream(key, nonce, counter) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
-exports.debug_chacha20_keystream = debug_chacha20_keystream;
 
 /**
  * Generate AES-128-CTR proof and return it serialized (base64).
@@ -34,7 +33,7 @@ exports.debug_chacha20_keystream = debug_chacha20_keystream;
  * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-function generate_aes128_ctr_proof(key, nonce, counter, plaintext, ciphertext) {
+export function generate_aes128_ctr_proof(key, nonce, counter, plaintext, ciphertext) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -54,7 +53,6 @@ function generate_aes128_ctr_proof(key, nonce, counter, plaintext, ciphertext) {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
-exports.generate_aes128_ctr_proof = generate_aes128_ctr_proof;
 
 /**
  * Generate AES-256-CTR proof and return it serialized (base64).
@@ -65,7 +63,7 @@ exports.generate_aes128_ctr_proof = generate_aes128_ctr_proof;
  * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-function generate_aes256_ctr_proof(key, nonce, counter, plaintext, ciphertext) {
+export function generate_aes256_ctr_proof(key, nonce, counter, plaintext, ciphertext) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -85,7 +83,6 @@ function generate_aes256_ctr_proof(key, nonce, counter, plaintext, ciphertext) {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
-exports.generate_aes256_ctr_proof = generate_aes256_ctr_proof;
 
 /**
  * Generate ChaCha20 proof and return it serialized (base64).
@@ -97,7 +94,7 @@ exports.generate_aes256_ctr_proof = generate_aes256_ctr_proof;
  * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-function generate_chacha20_proof(key, nonce, counter, plaintext, ciphertext) {
+export function generate_chacha20_proof(key, nonce, counter, plaintext, ciphertext) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -117,13 +114,12 @@ function generate_chacha20_proof(key, nonce, counter, plaintext, ciphertext) {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
-exports.generate_chacha20_proof = generate_chacha20_proof;
 
 /**
  * Get circuit information as JSON.
  * @returns {string}
  */
-function get_circuits_info() {
+export function get_circuits_info() {
     let deferred1_0;
     let deferred1_1;
     try {
@@ -135,7 +131,6 @@ function get_circuits_info() {
         wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
 }
-exports.get_circuits_info = get_circuits_info;
 
 /**
  * Prove AES-128-CTR encryption.
@@ -160,7 +155,7 @@ exports.get_circuits_info = get_circuits_info;
  * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-function prove_aes128_ctr_encrypt(key, nonce, counter, plaintext, ciphertext) {
+export function prove_aes128_ctr_encrypt(key, nonce, counter, plaintext, ciphertext) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -180,7 +175,6 @@ function prove_aes128_ctr_encrypt(key, nonce, counter, plaintext, ciphertext) {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
-exports.prove_aes128_ctr_encrypt = prove_aes128_ctr_encrypt;
 
 /**
  * Prove AES-256-CTR encryption.
@@ -205,7 +199,7 @@ exports.prove_aes128_ctr_encrypt = prove_aes128_ctr_encrypt;
  * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-function prove_aes256_ctr_encrypt(key, nonce, counter, plaintext, ciphertext) {
+export function prove_aes256_ctr_encrypt(key, nonce, counter, plaintext, ciphertext) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -225,7 +219,6 @@ function prove_aes256_ctr_encrypt(key, nonce, counter, plaintext, ciphertext) {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
-exports.prove_aes256_ctr_encrypt = prove_aes256_ctr_encrypt;
 
 /**
  * Prove ChaCha20 encryption.
@@ -250,7 +243,7 @@ exports.prove_aes256_ctr_encrypt = prove_aes256_ctr_encrypt;
  * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-function prove_chacha20_encrypt(key, nonce, counter, plaintext, ciphertext) {
+export function prove_chacha20_encrypt(key, nonce, counter, plaintext, ciphertext) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -270,7 +263,6 @@ function prove_chacha20_encrypt(key, nonce, counter, plaintext, ciphertext) {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
-exports.prove_chacha20_encrypt = prove_chacha20_encrypt;
 
 /**
  * Verify an AES-CTR proof (base64-encoded) against verifier-supplied public inputs.
@@ -285,7 +277,7 @@ exports.prove_chacha20_encrypt = prove_chacha20_encrypt;
  * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-function verify_aes_ctr_proof(proof_b64, nonce, counter, plaintext, ciphertext) {
+export function verify_aes_ctr_proof(proof_b64, nonce, counter, plaintext, ciphertext) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -305,7 +297,6 @@ function verify_aes_ctr_proof(proof_b64, nonce, counter, plaintext, ciphertext) 
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
-exports.verify_aes_ctr_proof = verify_aes_ctr_proof;
 
 /**
  * Verify a ChaCha20 proof (base64-encoded) against verifier-supplied public inputs.
@@ -319,7 +310,7 @@ exports.verify_aes_ctr_proof = verify_aes_ctr_proof;
  * @param {Uint8Array} ciphertext
  * @returns {string}
  */
-function verify_chacha20_proof(proof_b64, nonce, counter, plaintext, ciphertext) {
+export function verify_chacha20_proof(proof_b64, nonce, counter, plaintext, ciphertext) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -339,7 +330,6 @@ function verify_chacha20_proof(proof_b64, nonce, counter, plaintext, ciphertext)
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
-exports.verify_chacha20_proof = verify_chacha20_proof;
 
 function __wbg_get_imports() {
     const import0 = {
@@ -422,7 +412,15 @@ function passStringToWasm0(arg, malloc, realloc) {
 
 let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 cachedTextDecoder.decode();
+const MAX_SAFARI_DECODE_BYTES = 2146435072;
+let numBytesDecoded = 0;
 function decodeText(ptr, len) {
+    numBytesDecoded += len;
+    if (numBytesDecoded >= MAX_SAFARI_DECODE_BYTES) {
+        cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
+        cachedTextDecoder.decode();
+        numBytesDecoded = len;
+    }
     return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 
@@ -441,8 +439,94 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-const wasmPath = `${__dirname}/s2circuits_bg.wasm`;
-const wasmBytes = require('fs').readFileSync(wasmPath);
-const wasmModule = new WebAssembly.Module(wasmBytes);
-let wasm = new WebAssembly.Instance(wasmModule, __wbg_get_imports()).exports;
-wasm.__wbindgen_start();
+let wasmModule, wasm;
+function __wbg_finalize_init(instance, module) {
+    wasm = instance.exports;
+    wasmModule = module;
+    cachedUint8ArrayMemory0 = null;
+    wasm.__wbindgen_start();
+    return wasm;
+}
+
+async function __wbg_load(module, imports) {
+    if (typeof Response === 'function' && module instanceof Response) {
+        if (typeof WebAssembly.instantiateStreaming === 'function') {
+            try {
+                return await WebAssembly.instantiateStreaming(module, imports);
+            } catch (e) {
+                const validResponse = module.ok && expectedResponseType(module.type);
+
+                if (validResponse && module.headers.get('Content-Type') !== 'application/wasm') {
+                    console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
+
+                } else { throw e; }
+            }
+        }
+
+        const bytes = await module.arrayBuffer();
+        return await WebAssembly.instantiate(bytes, imports);
+    } else {
+        const instance = await WebAssembly.instantiate(module, imports);
+
+        if (instance instanceof WebAssembly.Instance) {
+            return { instance, module };
+        } else {
+            return instance;
+        }
+    }
+
+    function expectedResponseType(type) {
+        switch (type) {
+            case 'basic': case 'cors': case 'default': return true;
+        }
+        return false;
+    }
+}
+
+function initSync(module) {
+    if (wasm !== undefined) return wasm;
+
+
+    if (module !== undefined) {
+        if (Object.getPrototypeOf(module) === Object.prototype) {
+            ({module} = module)
+        } else {
+            console.warn('using deprecated parameters for `initSync()`; pass a single object instead')
+        }
+    }
+
+    const imports = __wbg_get_imports();
+    if (!(module instanceof WebAssembly.Module)) {
+        module = new WebAssembly.Module(module);
+    }
+    const instance = new WebAssembly.Instance(module, imports);
+    return __wbg_finalize_init(instance, module);
+}
+
+async function __wbg_init(module_or_path) {
+    if (wasm !== undefined) return wasm;
+
+
+    if (module_or_path !== undefined) {
+        if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
+            ({module_or_path} = module_or_path)
+        } else {
+            console.warn('using deprecated parameters for the initialization function; pass a single object instead')
+        }
+    }
+
+    if (module_or_path === undefined) {
+        module_or_path = new URL('s2circuits_bg.wasm', import.meta.url);
+    }
+    const imports = __wbg_get_imports();
+
+    if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
+        module_or_path = fetch(module_or_path);
+    }
+
+    const { instance, module } = await __wbg_load(await module_or_path, imports);
+
+    return __wbg_finalize_init(instance, module);
+}
+
+export { initSync, __wbg_init as default };

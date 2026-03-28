@@ -4,6 +4,7 @@ resources/*.sym
 js/src/test.ts
 node_modules
 lib
+dist
 
 .idea
 .DS_Store

@@ -100,3 +100,46 @@ export function verify_aes_ctr_proof(proof_b64: string, nonce: Uint8Array, count
  * Verification fails if the proof was generated for different data.
  */
 export function verify_chacha20_proof(proof_b64: string, nonce: Uint8Array, counter: number, plaintext: Uint8Array, ciphertext: Uint8Array): string;
+
+export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
+
+export interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+    readonly prove_chacha20_encrypt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly prove_aes128_ctr_encrypt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly prove_aes256_ctr_encrypt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly generate_chacha20_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly verify_chacha20_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly generate_aes128_ctr_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly generate_aes256_ctr_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly verify_aes_ctr_proof: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly debug_chacha20_keystream: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly get_circuits_info: () => [number, number];
+    readonly __wbindgen_externrefs: WebAssembly.Table;
+    readonly __wbindgen_malloc: (a: number, b: number) => number;
+    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+    readonly __wbindgen_start: () => void;
+}
+
+export type SyncInitInput = BufferSource | WebAssembly.Module;
+
+/**
+ * Instantiates the given `module`, which can either be bytes or
+ * a precompiled `WebAssembly.Module`.
+ *
+ * @param {{ module: SyncInitInput }} module - Passing `SyncInitInput` directly is deprecated.
+ *
+ * @returns {InitOutput}
+ */
+export function initSync(module: { module: SyncInitInput } | SyncInitInput): InitOutput;
+
+/**
+ * If `module_or_path` is {RequestInfo} or {URL}, makes a request and
+ * for everything else, calls `WebAssembly.instantiate` directly.
+ *
+ * @param {{ module_or_path: InitInput | Promise<InitInput> }} module_or_path - Passing `InitInput` directly is deprecated.
+ *
+ * @returns {Promise<InitOutput>}
+ */
+export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;

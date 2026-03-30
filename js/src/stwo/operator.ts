@@ -1,5 +1,5 @@
 import { Base64 } from 'js-base64'
-import type { EncryptionAlgorithm, FileFetch, Logger, MakeZKOperatorOpts, ZKOperator, ZKProofInput } from '../types.ts'
+import type { EncryptionAlgorithm, MakeZKOperatorOpts, ZKOperator, ZKProofInput } from '../types.ts'
 import { generate_aes128_ctr_proof, generate_aes256_ctr_proof, generate_chacha20_proof, initSync, verify_aes_ctr_proof, verify_chacha20_proof } from './s2circuits-wrapper.ts'
 
 type StwoWitnessData = {
@@ -35,7 +35,7 @@ function assertU32Counter(counter: number): void {
 let wasmInitialized = false
 let initPromise: Promise<void> | undefined
 
-async function ensureWasmInitialized(_fetcher: FileFetch, _logger?: Logger): Promise<void> {
+async function ensureWasmInitialized(): Promise<void> {
 	if(wasmInitialized) {
 		return
 	}
@@ -86,7 +86,6 @@ function deserializeWitness(witness: Uint8Array): StwoWitnessData {
 
 export function makeStwoZkOperator({
 	algorithm,
-	fetcher,
 }: MakeZKOperatorOpts<{}>): ZKOperator {
 	return {
 		generateWitness(input) {
@@ -95,8 +94,8 @@ export function makeStwoZkOperator({
 			return serializeWitness(algorithm, input)
 		},
 
-		async groth16Prove(witness, logger) {
-			await ensureWasmInitialized(fetcher, logger)
+		async groth16Prove(witness) {
+			await ensureWasmInitialized()
 			const data = deserializeWitness(witness)
 
 			const key = Base64.toUint8Array(data.key)
@@ -134,7 +133,7 @@ export function makeStwoZkOperator({
 		},
 
 		async groth16Verify(publicSignals, proof, logger) {
-			await ensureWasmInitialized(fetcher, logger)
+			await ensureWasmInitialized()
 
 			// Get verifier's expected public inputs
 			const expectedNonce = publicSignals.noncesAndCounters[0]?.nonce

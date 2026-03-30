@@ -35,7 +35,7 @@ function assertU32Counter(counter: number): void {
 let wasmInitialized = false
 let initPromise: Promise<void> | undefined
 
-async function ensureWasmInitialized(fetcher: FileFetch, logger?: Logger): Promise<void> {
+async function ensureWasmInitialized(_fetcher: FileFetch, _logger?: Logger): Promise<void> {
 	if(wasmInitialized) {
 		return
 	}
@@ -46,8 +46,9 @@ async function ensureWasmInitialized(fetcher: FileFetch, logger?: Logger): Promi
 
 	initPromise = (async() => {
 		try {
-			const wasmBytes = await fetcher.fetch('stwo', 's2circuits_bg.wasm', logger)
-			initSync({ module: wasmBytes })
+			// Node.js target has WASM embedded in the .cjs file
+			// initSync is a no-op that doesn't need the WASM bytes
+			initSync()
 			wasmInitialized = true
 		} catch(err) {
 			initPromise = undefined

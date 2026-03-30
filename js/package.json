@@ -28,7 +28,8 @@
   "scripts": {
     "test": "node --import=./src/tests/setup.ts --test --test-force-exit src/tests/*.test.ts",
     "bench": "node ./src/tests/benchmark",
-    "build": "npm exec tsc -- -p tsconfig.build.json",
+    "build": "npm exec tsc -- -p tsconfig.build.json && npm run build:copy-assets",
+    "build:copy-assets": "cp src/stwo/s2circuits.cjs src/stwo/s2circuits_bg.wasm lib/stwo/",
     "prepare": "npm run build",
     "commitlint": "commitlint --edit",
     "lint": "eslint ./ --ext .js,.ts,.jsx,.tsx",

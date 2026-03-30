@@ -3,7 +3,7 @@ import type { AlgorithmConfig, EncryptionAlgorithm } from './types.ts'
 import { bitsToUint8Array, bitsToUintArray, toUint8Array, toUintArray, uint8ArrayToBits, uintArrayToBits } from './utils.ts'
 
 // commit hash for this repo
-export const GIT_COMMIT_HASH = '4160642fd6c64c3f33c9144eaf8b4782c22ae2be'
+export const GIT_COMMIT_HASH = 'b2f7e537aca83925af886cd6f0fc19d9bf2f57a6'
 
 export const CONFIG: { [E in EncryptionAlgorithm]: AlgorithmConfig } = {
 	'chacha20': {

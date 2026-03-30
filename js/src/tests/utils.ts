@@ -5,16 +5,24 @@ import {
 	type ZKOperator
 } from '../index.ts'
 import { makeSnarkJsZKOperator } from '../snarkjs/operator.ts'
+import { makeStwoZkOperator } from '../stwo/operator.ts'
 
 const fetcher = makeLocalFileFetch()
 
 type ConfigItem = 'snarkjs'
 	| 'gnark'
+	| 'stwo'
 
 export function getEngineForConfigItem(item: ConfigItem) {
-	return item === 'snarkjs'
-		? 'snarkjs'
-		: 'gnark'
+	if(item === 'snarkjs') {
+		return 'snarkjs'
+	}
+
+	if(item === 'stwo') {
+		return 'stwo'
+	}
+
+	return 'gnark'
 }
 
 export const ZK_CONFIG_MAP: {
@@ -29,6 +37,9 @@ export const ZK_CONFIG_MAP: {
 	),
 	'gnark': (algorithm) => (
 		makeGnarkZkOperator({ algorithm, fetcher })
+	),
+	'stwo': (algorithm) => (
+		makeStwoZkOperator({ algorithm, fetcher })
 	),
 }
 

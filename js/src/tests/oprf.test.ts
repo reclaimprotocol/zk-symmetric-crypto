@@ -25,7 +25,7 @@ const OPRF_ZK_ENGINES_MAP: { [E in ZKEngine]?: Config } = {
 	'gnark': {
 		make: algorithm => makeGnarkOPRFOperator({ fetcher, algorithm }),
 		algorithms: ['chacha20', 'aes-128-ctr', 'aes-256-ctr'],
-	}
+	},
 }
 
 const OPRF_ENGINES = Object.keys(OPRF_ZK_ENGINES_MAP) as ZKEngine[]

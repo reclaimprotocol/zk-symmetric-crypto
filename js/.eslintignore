@@ -2,3 +2,10 @@ lib
 node_modules
 bin
 jest.config.js
+resources/stwo/s2circuits.js
+resources/stwo/s2circuits.d.ts
+resources/stwo/s2circuits_bg.wasm.d.ts
+src/stwo/s2circuits.js
+src/stwo/s2circuits.cjs
+src/stwo/s2circuits.d.ts
+src/stwo/s2circuits_bg.js

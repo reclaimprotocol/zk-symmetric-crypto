@@ -1,6 +1,6 @@
 {
   "name": "@reclaimprotocol/zk-symmetric-crypto",
-  "version": "5.0.5",
+  "version": "5.0.9",
   "description": "JS Wrappers for Various ZK Snark Circuits",
   "type": "module",
   "exports": {
@@ -15,6 +15,10 @@
     "./gnark": {
       "types": "./lib/gnark/index.d.ts",
       "default": "./lib/gnark/index.js"
+    },
+    "./stwo": {
+      "types": "./lib/stwo/index.d.ts",
+      "default": "./lib/stwo/index.js"
     }
   },
   "repository": {
@@ -22,15 +26,15 @@
    	"url": "https://github.com/reclaimprotocol/zk-symmetric-crypto"
   },
   "scripts": {
-    "run:tsc": "node --experimental-strip-types",
-    "test": "node --experimental-strip-types --import=./src/tests/setup.ts --test --test-force-exit src/tests/*.test.ts",
-    "bench": "NODE_ENV=test npm run run:tsc -- ./src/tests/benchmark",
-    "build": "npm exec tsc -- -p tsconfig.build.json",
+    "test": "node --import=./src/tests/setup.ts --test --test-force-exit src/tests/*.test.ts",
+    "bench": "node ./src/tests/benchmark",
+    "build": "npm exec tsc -- -p tsconfig.build.json && npm run build:copy-assets",
+    "build:copy-assets": "cp src/stwo/s2circuits.cjs src/stwo/s2circuits_bg.wasm lib/stwo/",
     "prepare": "npm run build",
     "commitlint": "commitlint --edit",
     "lint": "eslint ./ --ext .js,.ts,.jsx,.tsx",
     "lint:fix": "npm run lint -- --fix",
-    "publish:pkg": "npm run run:tsc -- ./src/scripts/publish-pkg.ts"
+    "publish:pkg": "node ./src/scripts/publish-pkg.ts"
   },
   "keywords": [
     "circom",

@@ -585,7 +585,7 @@ pub fn generate_chacha20_proof(
 
     // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
     // inside stmt.public_inputs, so we don't need to send raw data separately
-    let proof_bytes = match serde_json::to_vec(&proof) {
+    let proof_bytes = match bincode::serialize(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
     };
@@ -633,7 +633,7 @@ pub fn verify_chacha20_proof(
         Err(e) => return json_error(format!("Invalid base64: {}", e)),
     };
 
-    let proof: StreamProof<Blake2sMerkleHasher> = match serde_json::from_slice(&proof_bytes) {
+    let proof: StreamProof<Blake2sMerkleHasher> = match bincode::deserialize(&proof_bytes) {
         Ok(p) => p,
         Err(e) => return json_error(format!("Invalid proof format: {}", e)),
     };
@@ -755,7 +755,7 @@ pub fn generate_aes128_ctr_proof(
 
     // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
     // inside stmt0.public_inputs, so we don't need to send raw data separately
-    let proof_bytes = match serde_json::to_vec(&proof) {
+    let proof_bytes = match bincode::serialize(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
     };
@@ -879,7 +879,7 @@ pub fn generate_aes256_ctr_proof(
 
     // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
     // inside stmt0.public_inputs, so we don't need to send raw data separately
-    let proof_bytes = match serde_json::to_vec(&proof) {
+    let proof_bytes = match bincode::serialize(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
     };
@@ -928,7 +928,7 @@ pub fn verify_aes_ctr_proof(
         Err(e) => return json_error(format!("Invalid base64: {}", e)),
     };
 
-    let proof: AESCtrProof<Blake2sMerkleHasher> = match serde_json::from_slice(&proof_bytes) {
+    let proof: AESCtrProof<Blake2sMerkleHasher> = match bincode::deserialize(&proof_bytes) {
         Ok(p) => p,
         Err(e) => return json_error(format!("Invalid proof format: {}", e)),
     };

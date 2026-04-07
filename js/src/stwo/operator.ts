@@ -127,9 +127,9 @@ export function makeStwoZkOperator({
 				throw new Error('Stwo proof generation failed: no proof returned')
 			}
 
-			// Return the STARK proof directly - public inputs are cryptographically
-			// bound via Fiat-Shamir hashes inside the proof
-			return { proof: result.proof }
+			// Decode base64 to binary for compact protobuf storage
+			// (matches gnark which also returns Uint8Array)
+			return { proof: Base64.toUint8Array(result.proof) }
 		},
 
 		async groth16Verify(publicSignals, proof, logger) {
@@ -149,10 +149,10 @@ export function makeStwoZkOperator({
 
 			assertU32Counter(expectedCounter)
 
-			// The proof is the raw base64-encoded STARK proof
+			// Re-encode to base64 for WASM verify function
 			const proofStr = typeof proof === 'string'
 				? proof
-				: new TextDecoder().decode(proof)
+				: Base64.fromUint8Array(proof)
 
 			// Verify the STARK proof with verifier-supplied public inputs.
 			// Security: Public inputs (nonce, counter, plaintext/ciphertext hashes) are

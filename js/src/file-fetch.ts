@@ -78,7 +78,10 @@ export function makeLocalFileFetch(
 			// a browser env
 			const { readFile } = await import('fs/promises')
 			const { join, dirname } = await import('path')
-			const __dirname = dirname(import.meta.url.replace('file://', ''))
+			const { fileURLToPath } = await import('url')
+			// fileURLToPath handles the Windows file:///F:/... -> F:\... conversion;
+			// stripping the `file://` prefix by hand leaves a leading slash that breaks fs ops.
+			const __dirname = dirname(fileURLToPath(import.meta.url))
 			const fullPath = join(__dirname, path)
 			const buff = await readFile(fullPath)
 			return buff

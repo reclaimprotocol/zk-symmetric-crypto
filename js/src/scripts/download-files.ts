@@ -1,21 +1,22 @@
-import { exec } from 'child_process'
+import { spawn } from 'child_process'
 import { createWriteStream } from 'fs'
 import { mkdir, rename, rm } from 'fs/promises'
 import { dirname, join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
-import { promisify } from 'util'
+import { fileURLToPath } from 'url'
 import { GIT_COMMIT_HASH } from '../config.ts'
 import type { Logger } from '../types.ts'
 
-const execPromise = promisify(exec)
 const logger: Logger = console
 
 const ZIP_URL = `https://github.com/reclaimprotocol/zk-symmetric-crypto/archive/${GIT_COMMIT_HASH}.zip`
 const DOWNLOAD_DIR = './zk-symmetric-crypto-download'
 const EXTRACTED_DIR = `./zk-symmetric-crypto-${GIT_COMMIT_HASH}`
 
-const __dirname = dirname(import.meta.url.replace('file://', ''))
+// fileURLToPath handles the Windows file:///F:/... -> F:\... conversion;
+// stripping the `file://` prefix by hand leaves a leading slash that breaks fs ops.
+const __dirname = dirname(fileURLToPath(import.meta.url))
 const BASE_DIR = join(__dirname, '../../')
 const DIRS_TO_COPY = [
 	'resources',
@@ -49,10 +50,34 @@ async function downloadAndExtractZip() {
 
 	logger.info('downloaded ZIP, extracting...')
 
-	// Extract ZIP using unzip command
-	await execPromise(`unzip -q ${zipPath} -d ./`)
+	await extractZip(zipPath, './')
 
 	logger.info(`extracted to ${EXTRACTED_DIR}`)
+}
+
+async function extractZip(zipFile: string, destDir: string) {
+	// Windows ships PowerShell but not `unzip`; everywhere else, `unzip` is the
+	// safe assumption. Using spawn (not exec) so paths with spaces stay intact.
+	if(process.platform === 'win32') {
+		await runCmd('powershell', [
+			'-NoProfile',
+			'-ExecutionPolicy', 'Bypass',
+			'-Command',
+			`Expand-Archive -LiteralPath '${zipFile}' -DestinationPath '${destDir}' -Force`,
+		])
+	} else {
+		await runCmd('unzip', ['-q', zipFile, '-d', destDir])
+	}
+}
+
+function runCmd(cmd: string, args: string[]) {
+	return new Promise<void>((resolve, reject) => {
+		const child = spawn(cmd, args, { stdio: 'inherit' })
+		child.on('error', reject)
+		child.on('exit', code => (
+			code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`))
+		))
+	})
 }
 
 async function main() {

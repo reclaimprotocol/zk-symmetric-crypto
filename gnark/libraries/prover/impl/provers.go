@@ -176,7 +176,7 @@ func (cp *ChaChaProver) Prove(params *InputParams) (proof []byte, output []uint8
 	if err != nil {
 		panic(err)
 	}
-	gProof, err := groth16.Prove(cp.r1cs, cp.pk, wtns)
+	gProof, err := groth16.Prove(cp.r1cs, cp.pk, wtns, legacyProverOptions()...)
 	if err != nil {
 		panic(err)
 	}
@@ -266,7 +266,7 @@ func (ap *AESProver) Prove(params *InputParams) (proof []byte, output []uint8) {
 	if err != nil {
 		panic(err)
 	}
-	gProof, err := groth16.Prove(ap.r1cs, ap.pk, wtns)
+	gProof, err := groth16.Prove(ap.r1cs, ap.pk, wtns, legacyProverOptions()...)
 	if err != nil {
 		panic(err)
 	}
@@ -439,7 +439,7 @@ func (cp *ChaChaOPRFProver) Prove(params *InputParams) (proof []byte, output []u
 		panic(err)
 	}
 
-	gProof, err := groth16.Prove(cp.r1cs, cp.pk, wtns)
+	gProof, err := groth16.Prove(cp.r1cs, cp.pk, wtns, legacyProverOptions()...)
 	if err != nil {
 		panic(err)
 	}
@@ -613,7 +613,7 @@ func (ap *AESOPRFProver) Prove(params *InputParams) (proof []byte, output []uint
 	if err != nil {
 		panic(err)
 	}
-	gProof, err := groth16.Prove(ap.r1cs, ap.pk, wtns)
+	gProof, err := groth16.Prove(ap.r1cs, ap.pk, wtns, legacyProverOptions()...)
 	if err != nil {
 		panic(err)
 	}

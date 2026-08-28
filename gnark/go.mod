@@ -1,6 +1,8 @@
 module github.com/reclaimprotocol/zk-symmetric-crypto/gnark
 
-go 1.27.0
+go 1.26.0
+
+toolchain go1.27.0
 
 require (
 	github.com/consensys/gnark v0.16.3

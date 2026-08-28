@@ -94,4 +94,13 @@ jobs:
 
       - name: Run tests
         working-directory: ./gnark
-        run: go test -v ./...
+        # OPRF source circuits use the newer cofactor-cleared protocol, while
+        # released clients use frozen v0.14 artifacts with legacy DLEQ. The JS
+        # tests exercise those shipped artifacts with the current libraries.
+        run: >-
+          go test -v
+          ./circuits/aesV2
+          ./circuits/chachaV3
+          ./keygen
+          ./libraries/...
+          ./utils

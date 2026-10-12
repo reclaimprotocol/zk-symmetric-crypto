@@ -2,6 +2,7 @@
 
 use std::simd::u32x16;
 
+use crate::public_inputs::{preprocessed_root, public_column_ids, public_trace};
 use blake2::{Blake2s256, Digest};
 use itertools::Itertools;
 use num_traits::Zero;
@@ -26,17 +27,20 @@ use super::{
     ChaChaStreamInput,
 };
 
-/// Public inputs for ChaCha20 proof - cryptographically bound to the proof via Fiat-Shamir.
+/// Public inputs for ChaCha20 proof, bound to trace cells by public columns.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChaChaPublicInputs {
     /// 12-byte nonce (as 3 u32s in little-endian)
     pub nonce: [u8; 12],
     /// Starting counter value
     pub counter: u32,
-    /// Blake2s hash of plaintext (for binding without storing full plaintext)
+    /// Blake2s digest of plaintext, included in the transcript
     pub plaintext_hash: [u8; 32],
     /// Blake2s hash of ciphertext
     pub ciphertext_hash: [u8; 32],
+    /// Public bytes needed to reconstruct the preprocessed commitment.
+    pub plaintext: Vec<u8>,
+    pub ciphertext: Vec<u8>,
 }
 
 impl ChaChaPublicInputs {
@@ -49,6 +53,8 @@ impl ChaChaPublicInputs {
             counter,
             plaintext_hash,
             ciphertext_hash,
+            plaintext: plaintext.to_vec(),
+            ciphertext: ciphertext.to_vec(),
         }
     }
 
@@ -59,7 +65,10 @@ impl ChaChaPublicInputs {
         }
         let plaintext_hash: [u8; 32] = Blake2s256::digest(plaintext).into();
         let ciphertext_hash: [u8; 32] = Blake2s256::digest(ciphertext).into();
-        self.plaintext_hash == plaintext_hash && self.ciphertext_hash == ciphertext_hash
+        self.plaintext == plaintext
+            && self.ciphertext == ciphertext
+            && self.plaintext_hash == plaintext_hash
+            && self.ciphertext_hash == ciphertext_hash
     }
 
     /// Mix into Fiat-Shamir channel.
@@ -112,8 +121,8 @@ impl StreamStatement {
         let info = chacha_stream_info();
         let n_trace_cols = info.mask_offsets[1].len();
         TreeVec::new(vec![
-            vec![],                            // Preprocessed (empty)
-            vec![self.log_size; n_trace_cols], // Main trace
+            vec![self.log_size; public_column_ids(64).len()], // Public columns
+            vec![self.log_size; n_trace_cols],                // Main trace
         ])
     }
 
@@ -192,8 +201,16 @@ where
     let channel = &mut MC::C::default();
     let mut commitment_scheme = CommitmentSchemeProver::new(config, &twiddles);
 
-    // No preprocessed trace
-    let tree_builder = commitment_scheme.tree_builder();
+    let preprocessed = public_trace(
+        log_size,
+        64,
+        &public_inputs.nonce,
+        public_inputs.counter,
+        &public_inputs.plaintext,
+        &public_inputs.ciphertext,
+    )?;
+    let mut tree_builder = commitment_scheme.tree_builder();
+    tree_builder.extend_evals(preprocessed);
     tree_builder.commit(channel);
 
     // Generate trace
@@ -212,7 +229,8 @@ where
     tree_builder.commit(channel);
 
     // Create component
-    let tree_span_provider = &mut TraceLocationAllocator::default();
+    let tree_span_provider =
+        &mut TraceLocationAllocator::new_with_preprocessed_columns(&public_column_ids(64));
     let component = ChaChaStreamComponent::new(
         tree_span_provider,
         ChaChaStreamEval {
@@ -280,9 +298,18 @@ where
         })
         .collect();
 
-    // For test data, create dummy public inputs
-    let nonce_bytes: [u8; 12] = [0x00; 12];
-    let public_inputs = ChaChaPublicInputs::new(&nonce_bytes, 1, &[], &[]);
+    let nonce_bytes: [u8; 12] = std::array::from_fn(|byte| nonce[byte / 4].to_le_bytes()[byte % 4]);
+    let mut plaintext = Vec::new();
+    let mut ciphertext = Vec::new();
+    for input in &inputs {
+        for lane in 0..16 {
+            for word in 0..16 {
+                plaintext.extend_from_slice(&input.plaintext[word][lane].to_le_bytes());
+                ciphertext.extend_from_slice(&input.ciphertext[word][lane].to_le_bytes());
+            }
+        }
+    }
+    let public_inputs = ChaChaPublicInputs::new(&nonce_bytes, 1, &plaintext, &ciphertext);
 
     prove_stream_internal::<MC>(log_size, config, &inputs, public_inputs)
         .expect("Test data should produce valid proof")
@@ -338,7 +365,7 @@ fn validate_pcs_config(
 ///
 /// # Security
 /// - The proof's PCS config is validated against min_config before any verifier state is created
-/// - Public inputs are cryptographically bound to the proof via Fiat-Shamir
+/// - AIR constraints bind trace bytes to verifier-reconstructed public columns
 /// - If the verifier-supplied inputs don't match what was proven, verification fails
 pub fn verify_stream_with_public_inputs<MC: MerkleChannel>(
     proof: StreamProof<MC::H>,
@@ -347,7 +374,10 @@ pub fn verify_stream_with_public_inputs<MC: MerkleChannel>(
     counter: u32,
     plaintext: &[u8],
     ciphertext: &[u8],
-) -> Result<(), VerificationError> {
+) -> Result<(), VerificationError>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
     // SECURITY: Validate proof's config meets minimum requirements BEFORE creating verifier state
     validate_pcs_config(&proof.stark_proof.config, min_config)?;
 
@@ -373,7 +403,10 @@ pub fn verify_stream_with_public_inputs<MC: MerkleChannel>(
 pub fn verify_stream<MC: MerkleChannel>(
     proof: StreamProof<MC::H>,
     min_config: &PcsConfig,
-) -> Result<(), VerificationError> {
+) -> Result<(), VerificationError>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
     // SECURITY: Validate proof's config meets minimum requirements BEFORE creating verifier state
     validate_pcs_config(&proof.stark_proof.config, min_config)?;
 
@@ -383,9 +416,36 @@ pub fn verify_stream<MC: MerkleChannel>(
 /// Internal verification function.
 fn verify_stream_internal<MC: MerkleChannel>(
     StreamProof { stmt, stark_proof }: StreamProof<MC::H>,
-) -> Result<(), VerificationError> {
+) -> Result<(), VerificationError>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
     // Validate commitment count before indexing
     if stark_proof.commitments.len() < 2 {
+        return Err(VerificationError::OodsNotMatching);
+    }
+
+    let inputs = &stmt.public_inputs;
+    if !inputs.verify(
+        &inputs.nonce,
+        inputs.counter,
+        &inputs.plaintext,
+        &inputs.ciphertext,
+    ) {
+        return Err(VerificationError::OodsNotMatching);
+    }
+    let preprocessed = public_trace(
+        stmt.log_size,
+        64,
+        &inputs.nonce,
+        inputs.counter,
+        &inputs.plaintext,
+        &inputs.ciphertext,
+    )
+    .map_err(VerificationError::InvalidStructure)?;
+    if stark_proof.commitments[0]
+        != preprocessed_root::<MC>(stmt.log_size, stark_proof.config, preprocessed)
+    {
         return Err(VerificationError::OodsNotMatching);
     }
 
@@ -394,7 +454,7 @@ fn verify_stream_internal<MC: MerkleChannel>(
 
     let log_sizes = stmt.log_sizes();
 
-    // Preprocessed (empty)
+    // Preprocessed public columns, authenticated against verifier-reconstructed bytes.
     commitment_scheme.commit(stark_proof.commitments[0], &log_sizes[0], channel);
 
     // Trace
@@ -402,7 +462,8 @@ fn verify_stream_internal<MC: MerkleChannel>(
     commitment_scheme.commit(stark_proof.commitments[1], &log_sizes[1], channel);
 
     // Create component
-    let tree_span_provider = &mut TraceLocationAllocator::default();
+    let tree_span_provider =
+        &mut TraceLocationAllocator::new_with_preprocessed_columns(&public_column_ids(64));
     let component = ChaChaStreamComponent::new(
         tree_span_provider,
         ChaChaStreamEval {
@@ -455,6 +516,237 @@ mod tests {
     // ==================== SECURITY TESTS ====================
     // These tests verify the cryptographic binding of public inputs to proofs.
     // See README.md "Security Model" section for detailed documentation.
+
+    #[test]
+    fn test_security_chacha_forged_statement_before_proving() {
+        let key = [0x12345678; 8];
+        let nonce = [0x87654321; 3];
+        let counters = u32x16::from_array(std::array::from_fn(|lane| lane as u32 + 1));
+        let plaintext = [u32x16::splat(0); 16];
+        let ciphertext = compute_simd_ciphertext(&key, &nonce, counters, &plaintext);
+        let inputs = [ChaChaStreamInput {
+            key,
+            nonce,
+            counters,
+            plaintext,
+            ciphertext,
+        }];
+        let fake_nonce = [0xab; 12];
+        let fake_plaintext = vec![0x41; 16 * 64];
+        let fake_ciphertext = vec![0x42; 16 * 64];
+
+        // Choose the false statement BEFORE deriving challenges. Post-hoc
+        // statement tampering does not exercise this attack.
+        let proof = prove_stream_with_inputs::<Blake2sMerkleChannel>(
+            4,
+            PcsConfig::default(),
+            &fake_nonce,
+            99,
+            &fake_plaintext,
+            &fake_ciphertext,
+            &inputs,
+        );
+        let proof = match proof {
+            Ok(proof) => proof,
+            Err(error) => {
+                assert!(error.contains("ConstraintsNotSatisfied"), "{error}");
+                return;
+            }
+        };
+        let result = verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+            proof,
+            &PcsConfig::default(),
+            &fake_nonce,
+            99,
+            &fake_plaintext,
+            &fake_ciphertext,
+        );
+        assert!(
+            result.is_err(),
+            "Verifier accepted an unrelated trace for a forged statement"
+        );
+    }
+
+    fn stream_fixture(n_blocks: usize) -> (ChaChaPublicInputs, Vec<ChaChaStreamInput>) {
+        let key = [0x12345678; 8];
+        let nonce: [u32; 3] = [0x87654321, 0x11223344, 0xaabbccdd];
+        let counter = 0x01020304;
+        let inputs: Vec<_> = (0..n_blocks.div_ceil(16))
+            .map(|row| {
+                let counters = u32x16::from_array(std::array::from_fn(|lane| {
+                    counter + (row * 16 + lane) as u32
+                }));
+                let plaintext = std::array::from_fn(|word| {
+                    u32x16::from_array(std::array::from_fn(|lane| {
+                        if row * 16 + lane < n_blocks {
+                            (row * 256 + lane * 16 + word) as u32
+                        } else {
+                            0
+                        }
+                    }))
+                });
+                let ciphertext = compute_simd_ciphertext(&key, &nonce, counters, &plaintext);
+                ChaChaStreamInput {
+                    key,
+                    nonce,
+                    counters,
+                    plaintext,
+                    ciphertext,
+                }
+            })
+            .collect();
+        let mut plaintext = Vec::new();
+        let mut ciphertext = Vec::new();
+        for block in 0..n_blocks {
+            let input = &inputs[block / 16];
+            for word in 0..16 {
+                plaintext.extend_from_slice(&input.plaintext[word][block % 16].to_le_bytes());
+                ciphertext.extend_from_slice(&input.ciphertext[word][block % 16].to_le_bytes());
+            }
+        }
+        let nonce = std::array::from_fn(|byte| nonce[byte / 4].to_le_bytes()[byte % 4]);
+        (
+            ChaChaPublicInputs::new(&nonce, counter, &plaintext, &ciphertext),
+            inputs,
+        )
+    }
+
+    #[test]
+    fn test_security_chacha_each_public_input_is_constrained() {
+        let (public, inputs) = stream_fixture(17);
+        for field in 0..4 {
+            let mut fake = public.clone();
+            match field {
+                0 => fake.nonce[11] ^= 1,
+                1 => fake.counter += 1,
+                2 => *fake.plaintext.last_mut().unwrap() ^= 1,
+                _ => *fake.ciphertext.last_mut().unwrap() ^= 1,
+            }
+            let proof = prove_stream_with_inputs::<Blake2sMerkleChannel>(
+                5,
+                PcsConfig::default(),
+                &fake.nonce,
+                fake.counter,
+                &fake.plaintext,
+                &fake.ciphertext,
+                &inputs,
+            );
+            match proof {
+                Ok(proof) => assert!(
+                    verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+                        proof,
+                        &PcsConfig::default(),
+                        &fake.nonce,
+                        fake.counter,
+                        &fake.plaintext,
+                        &fake.ciphertext,
+                    )
+                    .is_err(),
+                    "Forged field {field} was accepted"
+                ),
+                Err(error) => assert!(error.contains("ConstraintsNotSatisfied"), "{error}"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_security_chacha_prover_chosen_public_columns_rejected() {
+        let (public, inputs) = stream_fixture(16);
+        let config = PcsConfig::default();
+        let twiddles = SimdBackend::precompute_twiddles(
+            CanonicCoset::new(5 + config.fri_config.log_blowup_factor)
+                .circle_domain()
+                .half_coset,
+        );
+        let channel = &mut <Blake2sMerkleChannel as MerkleChannel>::C::default();
+        let mut scheme =
+            CommitmentSchemeProver::<SimdBackend, Blake2sMerkleChannel>::new(config, &twiddles);
+        let mut builder = scheme.tree_builder();
+        // A custom prover supplies columns for its own data, rather than the statement.
+        builder.extend_evals(
+            public_trace(
+                4,
+                64,
+                &public.nonce,
+                public.counter,
+                &public.plaintext,
+                &public.ciphertext,
+            )
+            .unwrap(),
+        );
+        builder.commit(channel);
+        let fake_plaintext = vec![0x41; 16 * 64];
+        let fake_ciphertext = vec![0x42; 16 * 64];
+        let stmt = StreamStatement {
+            log_size: 4,
+            public_inputs: ChaChaPublicInputs::new(
+                &[0xab; 12],
+                99,
+                &fake_plaintext,
+                &fake_ciphertext,
+            ),
+        };
+        stmt.mix_into(channel);
+        let (trace, valid) = generate_stream_trace(4, &inputs);
+        assert!(valid);
+        let mut builder = scheme.tree_builder();
+        builder.extend_evals(trace);
+        builder.commit(channel);
+        let component = ChaChaStreamComponent::new(
+            &mut TraceLocationAllocator::new_with_preprocessed_columns(&public_column_ids(64)),
+            ChaChaStreamEval {
+                log_size: 4,
+                claimed_sum: SecureField::zero(),
+            },
+            SecureField::zero(),
+        );
+        let stark_proof = prove(
+            &[&component as &dyn ComponentProver<SimdBackend>],
+            channel,
+            scheme,
+        )
+        .unwrap();
+        let proof = StreamProof { stmt, stark_proof };
+        assert!(verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+            proof.clone(),
+            &config,
+            &[0xab; 12],
+            99,
+            &fake_plaintext,
+            &fake_ciphertext,
+        )
+        .is_err());
+        assert!(verify_stream::<Blake2sMerkleChannel>(proof, &config).is_err());
+    }
+
+    #[test]
+    fn test_stream_public_binding_with_padding_and_serialization() {
+        for n_blocks in [1usize, 17, 33] {
+            let (public, inputs) = stream_fixture(n_blocks);
+            let log_size = n_blocks.next_power_of_two().ilog2().max(4);
+            let proof = prove_stream_with_inputs::<Blake2sMerkleChannel>(
+                log_size,
+                PcsConfig::default(),
+                &public.nonce,
+                public.counter,
+                &public.plaintext,
+                &public.ciphertext,
+                &inputs,
+            )
+            .unwrap();
+            let bytes = bincode::serialize(&proof).unwrap();
+            let proof = bincode::deserialize(&bytes).unwrap();
+            verify_stream_with_public_inputs::<Blake2sMerkleChannel>(
+                proof,
+                &PcsConfig::default(),
+                &public.nonce,
+                public.counter,
+                &public.plaintext,
+                &public.ciphertext,
+            )
+            .unwrap();
+        }
+    }
 
     /// Helper to compute ciphertext for SIMD input using native encrypt.
     fn compute_simd_ciphertext(

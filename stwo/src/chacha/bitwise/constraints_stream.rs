@@ -7,6 +7,7 @@ use stwo_constraint_framework::EvalAtRow;
 
 use super::constraints::BitU32;
 use crate::chacha::STATE_SIZE;
+use crate::public_inputs::{PublicRow, HEADER_BYTES};
 
 /// Constraint evaluator for ChaCha20 stream encryption.
 pub struct ChaChaStreamEvalAtRow<E: EvalAtRow> {
@@ -18,8 +19,31 @@ impl<E: EvalAtRow> ChaChaStreamEvalAtRow<E> {
     /// Inputs: initial state (key/counter/nonce encoded)
     /// Outputs: ciphertext = keystream XOR plaintext
     pub fn eval(mut self) -> E {
+        let public = PublicRow::read(&mut self.eval, 64);
         // Read initial state (16 u32s x 32 bits = 512 field elements)
         let initial: [BitU32<E::F>; STATE_SIZE] = std::array::from_fn(|_| self.next_u32());
+        // The ChaCha constants are fixed, even for padding rows.
+        for (word, constant) in [0x61707865u32, 0x3320646e, 0x79622d32, 0x6b206574]
+            .into_iter()
+            .enumerate()
+        {
+            for bit in 0..32 {
+                self.eval.add_constraint(
+                    initial[word].bits[bit].clone()
+                        - E::F::from(BaseField::from_u32_unchecked((constant >> bit) & 1)),
+                );
+            }
+        }
+        for byte in 0..12 {
+            public.bind(
+                &mut self.eval,
+                Self::byte(&initial[13 + byte / 4], byte % 4),
+                byte,
+            );
+        }
+        for byte in 0..4 {
+            public.bind(&mut self.eval, Self::byte(&initial[12], byte), 12 + byte);
+        }
         let mut v = initial.clone();
 
         // 10 double-rounds
@@ -49,12 +73,25 @@ impl<E: EvalAtRow> ChaChaStreamEvalAtRow<E> {
         // Boolean constraints are added by next_u32()
         let plaintext: [BitU32<E::F>; STATE_SIZE] = std::array::from_fn(|_| self.next_u32());
 
-        // Read PUBLIC ciphertext from trace (16 u32s x 32 bits = 512 field elements)
+        // Read ciphertext from the witness (16 u32s x 32 bits = 512 field elements)
         // This is the claimed ciphertext that must match the computed value
-        let public_ciphertext: [BitU32<E::F>; STATE_SIZE] = std::array::from_fn(|_| self.next_u32());
+        let public_ciphertext: [BitU32<E::F>; STATE_SIZE] =
+            std::array::from_fn(|_| self.next_u32());
+        for byte in 0..64 {
+            public.bind(
+                &mut self.eval,
+                Self::byte(&plaintext[byte / 4], byte % 4),
+                HEADER_BYTES + byte,
+            );
+            public.bind(
+                &mut self.eval,
+                Self::byte(&public_ciphertext[byte / 4], byte % 4),
+                HEADER_BYTES + 64 + byte,
+            );
+        }
 
         // XOR keystream with plaintext to get computed ciphertext
-        // CRITICAL: Bind computed ciphertext to public ciphertext
+        // Check the encryption relation against the bound ciphertext bytes
         for i in 0..STATE_SIZE {
             let computed = self.xor_u32_no_trace(keystream[i].clone(), plaintext[i].clone());
 
@@ -67,6 +104,17 @@ impl<E: EvalAtRow> ChaChaStreamEvalAtRow<E> {
         }
 
         self.eval
+    }
+
+    fn byte(word: &BitU32<E::F>, byte: usize) -> E::F {
+        (0..8).fold(
+            E::F::from(BaseField::from_u32_unchecked(0)),
+            |value, bit| {
+                value
+                    + word.bits[byte * 8 + bit].clone()
+                        * E::F::from(BaseField::from_u32_unchecked(1 << bit))
+            },
+        )
     }
 
     /// Read next u32 from trace (32 bits).

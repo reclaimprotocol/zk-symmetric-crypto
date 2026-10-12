@@ -238,13 +238,14 @@ pub fn generate_stream_trace(
                 all_valid = false;
             }
         } else {
-            // Generate with default/zero input
+            // Padding rows still need a valid encryption trace.
+            let ciphertext = chacha20_encrypt(&[0; 8], &[0; 3], 0, &[0; 16]);
             let default_input = ChaChaStreamInput {
                 key: [0; 8],
                 nonce: [0; 3],
                 counters: u32x16::splat(0),
                 plaintext: [u32x16::splat(0); 16],
-                ciphertext: [u32x16::splat(0); 16],
+                ciphertext: std::array::from_fn(|word| u32x16::splat(ciphertext[word])),
             };
             row_gen.generate(&default_input);
         }

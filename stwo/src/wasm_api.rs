@@ -583,8 +583,7 @@ pub fn generate_chacha20_proof(
         Err(e) => return json_error(e),
     };
 
-    // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
-    // inside stmt.public_inputs, so we don't need to send raw data separately
+    // Serialize proof, including public bytes for verifier-reconstructed AIR columns.
     let proof_bytes = match bincode::serialize(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
@@ -753,8 +752,7 @@ pub fn generate_aes128_ctr_proof(
         Err(e) => return json_error(e),
     };
 
-    // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
-    // inside stmt0.public_inputs, so we don't need to send raw data separately
+    // Serialize proof, including public bytes for verifier-reconstructed AIR columns.
     let proof_bytes = match bincode::serialize(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),
@@ -877,8 +875,7 @@ pub fn generate_aes256_ctr_proof(
         Err(e) => return json_error(e),
     };
 
-    // Serialize proof - public inputs are cryptographically bound via Fiat-Shamir hashes
-    // inside stmt0.public_inputs, so we don't need to send raw data separately
+    // Serialize proof, including public bytes for verifier-reconstructed AIR columns.
     let proof_bytes = match bincode::serialize(&proof) {
         Ok(b) => b,
         Err(e) => return json_error(format!("Failed to serialize proof: {}", e)),

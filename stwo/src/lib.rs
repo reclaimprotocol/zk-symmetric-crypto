@@ -4,6 +4,7 @@
 
 pub mod aes;
 pub mod chacha;
+mod public_inputs;
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm_api;

@@ -2,6 +2,7 @@
 //!
 //! Supports both AES-128-CTR and AES-256-CTR.
 
+use crate::public_inputs::{preprocessed_root, public_column_ids, public_trace};
 use blake2::{Blake2s256, Digest};
 use itertools::{chain, Itertools};
 use num_traits::Zero;
@@ -36,21 +37,27 @@ use crate::aes::sbox_table::{
 use crate::aes::AesKeySize;
 
 /// IDs for preprocessed S-box columns.
-fn preprocessed_sbox_columns() -> [PreProcessedColumnId; 2] {
+fn preprocessed_columns() -> Vec<PreProcessedColumnId> {
     [sbox_column_id(0), sbox_column_id(1)]
+        .into_iter()
+        .chain(public_column_ids(16))
+        .collect()
 }
 
-/// Public inputs for AES-CTR proof - cryptographically bound to the proof via Fiat-Shamir.
+/// Public inputs for AES-CTR proof, bound to trace cells by public columns.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AESCtrPublicInputs {
     /// 12-byte nonce
     pub nonce: [u8; 12],
     /// Starting counter value
     pub counter: u32,
-    /// Blake2s hash of plaintext (for binding without storing full plaintext)
+    /// Blake2s digest of plaintext, included in the transcript
     pub plaintext_hash: [u8; 32],
     /// Blake2s hash of ciphertext
     pub ciphertext_hash: [u8; 32],
+    /// Public bytes needed to reconstruct the preprocessed commitment.
+    pub plaintext: Vec<u8>,
+    pub ciphertext: Vec<u8>,
 }
 
 impl AESCtrPublicInputs {
@@ -63,6 +70,8 @@ impl AESCtrPublicInputs {
             counter,
             plaintext_hash,
             ciphertext_hash,
+            plaintext: plaintext.to_vec(),
+            ciphertext: ciphertext.to_vec(),
         }
     }
 
@@ -73,7 +82,10 @@ impl AESCtrPublicInputs {
         }
         let plaintext_hash: [u8; 32] = Blake2s256::digest(plaintext).into();
         let ciphertext_hash: [u8; 32] = Blake2s256::digest(ciphertext).into();
-        self.plaintext_hash == plaintext_hash && self.ciphertext_hash == ciphertext_hash
+        self.plaintext == plaintext
+            && self.ciphertext == ciphertext
+            && self.plaintext_hash == plaintext_hash
+            && self.ciphertext_hash == ciphertext_hash
     }
 
     /// Mix into Fiat-Shamir channel.
@@ -137,7 +149,11 @@ impl AESCtrStatement0 {
         // Trees: preprocessed, main trace, interaction trace
         TreeVec::new(vec![
             // Tree 0: Preprocessed S-box table (input, output columns)
-            vec![SBOX_BITS; 2],
+            chain![
+                vec![SBOX_BITS; 2],
+                vec![self.log_size; public_column_ids(16).len()]
+            ]
+            .collect(),
             // Tree 1: Main trace (CTR columns at log_size, S-box multiplicity at SBOX_BITS)
             chain![
                 vec![self.log_size; n_ctr_trace_cols],
@@ -196,7 +212,7 @@ impl AESCtrComponents {
         stmt1: &AESCtrStatement1,
     ) -> Self {
         let tree_span_provider =
-            &mut TraceLocationAllocator::new_with_preprocessed_columns(&preprocessed_sbox_columns());
+            &mut TraceLocationAllocator::new_with_preprocessed_columns(&preprocessed_columns());
 
         Self {
             ctr_component: AESCtrComponent::new(
@@ -352,7 +368,15 @@ where
     let mut commitment_scheme = CommitmentSchemeProver::new(config, &twiddles);
 
     // Generate and commit preprocessed S-box table columns
-    let sbox_preprocessed_trace = generate_sbox_trace();
+    let mut sbox_preprocessed_trace = generate_sbox_trace();
+    sbox_preprocessed_trace.extend(public_trace(
+        log_size,
+        16,
+        &public_inputs.nonce,
+        public_inputs.counter,
+        &public_inputs.plaintext,
+        &public_inputs.ciphertext,
+    )?);
     let mut tree_builder = commitment_scheme.tree_builder();
     tree_builder.extend_evals(sbox_preprocessed_trace);
     tree_builder.commit(channel);
@@ -469,15 +493,46 @@ where
         }
     };
 
-    // For test data, create dummy public inputs (counter 0, empty plaintext/ciphertext hashes)
-    let public_inputs = AESCtrPublicInputs::new(&nonce, 0, &[], &[]);
+    let mut plaintext = Vec::with_capacity(num_blocks * 16);
+    let mut ciphertext = Vec::with_capacity(num_blocks * 16);
+    for block in 0..num_blocks {
+        let pt: [u8; 16] = std::array::from_fn(|byte| ((block * 16 + byte) & 0xff) as u8);
+        let ct = match key_size {
+            AesKeySize::Aes128 => crate::aes::aes128_ctr_block(
+                &std::array::from_fn(|byte| byte as u8),
+                &nonce,
+                block as u32 + 1,
+                &pt,
+            ),
+            AesKeySize::Aes256 => crate::aes::aes256_ctr_block(
+                &std::array::from_fn(|byte| byte as u8),
+                &nonce,
+                block as u32 + 1,
+                &pt,
+            ),
+        };
+        plaintext.extend_from_slice(&pt);
+        ciphertext.extend_from_slice(&ct);
+    }
+    let public_inputs = AESCtrPublicInputs::new(&nonce, 1, &plaintext, &ciphertext);
 
     // Setup protocol
     let channel = &mut MC::C::default();
     let mut commitment_scheme = CommitmentSchemeProver::new(config, &twiddles);
 
     // Generate and commit preprocessed S-box table columns
-    let sbox_preprocessed_trace = generate_sbox_trace();
+    let mut sbox_preprocessed_trace = generate_sbox_trace();
+    sbox_preprocessed_trace.extend(
+        public_trace(
+            log_size,
+            16,
+            &public_inputs.nonce,
+            public_inputs.counter,
+            &public_inputs.plaintext,
+            &public_inputs.ciphertext,
+        )
+        .expect("Valid test public inputs"),
+    );
     let mut tree_builder = commitment_scheme.tree_builder();
     tree_builder.extend_evals(sbox_preprocessed_trace);
     tree_builder.commit(channel);
@@ -614,7 +669,7 @@ fn validate_pcs_config(
 ///
 /// # Security
 /// - The proof's PCS config is validated against min_config before any verifier state is created
-/// - Public inputs are cryptographically bound to the proof via Fiat-Shamir
+/// - AIR constraints bind trace bytes to verifier-reconstructed public columns
 /// - If the verifier-supplied inputs don't match what was proven, verification fails
 pub fn verify_aes_ctr_with_public_inputs<MC: MerkleChannel>(
     proof: AESCtrProof<MC::H>,
@@ -623,7 +678,10 @@ pub fn verify_aes_ctr_with_public_inputs<MC: MerkleChannel>(
     counter: u32,
     plaintext: &[u8],
     ciphertext: &[u8],
-) -> Result<(), VerificationError> {
+) -> Result<(), VerificationError>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
     // SECURITY: Validate proof's config meets minimum requirements BEFORE creating verifier state
     // This prevents a malicious prover from using weak STARK settings
     validate_pcs_config(&proof.stark_proof.config, min_config)?;
@@ -650,7 +708,10 @@ pub fn verify_aes_ctr_with_public_inputs<MC: MerkleChannel>(
 pub fn verify_aes_ctr<MC: MerkleChannel>(
     proof: AESCtrProof<MC::H>,
     min_config: &PcsConfig,
-) -> Result<(), VerificationError> {
+) -> Result<(), VerificationError>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
     // SECURITY: Validate proof's config meets minimum requirements BEFORE creating verifier state
     validate_pcs_config(&proof.stark_proof.config, min_config)?;
 
@@ -664,7 +725,10 @@ fn verify_aes_ctr_internal<MC: MerkleChannel>(
         stmt1,
         stark_proof,
     }: AESCtrProof<MC::H>,
-) -> Result<(), VerificationError> {
+) -> Result<(), VerificationError>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
     // Validate interaction column counts to prevent memory DoS
     if stmt1.n_ctr_interaction_cols > MAX_INTERACTION_COLS
         || stmt1.n_sbox_interaction_cols > MAX_INTERACTION_COLS
@@ -674,6 +738,38 @@ fn verify_aes_ctr_internal<MC: MerkleChannel>(
 
     // Validate commitment count before indexing
     if stark_proof.commitments.len() < 3 {
+        return Err(VerificationError::OodsNotMatching);
+    }
+
+    if !(SBOX_BITS..=MAX_LOG_SIZE).contains(&stmt0.log_size) {
+        return Err(VerificationError::InvalidStructure(
+            "Invalid AES-CTR log_size".into(),
+        ));
+    }
+    let inputs = &stmt0.public_inputs;
+    if !inputs.verify(
+        &inputs.nonce,
+        inputs.counter,
+        &inputs.plaintext,
+        &inputs.ciphertext,
+    ) {
+        return Err(VerificationError::OodsNotMatching);
+    }
+    let mut preprocessed = generate_sbox_trace();
+    preprocessed.extend(
+        public_trace(
+            stmt0.log_size,
+            16,
+            &inputs.nonce,
+            inputs.counter,
+            &inputs.plaintext,
+            &inputs.ciphertext,
+        )
+        .map_err(VerificationError::InvalidStructure)?,
+    );
+    if stark_proof.commitments[0]
+        != preprocessed_root::<MC>(stmt0.log_size, stark_proof.config, preprocessed)
+    {
         return Err(VerificationError::OodsNotMatching);
     }
 
@@ -863,6 +959,241 @@ mod tests {
     // ==================== SECURITY TESTS ====================
     // These tests verify the cryptographic binding of public inputs to proofs.
     // See README.md "Security Model" section for detailed documentation.
+
+    fn ctr_fixture(
+        key_size: AesKeySize,
+        n_blocks: usize,
+    ) -> (Vec<u8>, AESCtrPublicInputs, Vec<AESCtrInput>) {
+        use std::simd::Simd;
+        let key: Vec<u8> = (0..match key_size {
+            AesKeySize::Aes128 => 16,
+            AesKeySize::Aes256 => 32,
+        })
+            .map(|byte| byte as u8)
+            .collect();
+        let nonce = [0xab; 12];
+        let counter = 0x01020304;
+        let mut plaintext = Vec::new();
+        let mut ciphertext = Vec::new();
+        let mut inputs = Vec::new();
+        for batch in 0..n_blocks.div_ceil(16) {
+            let counters = Simd::from_array(std::array::from_fn(|lane| {
+                counter + (batch * 16 + lane) as u32
+            }));
+            let pt: [[u8; 16]; 16] = std::array::from_fn(|lane| {
+                std::array::from_fn(|byte| {
+                    if batch * 16 + lane < n_blocks {
+                        ((batch * 256 + lane * 16 + byte) & 0xff) as u8
+                    } else {
+                        0
+                    }
+                })
+            });
+            let ct: [[u8; 16]; 16] = std::array::from_fn(|lane| match key_size {
+                AesKeySize::Aes128 => crate::aes::aes128_ctr_block(
+                    key.as_slice().try_into().unwrap(),
+                    &nonce,
+                    counters[lane],
+                    &pt[lane],
+                ),
+                AesKeySize::Aes256 => crate::aes::aes256_ctr_block(
+                    key.as_slice().try_into().unwrap(),
+                    &nonce,
+                    counters[lane],
+                    &pt[lane],
+                ),
+            });
+            for lane in 0..16 {
+                if batch * 16 + lane < n_blocks {
+                    plaintext.extend_from_slice(&pt[lane]);
+                    ciphertext.extend_from_slice(&ct[lane]);
+                }
+            }
+            inputs.push(AESCtrInput {
+                nonce,
+                counters,
+                plaintext: std::array::from_fn(|byte| {
+                    Simd::from_array(std::array::from_fn(|lane| pt[lane][byte]))
+                }),
+                ciphertext: std::array::from_fn(|byte| {
+                    Simd::from_array(std::array::from_fn(|lane| ct[lane][byte]))
+                }),
+            });
+        }
+        (
+            key,
+            AESCtrPublicInputs::new(&nonce, counter, &plaintext, &ciphertext),
+            inputs,
+        )
+    }
+
+    #[test]
+    fn test_security_aes_each_public_input_is_constrained() {
+        for key_size in [AesKeySize::Aes128, AesKeySize::Aes256] {
+            let (key, public, inputs) = ctr_fixture(key_size, 17);
+            for field in 0..4 {
+                let mut fake = public.clone();
+                match field {
+                    0 => fake.nonce[11] ^= 1,
+                    1 => fake.counter += 1,
+                    2 => *fake.plaintext.last_mut().unwrap() ^= 1,
+                    _ => *fake.ciphertext.last_mut().unwrap() ^= 1,
+                }
+                let fake = AESCtrPublicInputs::new(
+                    &fake.nonce,
+                    fake.counter,
+                    &fake.plaintext,
+                    &fake.ciphertext,
+                );
+                let proof = prove_aes_ctr_with_inputs_internal::<Blake2sMerkleChannel>(
+                    8,
+                    key_size,
+                    PcsConfig::default(),
+                    &key,
+                    &inputs,
+                    fake.clone(),
+                );
+                match proof {
+                    Ok(proof) => assert!(
+                        verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+                            proof,
+                            &PcsConfig::default(),
+                            &fake.nonce,
+                            fake.counter,
+                            &fake.plaintext,
+                            &fake.ciphertext,
+                        )
+                        .is_err(),
+                        "Forged field {field} was accepted"
+                    ),
+                    Err(error) => assert!(error.contains("ConstraintsNotSatisfied"), "{error}"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_security_aes_prover_chosen_public_columns_rejected() {
+        for key_size in [AesKeySize::Aes128, AesKeySize::Aes256] {
+            let (key, public, inputs) = ctr_fixture(key_size, 17);
+            let config = PcsConfig::default();
+            let twiddles = SimdBackend::precompute_twiddles(
+                CanonicCoset::new(9 + config.fri_config.log_blowup_factor)
+                    .circle_domain()
+                    .half_coset,
+            );
+            let channel = &mut <Blake2sMerkleChannel as MerkleChannel>::C::default();
+            let mut scheme =
+                CommitmentSchemeProver::<SimdBackend, Blake2sMerkleChannel>::new(config, &twiddles);
+            let mut preprocessed = generate_sbox_trace();
+            preprocessed.extend(
+                public_trace(
+                    8,
+                    16,
+                    &public.nonce,
+                    public.counter,
+                    &public.plaintext,
+                    &public.ciphertext,
+                )
+                .unwrap(),
+            );
+            let mut builder = scheme.tree_builder();
+            builder.extend_evals(preprocessed);
+            builder.commit(channel);
+            let (trace, accum, lookup, valid) = match key_size {
+                AesKeySize::Aes128 => generate_aes128_ctr_trace_with_inputs(
+                    8,
+                    key.as_slice().try_into().unwrap(),
+                    &inputs,
+                ),
+                AesKeySize::Aes256 => generate_aes256_ctr_trace_with_inputs(
+                    8,
+                    key.as_slice().try_into().unwrap(),
+                    &inputs,
+                ),
+            };
+            assert!(valid);
+            let fake_plaintext = vec![0x41; 17 * 16];
+            let fake_ciphertext = vec![0x42; 17 * 16];
+            let stmt0 = AESCtrStatement0 {
+                log_size: 8,
+                key_size,
+                public_inputs: AESCtrPublicInputs::new(
+                    &[0xcd; 12],
+                    99,
+                    &fake_plaintext,
+                    &fake_ciphertext,
+                ),
+            };
+            stmt0.mix_into(channel);
+            let mult = stwo::prover::poly::circle::CircleEvaluation::new(
+                CanonicCoset::new(SBOX_BITS).circle_domain(),
+                accum.clone().into_base_column(),
+            );
+            let mut builder = scheme.tree_builder();
+            builder.extend_evals(chain![trace, [mult]].collect());
+            builder.commit(channel);
+            let elements = SboxElements::draw(channel);
+            let (ctr_trace, ctr_claimed_sum) =
+                generate_ctr_sbox_interaction_trace(8, &lookup, &elements);
+            let (sbox_trace, sbox_table_claimed_sum) =
+                generate_sbox_table_interaction_trace(&accum, &elements);
+            let stmt1 = AESCtrStatement1 {
+                ctr_claimed_sum,
+                sbox_table_claimed_sum,
+                n_ctr_interaction_cols: ctr_trace.len(),
+                n_sbox_interaction_cols: sbox_trace.len(),
+            };
+            stmt1.mix_into(channel);
+            let mut builder = scheme.tree_builder();
+            builder.extend_evals(chain![ctr_trace, sbox_trace].collect());
+            builder.commit(channel);
+            let components = AESCtrComponents::new(&stmt0, &elements, &stmt1);
+            let stark_proof = prove(&components.component_provers(), channel, scheme).unwrap();
+            let proof = AESCtrProof {
+                stmt0,
+                stmt1,
+                stark_proof,
+            };
+            assert!(verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+                proof.clone(),
+                &config,
+                &[0xcd; 12],
+                99,
+                &fake_plaintext,
+                &fake_ciphertext,
+            )
+            .is_err());
+            assert!(verify_aes_ctr::<Blake2sMerkleChannel>(proof, &config).is_err());
+        }
+    }
+
+    #[test]
+    fn test_aes_public_binding_with_padding_and_serialization() {
+        for key_size in [AesKeySize::Aes128, AesKeySize::Aes256] {
+            let (key, public, inputs) = ctr_fixture(key_size, 17);
+            let proof = prove_aes_ctr_with_inputs_internal::<Blake2sMerkleChannel>(
+                8,
+                key_size,
+                PcsConfig::default(),
+                &key,
+                &inputs,
+                public.clone(),
+            )
+            .unwrap();
+            let bytes = bincode::serialize(&proof).unwrap();
+            let proof = bincode::deserialize(&bytes).unwrap();
+            verify_aes_ctr_with_public_inputs::<Blake2sMerkleChannel>(
+                proof,
+                &PcsConfig::default(),
+                &public.nonce,
+                public.counter,
+                &public.plaintext,
+                &public.ciphertext,
+            )
+            .unwrap();
+        }
+    }
 
     /// Security test: Verify that tampering with public inputs in a serialized proof
     /// causes verification to fail.

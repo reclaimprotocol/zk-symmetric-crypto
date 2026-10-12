@@ -318,11 +318,18 @@ impl<'a, E: EvalAtRow> AESCtrEvalAtRow<'a, E> {
     /// Outputs:
     /// - ciphertext (16 bytes)
     pub fn ctr_block(mut self) -> E {
+        let public = crate::public_inputs::PublicRow::read(&mut self.eval, 16);
         let num_round_keys = self.key_size.num_round_keys();
 
         // Read nonce (12 bytes) and counter (4 bytes) to form counter block
         let nonce: [Byte<E::F>; 12] = std::array::from_fn(|_| self.next_byte());
         let counter: [Byte<E::F>; 4] = std::array::from_fn(|_| self.next_byte());
+        for byte in 0..12 {
+            public.bind(&mut self.eval, nonce[byte].value.clone(), byte);
+        }
+        for byte in 0..4 {
+            public.bind(&mut self.eval, counter[byte].value.clone(), 12 + byte);
+        }
 
         // Form counter block
         let counter_block: AESState<E::F> = std::array::from_fn(|i| {
@@ -343,6 +350,14 @@ impl<'a, E: EvalAtRow> AESCtrEvalAtRow<'a, E> {
 
         // Read ciphertext - PUBLIC INPUT (for verification)
         let expected_ciphertext = self.next_state();
+        for byte in 0..16 {
+            public.bind(&mut self.eval, plaintext[byte].value.clone(), 16 + byte);
+            public.bind(
+                &mut self.eval,
+                expected_ciphertext[byte].value.clone(),
+                32 + byte,
+            );
+        }
 
         // AES encrypt counter block
         let keystream = self.aes_block(&counter_block, &round_keys);

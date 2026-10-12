@@ -1,6 +1,6 @@
 {
   "name": "@reclaimprotocol/zk-symmetric-crypto",
-  "version": "5.1.4",
+  "version": "5.1.5",
   "description": "JS Wrappers for Various ZK Snark Circuits",
   "type": "module",
   "exports": {
@@ -22,8 +22,8 @@
     }
   },
   "repository": {
-  	"type": "git",
-   	"url": "https://github.com/reclaimprotocol/zk-symmetric-crypto"
+    "type": "git",
+    "url": "https://github.com/reclaimprotocol/zk-symmetric-crypto"
   },
   "scripts": {
     "test": "node --import=./src/tests/setup.ts --test --test-force-exit src/tests/*.test.ts",

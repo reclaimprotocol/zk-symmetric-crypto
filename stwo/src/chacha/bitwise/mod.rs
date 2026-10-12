@@ -197,7 +197,27 @@ mod tests {
         let (trace, valid) = generate_stream_trace(LOG_SIZE, &inputs);
         assert!(valid, "Ciphertext should be valid");
 
-        let trace = TreeVec::new(vec![vec![], trace, vec![]]);
+        let nonce_bytes = std::array::from_fn(|byte| nonce[byte / 4].to_le_bytes()[byte % 4]);
+        let mut plaintext = Vec::new();
+        let mut ciphertext = Vec::new();
+        for input in &inputs {
+            for lane in 0..16 {
+                for word in 0..16 {
+                    plaintext.extend_from_slice(&input.plaintext[word][lane].to_le_bytes());
+                    ciphertext.extend_from_slice(&input.ciphertext[word][lane].to_le_bytes());
+                }
+            }
+        }
+        let public = crate::public_inputs::public_trace(
+            LOG_SIZE,
+            64,
+            &nonce_bytes,
+            1,
+            &plaintext,
+            &ciphertext,
+        )
+        .unwrap();
+        let trace = TreeVec::new(vec![public, trace, vec![]]);
         let trace_polys = trace.map_cols(|c| c.interpolate());
 
         let component = ChaChaStreamEval {

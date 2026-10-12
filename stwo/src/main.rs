@@ -4,6 +4,7 @@
 
 pub mod aes;
 pub mod chacha;
+mod public_inputs;
 
 fn main() {
     println!("s2circuits - Stwo ChaCha/AES circuits");

@@ -155,11 +155,9 @@ export function makeStwoZkOperator({
 				: Base64.fromUint8Array(proof)
 
 			// Verify the STARK proof with verifier-supplied public inputs.
-			// Security: Public inputs (nonce, counter, plaintext/ciphertext hashes) are
-			// cryptographically bound to the proof via Fiat-Shamir transformation.
-			// The WASM verify function recomputes the hashes from verifier's data and
-			// compares with the proof's embedded hashes. If they don't match, or if
-			// the STARK proof is invalid, verification fails.
+			// The WASM verifier reconstructs the public columns from these bytes
+			// and checks their commitment. AIR equality constraints connect these
+			// columns to the encryption trace. Transcript hashes alone cannot do this.
 			let resultJson: string
 			if(algorithm === 'chacha20') {
 				resultJson = verify_chacha20_proof(

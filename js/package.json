@@ -92,5 +92,9 @@
     "snarkjs": "git+https://github.com/reclaimprotocol/snarkjs.git",
     "tinybench": "^3.0.3",
     "typescript": "^5.2.2"
+  },
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "^11.0.1",
+    "underscore": "^1.13.8"
   }
 }

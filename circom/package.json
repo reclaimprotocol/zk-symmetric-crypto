@@ -19,5 +19,8 @@
   "devDependencies": {
     "@types/node": "^22.8.2",
     "circom_tester": "^0.0.20"
+  },
+  "overrides": {
+    "underscore": "^1.13.8"
   }
 }
